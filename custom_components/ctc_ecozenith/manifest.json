@@ -19,15 +19,15 @@
       "macaddress": "020000*"
     }
   ],
-  "documentation": "https://github.com/beolink/ha-ctc",
+  "documentation": "https://github.com/beolink/HA-CTC-Local-Easyconf",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/beolink/ha-ctc/issues",
+  "issue_tracker": "https://github.com/beolink/HA-CTC-Local-Easyconf/issues",
   "loggers": [
     "pymodbus"
   ],
   "requirements": [
     "pymodbus>=3.6.9"
   ],
-  "version": "0.12.0"
+  "version": "0.12.1"
 }
