@@ -58,7 +58,9 @@ from typing import Any, Iterable, Mapping
 from .explanations import display_explanation, explain, source
 
 URL_PATH = "ctc-ecozenith"
-TITLE = "CTC EcoZenith"
+#: What the sidebar says. Short on purpose: it stands in a narrow column beside
+#: the other entries, and the address stays as it is so a bookmark still works.
+TITLE = "CTC"
 ICON = "mdi:heat-pump"
 
 #: What the graphs cover: a day of readings, a month of daily figures.

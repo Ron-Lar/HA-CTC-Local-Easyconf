@@ -69,7 +69,8 @@ def _values_card(config, path="values"):
 
 def test_a_pump_gets_the_four_tabs_in_the_order_the_questions_come(dashboard_views, pumps):
     config = dashboard_views.build_dashboard([pumps["vsh"]], "en", NEW_HA)
-    assert config["title"] == "CTC EcoZenith"
+    # The sidebar says CTC, and the pump's own name heads its status.
+    assert config["title"] == "CTC"
     assert [(v["title"], v["path"], v["type"]) for v in config["views"]] == [
         ("Översikt", "overview", "sections"),
         ("Styrning", "controls", "sections"),
@@ -453,7 +454,7 @@ def test_no_running_pump_gives_a_note(dashboard_views):
     (view,) = config["views"]
     (section,) = view["sections"]
     heading, note = section["cards"]
-    assert heading["heading"] == "CTC EcoZenith"
+    assert heading["heading"] == "CTC"
     assert note["type"] == "markdown" and note["content"].startswith("Ingen CTC-värmepump")
     assert dashboard_views.build_dashboard([], "de", NEW_HA)["views"][0]["title"] == "Overview"
 

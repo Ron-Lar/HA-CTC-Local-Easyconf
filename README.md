@@ -90,12 +90,12 @@ check asks GitHub once a day and can be switched off under Configure.
 Control entities are off by default. Turn them on under the integration's
 options if you want them.
 
-## The CTC EcoZenith page
+## The CTC page
 
-Setting the integration up adds a **CTC EcoZenith** entry to the sidebar on its
-own. There is nothing to configure and no button to press: the page is built
-the moment it is opened, from the entities the integration has at that moment,
-so it is never out of date. Each heat pump gets four tabs.
+Setting the integration up adds a **CTC** entry to the sidebar on its own.
+There is nothing to configure and no button to press: the page is built the
+moment it is opened, from the entities the integration has at that moment, so
+it is never out of date. Each heat pump gets four tabs.
 
 - **Overview.** What the pump is doing right now: the controller's status and
   the heat pump's own as a line of chips, the handful of controls worth reaching
@@ -122,7 +122,7 @@ the left and value on the right, in as many columns as the screen has room for.
 
 The display's own web interface is one click away from the device page, under
 *Settings, Devices and services*: the device's link opens the panel's own page
-in a new tab. It is not on the CTC EcoZenith page, because a browser will not
+in a new tab. It is not on the CTC page, because a browser will not
 show an http page inside a Home Assistant reached over https, and because the
 panel answers it from the same small web server the integration harvests from.
 
