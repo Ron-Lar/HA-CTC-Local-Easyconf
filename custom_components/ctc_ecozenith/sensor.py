@@ -219,6 +219,10 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:gauge"
     _attr_suggested_display_precision = 2
+    # A figure to be looked at over a month, which needs Home Assistant to keep
+    # long term statistics for it. Without this the page's graph of the daily
+    # coefficient of performance has nothing to draw.
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
     NAMES = {
         "day": "Dygnsvärmefaktor",

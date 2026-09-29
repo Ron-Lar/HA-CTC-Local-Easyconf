@@ -503,6 +503,14 @@ def test_every_control_name_starts_with_the_prefix_the_page_drops(dashboard_view
         assert register.name.startswith(dashboard_views._CONTROL_PREFIX), register.key
 
 
+def test_the_coefficient_of_performance_is_kept_as_a_statistic(dashboard_views):
+    """The page graphs it per day, which Home Assistant only has if it records it."""
+    source = _source("sensor.py")
+    cop = source[source.index("class CtcCopSensor"):source.index("class CtcCopSensor") + 900]
+    assert "_attr_state_class = SensorStateClass.MEASUREMENT" in cop
+    assert ("graph_cop", "mean", ("cop_day",)) in dashboard_views._GRAPHS
+
+
 def test_no_reading_without_a_device_class_is_left_with_the_default_icon(const):
     for description in const.MODBUS_SENSORS + const.MODBUS_SETTINGS:
         if description.device_class is None:
