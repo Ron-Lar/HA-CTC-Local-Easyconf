@@ -43,8 +43,8 @@ CONF_VISIT_SYSTEM_INFO: Final = "visit_system_info"
 #: Whether to ask GitHub once a day whether a newer release exists. A copy
 #: installed by hand is invisible to Home Assistant's own update notices.
 CONF_CHECK_UPDATES: Final = "check_updates"
-RELEASES_API: Final = "https://api.github.com/repos/beolink/ha-ctc/releases/latest"
-RELEASES_PAGE: Final = "https://github.com/beolink/ha-ctc/releases/latest"
+RELEASES_API: Final = "https://api.github.com/repos/beolink/HA-CTC-Local-Easyconf/releases/latest"
+RELEASES_PAGE: Final = "https://github.com/beolink/HA-CTC-Local-Easyconf/releases/latest"
 CONF_SLOW_INTERVAL: Final = "slow_interval"
 CONF_PARK_PAGE: Final = "park_page"
 CONF_RESTORE_PAGE: Final = "restore_page"
