@@ -172,5 +172,36 @@ def test_the_set_up_passes_every_flag_to_the_report():
         pathlib.Path(__file__).resolve().parent.parent
         / "custom_components" / "ctc_ecozenith" / "__init__.py"
     ).read_text(encoding="utf-8")
-    for flag in ("history_page", "heat_counter", "consumption_counter", "consumption_modbus"):
+    for flag in ("history_page", "heat_counter", "consumption_counter", "consumption_modbus",
+                 "heat_total", "consumption_total"):
         assert f"{flag}=" in source, f"__init__.py skickar inte {flag}"
+
+
+def test_a_located_counter_without_a_reading_is_reported_as_such(cop, stats_extra):
+    # The signature that prompted these flags: six pages harvested, both
+    # counters recognised on them, and no figure for eighteen days running. The
+    # report could not say whether the rows never gave a number or the machine
+    # counts nothing, and those two call for different remedies.
+    runtime = SimpleNamespace(
+        cop=None,
+        web=SimpleNamespace(data={}),
+        energy_out=_value("out", "Avgiven värme totalt"),
+        energy_in=_value("in", "Tillförd energi totalt"),
+        consumption_snapshot=None,
+    )
+    heat, consumed = cop.current_totals(runtime)
+    payload = stats_extra.build_extra(
+        "EcoZenith i360",
+        has_display=True,
+        control_enabled=False,
+        page_count=6,
+        read_failures=0,
+        heat_counter=runtime.energy_out is not None,
+        consumption_counter=runtime.energy_in is not None,
+        heat_total=heat is not None,
+        consumption_total=consumed is not None,
+    )
+    assert payload["features"]["heat_counter"] is True
+    assert payload["features"]["consumption_counter"] is True
+    assert payload["features"]["heat_total"] is False
+    assert payload["features"]["consumption_total"] is False

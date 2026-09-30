@@ -1,4 +1,4 @@
-"""What each value on the CTC EcoZenith page means, and where it comes from.
+"""What each value on the CTC page means, and where it comes from.
 
 Shown on the page when a name is hovered or tapped, the way the NIBE page explains
 its registers. Free of Home Assistant imports, like dashboard_views.py, so every

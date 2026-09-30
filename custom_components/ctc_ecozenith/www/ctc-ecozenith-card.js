@@ -1,4 +1,4 @@
-/* CTC EcoZenith: the page's cards, with an explanation for every value.
+/* CTC Local Easyconf: the page's cards, with an explanation for every value.
  *
  * Served by the integration at /ctc_ecozenith/ctc-ecozenith-card.js and loaded as a
  * Lovelace resource. The page itself is built in Python (dashboard_views.py) and uses

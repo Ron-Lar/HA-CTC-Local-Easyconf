@@ -151,6 +151,8 @@ def build_extra(
     heat_counter: bool | None = None,
     consumption_counter: bool | None = None,
     consumption_modbus: bool | None = None,
+    heat_total: bool | None = None,
+    consumption_total: bool | None = None,
     cop_day: Any = None,
     cop_year: Any = None,
     cop_first_year: Any = None,
@@ -185,11 +187,21 @@ def build_extra(
     # the history page is not among the harvested pages, the delivered heat
     # counter is not recognised on it, or neither the display nor Modbus has
     # the consumed energy. Yes or no only, never which page or what it says.
+    #
+    # The last two say whether each counter actually handed over a number at
+    # the most recent read. Recognising the row and getting a reading out of it
+    # are different things, and without that difference an installation with no
+    # coefficient of performance looks the same whether the harvest never
+    # delivered the row or the machine simply counts nothing. Both true and
+    # still no figure means the consumed total sits below the floor the
+    # calculation needs, which a clean zero does.
     flags = {
         "history_page": history_page,
         "heat_counter": heat_counter,
         "consumption_counter": consumption_counter,
         "consumption_modbus": consumption_modbus,
+        "heat_total": heat_total,
+        "consumption_total": consumption_total,
     }
     payload["features"].update({k: bool(v) for k, v in flags.items() if v is not None})
 

@@ -6,7 +6,7 @@ to water heat pump, current sensors that were never installed, the refrigerant
 circuit of a unit whose compressor has never run. What a given installation has is
 therefore something only that installation can tell, by giving a value. Every value
 the two coordinators read is noted here once it is a number other than zero, and the
-CTC EcoZenith page leaves out a reading that is zero and has never been anything else.
+CTC page leaves out a reading that is zero and has never been anything else.
 
 Kept in a Store per entry, so a value seen once stays known across restarts. Free of
 Home Assistant imports: the store is handed in, as for cop.CopTracker.

@@ -1,4 +1,4 @@
-"""The CTC EcoZenith integration.
+"""The CTC Local Easyconf integration.
 
 Reads a CTC heat pump locally over Modbus TCP, and optionally harvests the extra
 values that only the display knows from its own web interface. Nothing goes near
@@ -93,6 +93,7 @@ _WALKED: set[str] = set()
 #: at every reload: walking the menu moves the panel.
 _MENU_READ: set[str] = set()
 
+ISSUE_PAGES = "pages_missing"
 ISSUE_HISTORY_PAGE = "history_page_missing"
 ISSUE_IDENTITY = "identity_incomplete"
 ISSUE_UPDATE_AVAILABLE = "update_available"
@@ -135,9 +136,13 @@ def _async_review_issues(
 ) -> None:
     """Say in the repairs view what only the owner can settle.
 
-    Two things the integration cannot do for itself: which pages the panel may
-    be walked to, and showing the system information page once so the display
-    writes its serial number into it.
+    Three things the integration cannot do for itself: whether the panel may be
+    walked to any page at all, which pages those are, and showing the system
+    information page once so the display writes its serial number into it.
+    Nothing ticked means the display is never read, so there is no delivered
+    heat and no coefficient of performance, and that is worth saying plainly:
+    an empty list is as often a menu that could not be read at set-up as it is
+    a deliberate choice.
     """
     def review(key: str, needed: bool) -> None:
         issue_id = f"{entry.entry_id}_{key}"
@@ -153,6 +158,7 @@ def _async_review_issues(
         else:
             ir.async_delete_issue(hass, DOMAIN, issue_id)
 
+    review(ISSUE_PAGES, runtime.web is None)
     review(ISSUE_HISTORY_PAGE, runtime.web is not None and runtime.energy_out is None)
     review(ISSUE_IDENTITY, not runtime.identity.serial)
 
@@ -243,6 +249,9 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
             page_count=0,
             read_failures=1,
         )
+    # Recognising a counter and reading it are different things, so the report
+    # says which of the two happened. See stats_extra.build_extra.
+    heat, consumed = current_totals(runtime)
     return build_extra(
         entry.data.get("model"),
         has_display=runtime.web is not None,
@@ -258,6 +267,8 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
         heat_counter=runtime.energy_out is not None,
         consumption_counter=runtime.energy_in is not None,
         consumption_modbus=modbus_consumption(runtime.modbus.data) is not None,
+        heat_total=heat is not None,
+        consumption_total=consumed is not None,
         **cop_for_report(runtime),
     )
 
@@ -345,7 +356,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         integration = await async_get_integration(hass, DOMAIN)
         await dashboard.async_register(hass, str(integration.version))
     except Exception:  # noqa: BLE001 - the page must never break a set-up
-        _LOGGER.warning("Could not add the CTC EcoZenith page", exc_info=True)
+        _LOGGER.warning("Could not add the CTC page", exc_info=True)
 
     modbus_client = CtcModbusClient(host, modbus_port, slave)
     modbus = CtcModbusCoordinator(

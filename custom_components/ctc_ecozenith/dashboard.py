@@ -1,4 +1,4 @@
-"""The CTC EcoZenith page in the sidebar, built afresh every time it is opened.
+"""The CTC page in the sidebar, built afresh every time it is opened.
 
 The layout is dashboard_views.py; this file finds the entities and talks to Lovelace.
 
@@ -129,7 +129,7 @@ def build_config(hass: HomeAssistant) -> dict[str, Any]:
             _collect(hass), _panel_language(hass), (MAJOR_VERSION, MINOR_VERSION)
         )
     except Exception:  # noqa: BLE001 - the page must never break the frontend
-        _LOGGER.exception("Could not build the CTC EcoZenith page")
+        _LOGGER.exception("Could not build the CTC page")
         lang = views.language(hass.config.language)
         return views.message_dashboard(views.TEXT[lang]["failed"], lang)
 
@@ -143,7 +143,7 @@ def _page_class() -> type:
     from homeassistant.components.lovelace.dashboard import LovelaceConfig
 
     class CtcPage(LovelaceConfig):
-        """What Lovelace asks for when the CTC EcoZenith page is opened."""
+        """What Lovelace asks for when the CTC page is opened."""
 
         def __init__(self, hass: HomeAssistant) -> None:
             super().__init__(hass, views.URL_PATH, {
@@ -201,10 +201,10 @@ async def async_register(hass: HomeAssistant, version: str) -> None:
     await async_register_card(hass, version)
     dashboards = _lovelace_dashboards(hass)
     if dashboards is None:
-        _LOGGER.info("Lovelace is not loaded, so there is no CTC EcoZenith page")
+        _LOGGER.info("Lovelace is not loaded, so there is no CTC page")
         return
     if views.URL_PATH in dashboards or frontend.async_panel_exists(hass, views.URL_PATH):
-        _LOGGER.info("/%s is already taken, so the CTC EcoZenith page is not added",
+        _LOGGER.info("/%s is already taken, so the CTC page is not added",
                      views.URL_PATH)
         return
     page = None
@@ -223,7 +223,7 @@ async def async_register(hass: HomeAssistant, version: str) -> None:
     except Exception:  # noqa: BLE001 - no page, but the integration runs on
         if page is not None and dashboards.get(views.URL_PATH) is page:
             dashboards.pop(views.URL_PATH)
-        _LOGGER.warning("Could not add the CTC EcoZenith page to the sidebar", exc_info=True)
+        _LOGGER.warning("Could not add the CTC page to the sidebar", exc_info=True)
         return
 
     registered = _Registered(

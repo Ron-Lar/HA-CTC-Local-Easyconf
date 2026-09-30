@@ -1,4 +1,4 @@
-"""Constants and register map for the CTC EcoZenith integration.
+"""Constants and register map for the CTC Local Easyconf integration.
 
 Two transports are used side by side:
 
