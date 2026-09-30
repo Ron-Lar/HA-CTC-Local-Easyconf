@@ -1,4 +1,4 @@
-"""Config and options flow for CTC EcoZenith.
+"""Config and options flow for CTC Local Easyconf.
 
 Setup has two questions. First where the unit is, answered by scanning the local
 network and falling back to typing an address. Then which of the display's own

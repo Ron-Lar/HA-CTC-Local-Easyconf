@@ -299,3 +299,17 @@ def test_cop_flags_are_plain_yes_or_no(stats_extra):
     assert flags == {"history_page": True, "heat_counter": False,
                      "consumption_counter": False, "consumption_modbus": True}
     assert all(isinstance(v, bool) for v in flags.values())
+
+
+def test_a_counter_that_gave_a_number_is_told_from_one_that_did_not(stats_extra):
+    # Recognising the row and getting a reading out of it are different things,
+    # and an installation without a coefficient of performance looks the same
+    # either way unless the report says which happened.
+    extra = _extra(stats_extra, heat_total=True, consumption_total=False)
+    assert extra["features"]["heat_total"] is True
+    assert extra["features"]["consumption_total"] is False
+
+
+def test_the_counter_flags_are_left_out_while_unknown(stats_extra):
+    assert "heat_total" not in _extra(stats_extra)["features"]
+    assert "consumption_total" not in _extra(stats_extra)["features"]

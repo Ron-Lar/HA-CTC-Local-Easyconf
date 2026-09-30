@@ -75,16 +75,20 @@
     }
   },
   "issues": {
+    "pages_missing": {
+      "title": "Ingen sida i displayen läses",
+      "description": "Ingen av displayens sidor är ikryssad, så displayen läses aldrig: avgiven värme, och därmed värmefaktorn, finns bara där. Kryssa i sidorna under Inställningar, Enheter och tjänster, CTC Local Easyconf, Konfigurera. Är listan tom kunde menyn inte läsas när integrationen sattes upp; ladda om integrationen, då läses menyn på nytt."
+    },
     "history_page_missing": {
       "title": "Värmefaktorn saknar historiksidan",
-      "description": "Värmefaktorn räknas ur displayens räknare för avgiven värme, som står på sidan med historisk eller lagrad driftinfo. Den sidan hämtas inte. Kryssa i den under Inställningar, Enheter och tjänster, CTC EcoZenith, Konfigurera."
+      "description": "Värmefaktorn räknas ur displayens räknare för avgiven värme, som står på sidan med historisk eller lagrad driftinfo. Den sidan hämtas inte. Kryssa i den under Inställningar, Enheter och tjänster, CTC Local Easyconf, Konfigurera."
     },
     "identity_incomplete": {
       "title": "Serienumret har inte lästs",
       "description": "Displayen skriver serienummer och sin egen programversion i sidan Systeminformation först när den sidan visats på panelen. Öppna den en gång på panelen, eller låt integrationen gå dit själv under Konfigurera."
     },
     "update_available": {
-      "title": "En nyare version av CTC EcoZenith finns",
+      "title": "En nyare version av CTC Local Easyconf finns",
       "description": "Version {latest} är släppt, du kör {installed}. Installerad via HACS: uppdatera där, under Inställningar, Enheter och tjänster, HACS. Installerad för hand: byt ut custom_components/ctc_ecozenith mot den nya releasen och starta om Home Assistant."
     }
   }

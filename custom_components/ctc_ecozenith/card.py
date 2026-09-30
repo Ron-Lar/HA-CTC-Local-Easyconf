@@ -1,6 +1,6 @@
 """Serve the page's cards and load them into the frontend.
 
-The CTC EcoZenith page uses two cards of its own (www/ctc-ecozenith-card.js), which
+The CTC page uses two cards of its own (www/ctc-ecozenith-card.js), which
 add an explanation to every value. They are served by the integration and added as a
 Lovelace resource the way the NIBE and Miele integrations add theirs: best effort on
 storage mode resources, with the version in the address so a browser picks up a new
@@ -45,7 +45,7 @@ async def async_register_card(hass: HomeAssistant, version: str) -> None:
         # Already served, from an earlier load in this process.
         _LOGGER.debug("Static path for the card not registered: %s", err)
     except Exception as err:  # noqa: BLE001 - the page still loads, and says what is missing
-        _LOGGER.warning("Could not serve the CTC EcoZenith card: %s", err)
+        _LOGGER.warning("Could not serve the CTC card: %s", err)
     if not await _async_register_resource(hass, versioned):
         frontend.add_extra_js_url(hass, versioned)
 
@@ -79,5 +79,5 @@ async def _async_register_resource(hass: HomeAssistant, versioned: str) -> bool:
             await resources.async_delete_item(item["id"])
         return True
     except Exception as err:  # noqa: BLE001 - a missing card must not stop the integration
-        _LOGGER.warning("Could not add the CTC EcoZenith card as a Lovelace resource: %s", err)
+        _LOGGER.warning("Could not add the CTC card as a Lovelace resource: %s", err)
         return False

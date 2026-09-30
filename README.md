@@ -1,4 +1,4 @@
-# CTC EcoZenith for Home Assistant
+# CTC Local Easyconf for Home Assistant
 
 Local integration for CTC heat pumps. It talks straight to the unit on your own
 network and never touches myUplink or any other cloud.
@@ -231,8 +231,10 @@ created, which transports are in use, whether control is enabled, how many
 display pages are harvested and how many register reads failed. It also says
 whether a coefficient of performance is possible and, if not, why: whether the
 history page is harvested, whether the delivered heat counter was recognised on
-it, and whether the energy consumed comes from the display or from Modbus. Yes
-or no each time, never which page or what is on it.
+it, whether the energy consumed comes from the display or from Modbus, and
+whether each of those two counters actually handed over a number at the last
+read. Yes or no each time, never which page, what is on it or what the counters
+say.
 
 It also sends what the installation is made of and how well it performs: the
 indoor unit's model, the outdoor unit's model, the firmware in the display, in
@@ -258,7 +260,7 @@ seen only by whoever runs the service.
 The point is to know which versions are actually in the field, which parts are
 worth maintaining and whether something is failing on units other than mine.
 
-To opt out: *Settings, Devices and services, CTC EcoZenith, Configure, Send
+To opt out: *Settings, Devices and services, CTC Local Easyconf, Configure, Send
 anonymous usage statistics.* Switching it off also erases what has already been
 sent about your installation. The full list of fields and the reasoning:
 <https://stats.rnet.se/integritet>. The code that builds the report is

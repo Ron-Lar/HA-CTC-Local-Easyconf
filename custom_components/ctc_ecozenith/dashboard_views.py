@@ -1,4 +1,4 @@
-"""Layout of the CTC EcoZenith page, built from a plain description of the heat pumps.
+"""Layout of the CTC page, built from a plain description of the heat pumps.
 
 Free of Home Assistant imports on purpose, like stats_extra.py, so the layout can be
 checked without an installation (tests/test_dashboard.py). dashboard.py looks the
@@ -74,7 +74,7 @@ HIDDEN_STATES = ["unavailable", "unknown"]
 
 #: For an entity this layout does not know yet, from a newer integration.
 UNKNOWN_EXPLANATION = "Ett värde från integrationen som sidan ännu inte har någon egen förklaring för."
-UNKNOWN_SOURCE = "CTC EcoZenith"
+UNKNOWN_SOURCE = "CTC Local Easyconf"
 
 CHIPS_CARD = "custom:ctc-ecozenith-chips"
 READINGS_CARD = "custom:ctc-ecozenith-readings"

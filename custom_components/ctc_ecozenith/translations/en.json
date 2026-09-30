@@ -75,16 +75,20 @@
     }
   },
   "issues": {
+    "pages_missing": {
+      "title": "No page of the display is being read",
+      "description": "Not one of the display's pages is ticked, so the display is never read: delivered heat, and with it the coefficient of performance, lives only there. Tick the pages under Settings, Devices and services, CTC Local Easyconf, Configure. Is the list empty, the menu could not be read when the integration was set up; reload the integration and it reads the menu again."
+    },
     "history_page_missing": {
       "title": "The coefficient of performance is missing its history page",
-      "description": "The coefficient of performance is worked out from the display's counter for delivered heat, which lives on the page with the stored or historical operation data. That page is not being read. Tick it under Settings, Devices and services, CTC EcoZenith, Configure."
+      "description": "The coefficient of performance is worked out from the display's counter for delivered heat, which lives on the page with the stored or historical operation data. That page is not being read. Tick it under Settings, Devices and services, CTC Local Easyconf, Configure."
     },
     "identity_incomplete": {
       "title": "The serial number has not been read",
       "description": "The display writes the serial number and its own software version into the System information page only once that page has been shown on the panel. Open it once on the panel, or let the integration walk there itself under Configure."
     },
     "update_available": {
-      "title": "A newer version of CTC EcoZenith is out",
+      "title": "A newer version of CTC Local Easyconf is out",
       "description": "Version {latest} has been released; this is {installed}. Installed through HACS: update it there, under Settings, Devices and services, HACS. Installed by hand: replace custom_components/ctc_ecozenith with the new release and restart Home Assistant."
     }
   }
