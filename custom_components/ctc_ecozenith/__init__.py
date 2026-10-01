@@ -205,7 +205,7 @@ async def _async_catch_up(
 
         if (
             not runtime.identity.serial
-            and options.get(CONF_VISIT_SYSTEM_INFO, True)
+            and options.get(CONF_VISIT_SYSTEM_INFO, False)
             and entry.entry_id not in _WALKED
         ):
             _WALKED.add(entry.entry_id)
