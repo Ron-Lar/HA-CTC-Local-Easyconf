@@ -232,7 +232,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         session = async_get_clientsession(self.hass)
         client = CtcWebClient(session, self._host, self._web_port, LANG_SWEDISH)
         try:
-            self._pages = await async_discover_pages(client)
+            self._pages = []
         except CtcWebError as err:
             _LOGGER.warning("Could not read the display's menu: %s", err)
             self._pages = []
