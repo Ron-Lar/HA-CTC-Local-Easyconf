@@ -631,6 +631,30 @@ def pages_from_storage(stored: list[dict[str, Any]] | None) -> list[SlowPage]:
     return pages
 
 
+def menu_is_due(stored_version: str | None, version: str, tries: int, limit: int) -> bool:
+    """Whether the whole menu is worth reading again, and whether a try is left.
+
+    The stored menu was parsed by whichever version read it, so a newer one reads
+    it again: a newer parser makes sense of rows and pages the older one passed
+    over. A display that was busy for a moment is worth another try, but the
+    panel is a physical thing, so the tries are counted and they stop.
+    """
+    return stored_version != version and tries < limit
+
+
+def menu_wait(last: float | None, now: float, interval: float) -> float:
+    """Seconds left of the pause between two readings of the menu.
+
+    On the clock rather than in a sleep, because writing the options reloads the
+    entry: a pause that lived only in a sleeping task would be skipped by the very
+    reload that a successful identity reading causes, and the panel would be walked
+    twice in a row.
+    """
+    if last is None:
+        return 0.0
+    return max(0.0, interval - (now - last))
+
+
 def merge_menu(
     previous_menu: list[SlowPage],
     previous_selection: list[int],
