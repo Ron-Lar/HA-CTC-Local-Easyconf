@@ -182,7 +182,7 @@ async def _async_catch_up(
     options = entry.options
     await _async_check_release(hass, entry, version)
     try:
-        if options.get(CONF_MENU_VERSION) != version and entry.entry_id not in _MENU_READ:
+        if options.get(CONF_SLOW_PAGES) and options.get(CONF_MENU_VERSION) != version and entry.entry_id not in _MENU_READ:
             _MENU_READ.add(entry.entry_id)
             async with client.panel:
                 discovered = await async_discover_pages(client)
