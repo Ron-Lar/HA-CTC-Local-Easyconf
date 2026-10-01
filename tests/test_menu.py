@@ -54,6 +54,50 @@ def test_a_page_that_is_gone_is_forgotten(catalogue, const):
     assert selected == [1]
 
 
+# --------------------------------------------- reading the menu again, or trying to
+
+
+def test_a_menu_from_an_older_version_is_due_until_the_tries_run_out(catalogue):
+    assert catalogue.menu_is_due("0.12.3", "0.13.0", 0, 3)
+    assert catalogue.menu_is_due("0.12.3", "0.13.0", 2, 3)
+    # Spent is spent: a panel that never answers is not walked over and over.
+    assert not catalogue.menu_is_due("0.12.3", "0.13.0", 3, 3)
+    # This version has already read it.
+    assert not catalogue.menu_is_due("0.13.0", "0.13.0", 0, 3)
+    # An installation from before the menu was stamped at all is owed a reading.
+    assert catalogue.menu_is_due(None, "0.13.0", 0, 3)
+
+
+def test_a_menu_that_could_not_be_read_is_tried_again_in_the_same_run():
+    """VSH kept 0.12.3's menu through the whole of 0.13.0's first run.
+
+    The display answered in 24 ms when it was measured minutes later, so the one
+    attempt had simply landed badly, and a flag meant the next attempt waited for
+    a restart with nothing but a debug line to show for it.
+    """
+    source = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "custom_components" / "ctc_ecozenith" / "__init__.py"
+    ).read_text(encoding="utf-8")
+    assert "_MENU_READ" not in source, "spärren ska vara en räknare, inte en flagga"
+    assert "await asyncio.sleep(wait)" in source, "inget nytt försök i samma körning"
+    giving_up = source.split("async def _async_reread_menu")[1]
+    assert "_LOGGER.warning(" in giving_up, "tystnad när försöken är slut"
+
+
+def test_the_pause_between_two_readings_is_kept_on_the_clock(catalogue):
+    interval = 300.0
+    # The first reading of a run waits for nothing.
+    assert catalogue.menu_wait(None, 1000.0, interval) == 0
+    assert catalogue.menu_wait(1000.0, 1060.0, interval) == 240
+    assert catalogue.menu_wait(1000.0, 1300.0, interval) == 0
+    # A reload mid-pause must not turn the pause into no pause: the clock, not a
+    # sleeping task, is what the next run reads.
+    assert catalogue.menu_wait(1000.0, 1001.0, interval) == 299
+    # Nor a negative wait once the pause is long past.
+    assert catalogue.menu_wait(1000.0, 9000.0, interval) == 0
+
+
 # ------------------------------------------------- the repairs view's texts
 
 

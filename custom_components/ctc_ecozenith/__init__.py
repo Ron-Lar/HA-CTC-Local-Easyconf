@@ -7,6 +7,7 @@ myUplink or any other cloud.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -24,7 +25,14 @@ from homeassistant.loader import async_get_integration
 from homeassistant.helpers.storage import Store
 
 from . import dashboard
-from .catalogue import async_discover_pages, merge_menu, pages_from_storage, pages_to_storage
+from .catalogue import (
+    async_discover_pages,
+    menu_is_due,
+    menu_wait,
+    merge_menu,
+    pages_from_storage,
+    pages_to_storage,
+)
 from .cop import (
     ConsumptionSnapshot,
     CopTracker,
@@ -88,10 +96,19 @@ _FAILURES: dict[str, ErrorCounter] = {}
 #: reload, and only while the identity is still missing.
 _WALKED: set[str] = set()
 
-#: Entries whose menu has been read again in this run. A reading that failed
-#: because the display was busy is worth another try after a restart, but not
-#: at every reload: walking the menu moves the panel.
-_MENU_READ: set[str] = set()
+#: Attempts spent on each entry's menu in this run. Counted rather than flagged,
+#: and kept across reloads, because writing the options reloads the entry: a flag
+#: would leave a display that was busy for one moment with last version's menu
+#: until somebody restarted Home Assistant, and no limit at all would let a panel
+#: that never answers be walked over and over.
+_MENU_TRIES: dict[str, int] = {}
+
+#: When each entry's menu was last attempted, on the event loop's clock.
+_MENU_LAST: dict[str, float] = {}
+
+#: How many times a run reads the menu again, and how long it waits in between.
+MENU_READ_TRIES = 3
+MENU_READ_RETRY = timedelta(minutes=5)
 
 ISSUE_PAGES = "pages_missing"
 ISSUE_HISTORY_PAGE = "history_page_missing"
@@ -177,53 +194,115 @@ async def _async_catch_up(
     version reads the whole menu again, because a newer parser can make sense of
     rows and pages the old one passed over, and pages nobody has switched off
     are harvested.
+
+    A menu that could not be read is tried again a few minutes later in the same
+    run, and said out loud once the tries are spent. A display that was busy for
+    one moment used to leave the stored menu a version behind until somebody
+    restarted Home Assistant, with a single debug line as the only trace. The walk
+    to the system information page keeps its one attempt: where it gives up, the
+    menu itself has no way there, so repeating it would only move the panel.
     """
-    changed: dict[str, Any] = {}
-    options = entry.options
     await _async_check_release(hass, entry, version)
-    try:
-        if options.get(CONF_MENU_VERSION) != version and entry.entry_id not in _MENU_READ:
-            _MENU_READ.add(entry.entry_id)
-            async with client.panel:
-                discovered = await async_discover_pages(client)
-            if discovered:
-                menu, selected = merge_menu(
-                    pages_from_storage(options.get(CONF_MENU)),
-                    [page.page for page in pages_from_storage(options.get(CONF_SLOW_PAGES))],
-                    discovered,
+    while True:
+        changed: dict[str, Any] = {}
+        try:
+            if _menu_is_due(entry, version):
+                wait = menu_wait(
+                    _MENU_LAST.get(entry.entry_id),
+                    hass.loop.time(),
+                    MENU_READ_RETRY.total_seconds(),
                 )
-                chosen = set(selected)
-                changed[CONF_MENU] = pages_to_storage(menu)
-                changed[CONF_SLOW_PAGES] = pages_to_storage(
-                    [page for page in menu if page.page in chosen]
-                )
-                # Only a reading that worked counts as done. A display that was
-                # busy is tried again after a restart, not at every reload.
-                changed[CONF_MENU_VERSION] = version
-            else:
-                _LOGGER.debug("The display's menu could not be read; keeping the stored one")
+                if wait:
+                    _LOGGER.debug(
+                        "Reading the display's menu again in %s s", int(wait)
+                    )
+                    await asyncio.sleep(wait)
+                _MENU_TRIES[entry.entry_id] = _MENU_TRIES.get(entry.entry_id, 0) + 1
+                _MENU_LAST[entry.entry_id] = hass.loop.time()
+                changed.update(await _async_reread_menu(client, entry, version))
 
-        if (
-            not runtime.identity.serial
-            and options.get(CONF_VISIT_SYSTEM_INFO, True)
-            and entry.entry_id not in _WALKED
-        ):
-            _WALKED.add(entry.entry_id)
-            async with client.panel:
-                found = await async_read_identity_via_panel(
-                    client,
-                    restore=runtime.web.async_restore_page if runtime.web else None,
-                )
-            merged = runtime.identity.merged_with(found)
-            if merged.as_dict() != runtime.identity.as_dict():
-                changed[CONF_IDENTITY] = merged.as_dict()
-    except Exception as err:  # noqa: BLE001 - catching up must never break the entry
-        _LOGGER.debug("Could not catch up with the display: %s", err)
+            if (
+                not runtime.identity.serial
+                and entry.options.get(CONF_VISIT_SYSTEM_INFO, True)
+                and entry.entry_id not in _WALKED
+            ):
+                _WALKED.add(entry.entry_id)
+                async with client.panel:
+                    found = await async_read_identity_via_panel(
+                        client,
+                        restore=runtime.web.async_restore_page if runtime.web else None,
+                    )
+                merged = runtime.identity.merged_with(found)
+                if merged.as_dict() != runtime.identity.as_dict():
+                    changed[CONF_IDENTITY] = merged.as_dict()
+        except Exception as err:  # noqa: BLE001 - catching up must never break the entry
+            _LOGGER.debug("Could not catch up with the display: %s", err)
 
-    if changed:
-        # Writing the options reloads the entry, which is where the new pages
-        # and the new identity are picked up.
-        hass.config_entries.async_update_entry(entry, options={**entry.options, **changed})
+        if changed:
+            # Writing the options reloads the entry, which is where the new pages
+            # and the new identity are picked up. The reload cancels this task and
+            # starts it over, and the attempts already spent are remembered, so a
+            # menu that is still owed is tried again there rather than endlessly.
+            hass.config_entries.async_update_entry(
+                entry, options={**entry.options, **changed}
+            )
+            return
+        if not _menu_is_due(entry, version):
+            return
+
+
+def _menu_is_due(entry: "CtcConfigEntry", version: str) -> bool:
+    """Whether this run still owes the entry a fresh reading of the menu."""
+    return menu_is_due(
+        entry.options.get(CONF_MENU_VERSION),
+        version,
+        _MENU_TRIES.get(entry.entry_id, 0),
+        MENU_READ_TRIES,
+    )
+
+
+async def _async_reread_menu(
+    client: CtcWebClient, entry: "CtcConfigEntry", version: str
+) -> dict[str, Any]:
+    """The whole menu again, or nothing at all when the display would not give it.
+
+    Pages nobody has switched off stay on and pages somebody switched off stay
+    off; see merge_menu. Only a reading that worked stamps the version, so a
+    failed one is owed rather than forgotten.
+    """
+    options = entry.options
+    async with client.panel:
+        discovered = await async_discover_pages(client)
+    if not discovered:
+        spent = _MENU_TRIES.get(entry.entry_id, 0)
+        if spent >= MENU_READ_TRIES:
+            _LOGGER.warning(
+                "The display's menu could not be read in %s attempts, so the menu stored by "
+                "an earlier version is kept and anything a newer one would make sense of is "
+                "not harvested. Reload the integration to try again",
+                MENU_READ_TRIES,
+            )
+        else:
+            _LOGGER.debug(
+                "The display's menu could not be read (attempt %s of %s); keeping the stored "
+                "one and trying again in %s minutes",
+                spent,
+                MENU_READ_TRIES,
+                int(MENU_READ_RETRY.total_seconds() // 60),
+            )
+        return {}
+
+    menu, selected = merge_menu(
+        pages_from_storage(options.get(CONF_MENU)),
+        [page.page for page in pages_from_storage(options.get(CONF_SLOW_PAGES))],
+        discovered,
+    )
+    chosen = set(selected)
+    return {
+        CONF_MENU: pages_to_storage(menu),
+        CONF_SLOW_PAGES: pages_to_storage([page for page in menu if page.page in chosen]),
+        CONF_MENU_VERSION: version,
+    }
 
 
 def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, Any]:

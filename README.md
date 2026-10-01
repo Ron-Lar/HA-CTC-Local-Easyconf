@@ -46,9 +46,11 @@ So the display is treated as a supplement, not the base:
 - Every page is ticked to begin with, and you choose which ones are worth the
   trip. The whole menu is kept, so a page can be switched on or off later under
   Configure without walking the panel again.
-- A new version of the integration reads the menu again by itself, once, in the
+- A new version of the integration reads the menu again by itself, in the
   background: a newer parser understands rows and pages the older one passed
-  over, and those are then read without anyone having to ask for it.
+  over, and those are then read without anyone having to ask for it. A reading
+  that lands while the panel is busy is tried again five minutes later, three
+  times in all, and the log says so when they are spent.
 - They are polled on a slow interval, thirty minutes by default.
 - The panel is put back where it was afterwards.
 - If the panel is not where the integration left it, somebody is standing at it,
