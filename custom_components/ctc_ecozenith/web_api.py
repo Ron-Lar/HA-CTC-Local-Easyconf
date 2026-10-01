@@ -288,7 +288,7 @@ class CtcWebClient:
         looked like a failure would move the panel a second time.
         """
         url = f"{self.base_url}{path}"
-        timeouts = (REQUEST_TIMEOUT, PATIENT_TIMEOUT) if body is None else (REQUEST_TIMEOUT,)
+        timeouts = (REQUEST_TIMEOUT,)
         async with self._semaphore:
             for attempt, timeout in enumerate(timeouts, start=1):
                 try:
