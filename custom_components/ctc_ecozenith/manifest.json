@@ -1,6 +1,6 @@
 {
   "domain": "ctc_ecozenith",
-  "name": "CTC Local Easyconf",
+  "name": "CTC Local Easyconf Test",
   "after_dependencies": [
     "recorder"
   ],
