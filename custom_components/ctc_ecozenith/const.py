@@ -239,7 +239,7 @@ MODBUS_SENSORS: Final[tuple[ModbusSensor, ...]] = (
     ModbusSensor("tank_lower_setpoint", 62274, "Nedre tank börvärde", 0.1, "°C", _T, enabled_default=False),
     ModbusSensor("dhw_lower_temp", 62275, "Varmvatten nedre", 0.1, "°C", _T, enabled_default=False),
     ModbusSensor("dhw_temp", 62276, "Varmvatten", 0.1, "°C", _T),
-    ModbusSensor("dhw_capacity", 62279, "Varmvattenkapacitet", 1, "%", None, icon="mdi:water-percent"),
+    ModbusSensor("dhw_capacity", 62279, "Varmvattenkapacitet", 0.1, "%", None, icon="mdi:water-percent"),
     # Pump and fan speeds carry one decimal: an EcoAir 720M running at 66.2 per
     # cent reports 662, which read as a whole number would be nonsense.
     ModbusSensor("sg_mode", 62301, "SmartGrid-läge", 1, None, None, None, enum=SG_MODE, icon="mdi:transmission-tower"),
