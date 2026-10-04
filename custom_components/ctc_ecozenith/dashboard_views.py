@@ -61,7 +61,8 @@ URL_PATH = "ctc-ecozenith"
 #: What the sidebar says. Short on purpose: it stands in a narrow column beside
 #: the other entries, and the address stays as it is so a bookmark still works.
 TITLE = "CTC"
-ICON = "mdi:heat-pump"
+#: CTC's own mark, from the integration's icon pack (www/ctc-ecozenith-icon.js).
+ICON = "ctc:logo"
 
 #: What the graphs cover: a day of readings, a month of daily figures.
 GRAPH_HOURS = 24

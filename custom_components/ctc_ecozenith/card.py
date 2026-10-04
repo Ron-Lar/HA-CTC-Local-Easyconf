@@ -1,4 +1,4 @@
-"""Serve the page's cards and load them into the frontend.
+"""Serve the page's cards and the icon pack, and load them into the frontend.
 
 The CTC page uses two cards of its own (www/ctc-ecozenith-card.js), which
 add an explanation to every value. They are served by the integration and added as a
@@ -28,6 +28,12 @@ _LOGGER = logging.getLogger(__name__)
 CARD_URL = f"/{DOMAIN}/ctc-ecozenith-card.js"
 CARD_FILE = Path(__file__).parent / "www" / "ctc-ecozenith-card.js"
 
+#: The icon pack that gives the sidebar CTC's own mark. It is loaded on every
+#: page rather than with the dashboard, since the sidebar is drawn long before
+#: anybody opens one.
+ICON_URL = f"/{DOMAIN}/ctc-ecozenith-icon.js"
+ICON_FILE = Path(__file__).parent / "www" / "ctc-ecozenith-icon.js"
+
 _REGISTERED = f"{DOMAIN}_card_registered"
 
 
@@ -38,9 +44,10 @@ async def async_register_card(hass: HomeAssistant, version: str) -> None:
     hass.data[_REGISTERED] = True
     versioned = f"{CARD_URL}?v={version}"
     try:
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(CARD_URL, str(CARD_FILE), False)]
-        )
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(CARD_URL, str(CARD_FILE), False),
+            StaticPathConfig(ICON_URL, str(ICON_FILE), False),
+        ])
     except (RuntimeError, ValueError) as err:
         # Already served, from an earlier load in this process.
         _LOGGER.debug("Static path for the card not registered: %s", err)
@@ -48,6 +55,8 @@ async def async_register_card(hass: HomeAssistant, version: str) -> None:
         _LOGGER.warning("Could not serve the CTC card: %s", err)
     if not await _async_register_resource(hass, versioned):
         frontend.add_extra_js_url(hass, versioned)
+    # The icon pack is always an extra module: an icon is wanted on every page.
+    frontend.add_extra_js_url(hass, f"{ICON_URL}?v={version}")
 
 
 async def _async_register_resource(hass: HomeAssistant, versioned: str) -> bool:
