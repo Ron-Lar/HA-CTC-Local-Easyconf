@@ -44,6 +44,31 @@ MESSAGE_WAIT = 0.06
 # only costs anything on the first poll after a reconnect.
 CONNECT_DELAY = 3.0
 
+# And a moment after the socket closes before it hands its single client slot
+# back. Home Assistant reloads an entry by unloading and setting it up again
+# within the same breath, which is a new connection knocking while the
+# controller still believes the old one is there: it answers with a reset, and
+# the knocking appears to keep that belief alive. So a connection waits out the
+# last close on the same unit, which costs nothing at all on a fresh start.
+CLOSE_SETTLE = 10.0
+
+#: When each unit's socket was last closed, kept per address rather than per
+#: client, since a reload builds a new client for the same pump.
+_CLOSED_AT: dict[tuple[str, int], float] = {}
+
+
+def note_close(host: str, port: int, now: float) -> None:
+    """Remember that this unit's socket has just been closed."""
+    _CLOSED_AT[(host, port)] = now
+
+
+def settle_wait(host: str, port: int, now: float) -> float:
+    """How long a new connection to this unit should wait before knocking."""
+    closed = _CLOSED_AT.get((host, port))
+    if closed is None:
+        return 0.0
+    return max(0.0, CLOSE_SETTLE - (now - closed))
+
 
 class CtcModbusError(Exception):
     """Raised when the Modbus side cannot be used."""
@@ -83,6 +108,9 @@ class CtcModbusClient:
         except ImportError as err:  # pragma: no cover - dependency is declared
             raise CtcModbusError("pymodbus is not available") from err
 
+        waiting = settle_wait(self._host, self._port, time.monotonic())
+        if waiting:
+            await asyncio.sleep(waiting)
         self._client = AsyncModbusTcpClient(
             self._host, port=self._port, timeout=REQUEST_TIMEOUT
         )
@@ -111,6 +139,7 @@ class CtcModbusClient:
                     if asyncio.iscoroutine(result):
                         await result
                 self._client = None
+                note_close(self._host, self._port, time.monotonic())
 
     def _slave_kwargs(self, client: Any, method: str) -> dict[str, int]:
         """pymodbus renamed the unit argument; support both spellings."""

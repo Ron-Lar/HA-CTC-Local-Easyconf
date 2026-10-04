@@ -333,3 +333,20 @@ def test_other_readings_stay_measurements(catalogue):
     assert catalogue.display_state_class("°C", "Hetgas") == "measurement"
     assert catalogue.display_state_class("%", "Laddpump") == "measurement"
     assert catalogue.display_state_class(None, "Status") is None
+
+
+def test_a_reconnect_waits_out_the_last_close(modbus_api):
+    """CTC hands its single client slot back a moment after the socket closes.
+
+    A reload closes and connects again in the same breath, which the controller
+    answers with a reset, so the new connection waits for the slot instead.
+    """
+    unit = ("10.0.0.5", 502)
+    assert modbus_api.settle_wait(*unit, 1000.0) == 0.0  # never seen before
+    modbus_api.note_close(*unit, 1000.0)
+    assert modbus_api.settle_wait(*unit, 1000.0) == modbus_api.CLOSE_SETTLE
+    assert modbus_api.settle_wait(*unit, 1004.0) == modbus_api.CLOSE_SETTLE - 4.0
+    assert modbus_api.settle_wait(*unit, 1000.0 + modbus_api.CLOSE_SETTLE) == 0.0
+    assert modbus_api.settle_wait(*unit, 2000.0) == 0.0
+    # Another pump on the network is not kept waiting by this one.
+    assert modbus_api.settle_wait("10.0.0.6", 502, 1000.0) == 0.0
