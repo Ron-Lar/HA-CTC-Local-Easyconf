@@ -350,3 +350,25 @@ def test_a_reconnect_waits_out_the_last_close(modbus_api):
     assert modbus_api.settle_wait(*unit, 2000.0) == 0.0
     # Another pump on the network is not kept waiting by this one.
     assert modbus_api.settle_wait("10.0.0.6", 502, 1000.0) == 0.0
+
+
+def test_every_reading_is_created_switched_on(const):
+    """What the unit offers is on from the start, and the page hides the rest.
+
+    A reading this installation has only ever reported as zero is left off the
+    page by seen.py, which is a better filter than guessing here.
+    """
+    off = [d.key for d in const.MODBUS_SENSORS + const.MODBUS_SETTINGS if not d.enabled_default]
+    assert off == []
+
+
+def test_control_is_allowed_from_the_start(const):
+    """Both where an entry is created and where the runtime reads the option."""
+    from conftest import COMPONENT
+
+    flow = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
+    assert "CONF_ENABLE_CONTROL: True," in flow
+    assert "CONF_ENABLE_CONTROL: False," not in flow
+    assert "options.get(CONF_ENABLE_CONTROL, True)" in flow
+    setup = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
+    assert "options.get(CONF_ENABLE_CONTROL, True)" in setup

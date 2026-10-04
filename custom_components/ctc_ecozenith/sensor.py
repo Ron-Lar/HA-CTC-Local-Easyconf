@@ -165,9 +165,6 @@ class CtcDisplaySensor(CoordinatorEntity, SensorEntity):
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         elif state_class == "measurement":
             self._attr_state_class = SensorStateClass.MEASUREMENT
-        # Only a handful of these are interesting to most people; the rest are
-        # created but left switched off so the entity list stays usable.
-        self._attr_entity_registry_enabled_default = unit in ("kW", "kWh", "°C")
 
     @property
     def native_value(self):
@@ -198,7 +195,6 @@ class CtcIdentitySensor(SensorEntity):
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
 
     def __init__(self, runtime, key: str, name: str, value: str, icon: str) -> None:
         host = next(iter(runtime.device["identifiers"]))[1]
