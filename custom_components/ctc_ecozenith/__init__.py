@@ -498,7 +498,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         modbus=modbus,
         control=CtcControlManager(hass, modbus_client),
         device=device,
-        control_enabled=bool(options.get(CONF_ENABLE_CONTROL, False)),
+        control_enabled=bool(options.get(CONF_ENABLE_CONTROL, True)),
         identity=identity,
     )
 

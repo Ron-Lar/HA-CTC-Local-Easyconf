@@ -224,7 +224,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                     CONF_FAST_INTERVAL: DEFAULT_FAST_INTERVAL,
                     CONF_RESTORE_PAGE: user_input.get(CONF_RESTORE_PAGE, True),
-                    CONF_ENABLE_CONTROL: False,
+                    CONF_ENABLE_CONTROL: True,
                     CONF_LANGUAGE: LANG_SWEDISH,
                 },
             )
@@ -254,7 +254,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_SLOW_INTERVAL: DEFAULT_SLOW_INTERVAL,
                     CONF_FAST_INTERVAL: DEFAULT_FAST_INTERVAL,
                     CONF_RESTORE_PAGE: True,
-                    CONF_ENABLE_CONTROL: False,
+                    CONF_ENABLE_CONTROL: True,
                     CONF_LANGUAGE: LANG_SWEDISH,
                 },
             )
@@ -458,7 +458,7 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
                 ): bool,
                 vol.Optional(
                     CONF_ENABLE_CONTROL,
-                    default=options.get(CONF_ENABLE_CONTROL, False),
+                    default=options.get(CONF_ENABLE_CONTROL, True),
                 ): bool,
                 vol.Optional(
                     CONF_VISIT_SYSTEM_INFO,

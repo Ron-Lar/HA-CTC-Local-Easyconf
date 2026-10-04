@@ -89,8 +89,12 @@ has been released. Home Assistant only offers updates for what HACS installed,
 so a copy put into `custom_components` by hand is never offered one; the release
 check asks GitHub once a day and can be switched off under Configure.
 
-Control entities are off by default. Turn them on under the integration's
-options if you want them.
+Everything the unit offers is created and switched on: every register, every
+row of every harvested display page, and the controls. Nothing is written to the
+heat pump by their existence alone, since a control mirrors the unit until
+somebody sets it, and the page leaves out what this installation has only ever
+reported as zero. Switch off what you do not want, per entity on the device page
+or, for control as a whole, under the integration's options.
 
 ## The CTC page
 
