@@ -372,3 +372,71 @@ def test_control_is_allowed_from_the_start(const):
     assert "options.get(CONF_ENABLE_CONTROL, True)" in flow
     setup = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
     assert "options.get(CONF_ENABLE_CONTROL, True)" in setup
+
+
+# ------------------------------------------------- real pages, both displays
+
+#: What each page's readings are called, by the variable the display holds them
+#: in. Checked against the panel itself: the figures are the ones on the screen.
+REAL_PAGES = {
+    # Read against the panel: VP in 32,8 and ut 34,1 °C, the valve at 32,7 %,
+    # the inverter's bus at 616 V.
+    "i255_118": {
+        41: "Laddpump", 47: "VP in/ut °C 1", 48: "VP in/ut °C 2", 49: "Utetemperatur °C",
+        55: "Expansionsventil", 101: "Inverter DC-Bus spänning V", 108: "Kompressortemp °C",
+        113: "Vätskerör temp °C", 116: "Avgiven värme (kW)", 122: "Tillförd effekt (kW)",
+    },
+    # The counters the coefficient of performance rests on: 23 171 kWh of heat
+    # out against 9 357 kWh in, and 8 653 hours switched on.
+    "i255_128": {
+        20: "Total drifttid h", 21: "Drifttid total", 22: "Avgiven värme totalt (kWh)",
+        23: "Antal starter /24 h", 24: "Högsta framledning °C", 25: "Energi el total (kWh)",
+        32: "Antal starter", 47: "Energi el/30 dagar (kWh)",
+        53: "Tillförd energi totalt (kWh)", 65: "Medeltemperatur ute/30 dagar °C",
+    },
+    "i550_136": {
+        5: "Högsta framledning °C", 4: "Energi el total (kWh)",
+        6: "Avgiven värme totalt (kWh)", 7: "Drift /24 h:m", 9: "EMXXX kWh",
+        26: "Antal starter /24 h", 29: "Antal starter",
+        # The pair that used to share one name: two captions in a row, two
+        # readings after them, and the first caption owns the first reading.
+        50: "Energi el/30 dagar (kWh)", 32: "Medeltemperatur ute/30 dagar °C",
+        35: "Avgiven kyla totalt (kWh)", 38: "Tillförd energi totalt (kWh)",
+        47: "Tillförd energi/30 dagar (kWh)",
+    },
+    "i550_138": {
+        39: "Laddpump", 40: "Brine in/ut °C 1", 42: "VP in/ut °C 1", 89: "Flöde l/min",
+        44: "Utetemperatur °C", 46: "Hetgas/Suggas °C 1", 110: "Kompressortemp °C",
+        115: "Vätskerör temp °C", 118: "Avgiven värme (kW)", 121: "Avgiven kyla (kW)",
+        124: "Tillförd effekt (kW)",
+    },
+}
+
+
+def _named_by_variable(catalogue, web_api, data):
+    widgets = [web_api.Widget(**w) for w in data["widgets"]]
+    pairing = catalogue._pair_labels(widgets)
+    return {
+        w.value_vars[0]: pairing[w.index]
+        for w in widgets if w.index in pairing and w.value_vars
+    }
+
+
+@pytest.mark.parametrize("name", sorted(REAL_PAGES))
+def test_a_real_page_names_its_readings(catalogue, web_api, page, name):
+    named = _named_by_variable(catalogue, web_api, page(name))
+    for variable, expected in REAL_PAGES[name].items():
+        assert named.get(variable) == expected, f"{name} variable {variable}"
+
+
+def test_a_reading_the_panel_draws_without_a_caption_is_left_unnamed(catalogue, web_api, page):
+    """The schematic figures on the i550's compressor page, and the row whose
+    caption the display would not name."""
+    assert 107 not in _named_by_variable(catalogue, web_api, page("i550_138"))
+    assert 2 not in _named_by_variable(catalogue, web_api, page("i550_136"))
+
+
+def test_a_heading_over_the_rows_names_nothing(catalogue, web_api, page):
+    """"Kompressor" stands over the i255's history rows and owns no reading."""
+    named = _named_by_variable(catalogue, web_api, page("i255_128"))
+    assert "Kompressor" not in named.values()

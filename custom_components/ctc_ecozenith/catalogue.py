@@ -29,6 +29,8 @@ _FLOW_X = -10000
 MAX_READINGS_PER_ROW = 4
 #: Anything this high up and this wide is the page heading, not a row name.
 _HEADER_HEIGHT = 45
+#: How far a caption and its reading may sit apart and still be the same row.
+_ROW_TOLERANCE = 14
 
 
 def _decimals(fmt: str) -> float:
@@ -142,110 +144,110 @@ def has_conversion(fmt: str) -> bool:
     return bool(_CONVERSION.search(fmt))
 
 
-def _row_of(widgets: list[Widget]) -> dict[int, int]:
-    """Group widgets into rows.
+def _label_column(captions: list[Widget]) -> int | None:
+    """Where the row names stand.
 
-    Operation data pages are drawn row by row, and each row starts with its name
-    in the left hand column. Rows scrolled out of view are all parked at the same
-    negative y, so y cannot separate them; draw order and the left column can.
-    A widget placed at a large negative x is laid out after the previous one and
-    therefore continues the same row.
+    Not simply the leftmost thing on the page: a divider or a rule drawn at x=0
+    would take that place and then nothing would ever line up. The left edge
+    most of the names share is what the layout is built on.
     """
-    positioned = [w for w in widgets if w.x > _FLOW_X]
-    if not positioned:
-        return {w.index: 0 for w in widgets}
-
-    # The column is where the row names are, which is not the same as the
-    # leftmost thing on the screen: a divider or a rule drawn at x=0 would
-    # otherwise become the column, and then no row would ever break. The most
-    # common left edge among the captions is what the layout is actually built
-    # on, so that is used, falling back to the leftmost element.
     columns: dict[int, int] = {}
-    for widget in positioned:
-        if _is_caption(widget) and _usable_label(widget):
-            columns[widget.x] = columns.get(widget.x, 0) + 1
-    if columns:
-        label_column = min(columns, key=lambda x: (-columns[x], x))
-    else:
-        label_column = min(w.x for w in positioned)
+    for caption in captions:
+        if caption.x > _FLOW_X:
+            columns[caption.x] = columns.get(caption.x, 0) + 1
+    if not columns:
+        return None
+    return min(columns, key=lambda x: (-columns[x], x))
 
-    rows: dict[int, int] = {}
-    row = -1
-    started = False
-    for widget in sorted(widgets, key=lambda w: w.index):
-        starts_row = widget.x > _FLOW_X and abs(widget.x - label_column) <= 2
-        if starts_row or not started:
-            row += 1
-            started = True
-        rows[widget.index] = row
-    return rows
+
+def _is_heading(widget: Widget) -> bool:
+    """The page's own title, which stands across the top and names nothing."""
+    return 0 <= widget.y < _HEADER_HEIGHT and widget.width >= 80
 
 
 def _pair_labels(widgets: list[Widget]) -> dict[int, str]:
     """Name each reading after the caption that belongs to it.
 
     Two layouts have to work. Most pages draw a row at a time, caption on the
-    left and reading to its right, which geometry solves. Some pages draw every
-    caption first and then every reading, and rows scrolled out of view all
-    share one off screen y, so geometry has nothing to go on there. What is left
-    then is the order they are drawn in, where the two blocks run in step.
+    left and reading to its right. Some draw every caption first and then every
+    reading, and the rows scrolled out of view all share one off screen y, so
+    geometry has nothing left to separate them with. What both have in common is
+    the order: the captions come in the order their readings do. So the captions
+    in the left hand column queue up and each reading takes the one that has
+    waited longest.
+
+    A reading parked far to the left is laid out after the one before it and
+    belongs to the same caption, which is how "Brine in/ut" carries two.
+
+    A caption whose text the display would not give up still holds its place in
+    the queue: it is a row of the page either way, and skipping it would hand
+    its reading the next row's name. Where a caption and a reading are both on
+    screen their rows have to agree: a caption left behind owns nothing and is
+    passed over, and a caption still to come means this reading has no name.
     """
+    # A reading is a text element too, so what makes a caption is that it
+    # carries no format of its own.
     captions = [
-        w for w in widgets if w.visible and _is_caption(w) and _usable_label(w) and w.width > 0
+        w for w in widgets
+        if w.visible and _is_caption(w) and w.width > 0 and not w.value_fmt
     ]
-    values = [
-        w
-        for w in widgets
-        if w.visible and w.value_fmt and has_conversion(w.value_fmt)
-    ]
-    if not values:
+    # A reading the panel has hidden still holds its row: the caption above it
+    # is spoken for, and skipping it would hand that caption to the next row.
+    # Only the visible ones are named, since only those become values.
+    values = [w for w in widgets if w.value_fmt and has_conversion(w.value_fmt)]
+    if not any(w.visible for w in values):
         return {}
 
-    rows = _row_of(widgets)
-    pairing: dict[int, str] = {}
-    used: set[int] = set()
+    column = _label_column(captions)
+    queue = [
+        caption for caption in sorted(captions, key=lambda w: w.index)
+        if column is not None and abs(caption.x - column) <= 2 and not _is_heading(caption)
+    ]
 
-    # Geometry first: a caption on the same row, to the left of the reading.
-    by_row: dict[int, list[Widget]] = {}
-    for caption in captions:
-        by_row.setdefault(rows[caption.index], []).append(caption)
-    values_by_row: dict[int, list[Widget]] = {}
+    groups: list[tuple[Widget | None, list[Widget]]] = []
     for value in sorted(values, key=lambda w: w.index):
-        values_by_row.setdefault(rows[value.index], []).append(value)
+        if value.x <= _FLOW_X and groups:
+            groups[-1][1].append(value)
+            continue
+        caption = None
+        while queue:
+            candidate = queue[0]
+            if candidate.y >= 0 <= value.y:
+                if candidate.y < value.y - _ROW_TOLERANCE:
+                    queue.pop(0)  # a row of its own, without a reading
+                    continue
+                if candidate.y > value.y + _ROW_TOLERANCE:
+                    break  # the caption belongs further down; this one has none
+            elif candidate.y >= 0 > value.y:
+                # The caption is on a row the panel is drawing and the reading
+                # is not, so the caption is a heading over the rows below it.
+                queue.pop(0)
+                continue
+            elif value.y >= 0 > candidate.y:
+                # Drawn on the page while every caption left is scrolled away:
+                # a figure on a schematic, which no caption names.
+                break
+            caption = queue.pop(0)
+            break
+        groups.append((caption, [value]))
 
-    for row, members in values_by_row.items():
-        candidates = by_row.get(row)
-        if not candidates:
+    pairing: dict[int, str] = {}
+    for caption, members in groups:
+        members = [value for value in members if value.visible]
+        if not members:
             continue
         # A genuine row holds a handful of readings at most: the widest seen is
-        # "Överhettning S/H" with four. More than that means this is not a row
-        # but a block of readings that ran past its caption, and guessing would
-        # give several unrelated numbers the same name.
-        if len(members) > MAX_READINGS_PER_ROW:
+        # "Överhettning S/H" with four. More than that is a block that ran past
+        # its caption, and guessing would give unrelated numbers the same name.
+        if caption is None or len(members) > MAX_READINGS_PER_ROW:
             continue
-        name = (min(candidates, key=lambda w: w.x).label or "").strip()
-        if not name:
+        if not _usable_label(caption):
             continue
-        used.add(min(candidates, key=lambda w: w.x).index)
+        name = (caption.label or "").strip()
         for position, value in enumerate(members, start=1):
             pairing[value.index] = (
                 name if len(members) == 1 else f"{name} {position}"
             ).strip()
-
-    # Whatever is left is a caption block followed by a reading block. The two
-    # run in the same order, so they are matched off against each other. The
-    # page heading sits across the top and is not part of the block; counting it
-    # in would shift every name by one.
-    spare = [
-        c
-        for c in sorted(captions, key=lambda w: w.index)
-        if c.index not in used and not (0 <= c.y < _HEADER_HEIGHT and c.width >= 80)
-    ]
-    orphans = [v for v in sorted(values, key=lambda w: w.index) if v.index not in pairing]
-    for value, caption in zip(orphans, spare):
-        name = (caption.label or "").strip()
-        if name:
-            pairing[value.index] = name
     return pairing
 
 
