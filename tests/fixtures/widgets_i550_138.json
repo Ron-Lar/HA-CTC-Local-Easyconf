@@ -1,0 +1,1204 @@
+{
+ "screen": 138,
+ "widgets": [
+  {
+   "index": 0,
+   "kind": 1,
+   "x": 5,
+   "y": 4,
+   "width": 48,
+   "height": 38,
+   "visible": true,
+   "label": "Installation"
+  },
+  {
+   "index": 1,
+   "kind": 3,
+   "x": 60,
+   "y": 4,
+   "width": 290,
+   "height": 38,
+   "visible": true,
+   "label": "Kompressor VP1"
+  },
+  {
+   "index": 2,
+   "kind": 3,
+   "x": 5,
+   "y": 55,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Status"
+  },
+  {
+   "index": 3,
+   "kind": 3,
+   "x": 195,
+   "y": 55,
+   "width": 220,
+   "height": 28,
+   "visible": true,
+   "label": "Från, startklar"
+  },
+  {
+   "index": 4,
+   "kind": 3,
+   "x": 5,
+   "y": 83,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Modell"
+  },
+  {
+   "index": 5,
+   "kind": 2,
+   "x": 195,
+   "y": 83,
+   "width": 125,
+   "height": 28,
+   "visible": true,
+   "label": "EA420"
+  },
+  {
+   "index": 6,
+   "kind": 3,
+   "x": 5,
+   "y": 111,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Kompressor"
+  },
+  {
+   "index": 7,
+   "kind": 3,
+   "x": 195,
+   "y": 111,
+   "width": 60,
+   "height": 28,
+   "visible": true,
+   "label": "Från"
+  },
+  {
+   "index": 8,
+   "kind": 3,
+   "x": 255,
+   "y": 111,
+   "width": 30,
+   "height": 28,
+   "visible": false,
+   "label": "R"
+  },
+  {
+   "index": 9,
+   "kind": 3,
+   "x": 5,
+   "y": 139,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Laddpump"
+  },
+  {
+   "index": 10,
+   "kind": 3,
+   "x": 195,
+   "y": 139,
+   "width": 60,
+   "height": 28,
+   "visible": true,
+   "label": "Från"
+  },
+  {
+   "index": 11,
+   "kind": 3,
+   "x": 255,
+   "y": 139,
+   "width": 40,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.-1f%%",
+   "value_vars": [
+    39
+   ]
+  },
+  {
+   "index": 12,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Brinepump"
+  },
+  {
+   "index": 13,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 60,
+   "height": 28,
+   "visible": true,
+   "label": "Från"
+  },
+  {
+   "index": 14,
+   "kind": 3,
+   "x": 255,
+   "y": -28,
+   "width": 40,
+   "height": 28,
+   "visible": false,
+   "value_fmt": "%.-1f%%",
+   "value_vars": [
+    73
+   ]
+  },
+  {
+   "index": 15,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Brine in/ut °C"
+  },
+  {
+   "index": 16,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    40
+   ]
+  },
+  {
+   "index": 17,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 10,
+   "height": 28,
+   "visible": true,
+   "value_fmt": " / ",
+   "value_vars": []
+  },
+  {
+   "index": 18,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 30,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    41
+   ]
+  },
+  {
+   "index": 19,
+   "kind": 3,
+   "x": 5,
+   "y": 167,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Fläkt"
+  },
+  {
+   "index": 20,
+   "kind": 3,
+   "x": 195,
+   "y": 167,
+   "width": 60,
+   "height": 28,
+   "visible": true,
+   "label": "Från"
+  },
+  {
+   "index": 21,
+   "kind": 3,
+   "x": 255,
+   "y": 167,
+   "width": 40,
+   "height": 28,
+   "visible": false,
+   "value_fmt": "%.-1f%%",
+   "value_vars": [
+    56
+   ]
+  },
+  {
+   "index": 22,
+   "kind": 3,
+   "x": 5,
+   "y": 223,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "VP in/ut °C"
+  },
+  {
+   "index": 23,
+   "kind": 3,
+   "x": 195,
+   "y": 223,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    42
+   ]
+  },
+  {
+   "index": 24,
+   "kind": 3,
+   "x": -20000,
+   "y": 223,
+   "width": 10,
+   "height": 28,
+   "visible": true,
+   "value_fmt": " / ",
+   "value_vars": []
+  },
+  {
+   "index": 25,
+   "kind": 3,
+   "x": -20000,
+   "y": 223,
+   "width": 40,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    43
+   ]
+  },
+  {
+   "index": 26,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Flöde l/min"
+  },
+  {
+   "index": 27,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    89
+   ]
+  },
+  {
+   "index": 28,
+   "kind": 3,
+   "x": 5,
+   "y": 251,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Utetemperatur °C"
+  },
+  {
+   "index": 29,
+   "kind": 3,
+   "x": 195,
+   "y": 251,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    44
+   ]
+  },
+  {
+   "index": 30,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Givare förångare/fläkt °C"
+  },
+  {
+   "index": 31,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    69
+   ]
+  },
+  {
+   "index": 32,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 10,
+   "height": 28,
+   "visible": true,
+   "value_fmt": " / ",
+   "value_vars": []
+  },
+  {
+   "index": 33,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 40,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    68
+   ]
+  },
+  {
+   "index": 34,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Timer avfrostning"
+  },
+  {
+   "index": 35,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    45
+   ]
+  },
+  {
+   "index": 36,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Hetgas/Suggas °C"
+  },
+  {
+   "index": 37,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    46
+   ]
+  },
+  {
+   "index": 38,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 10,
+   "height": 28,
+   "visible": true,
+   "value_fmt": " / ",
+   "value_vars": []
+  },
+  {
+   "index": 39,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 40,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    47
+   ]
+  },
+  {
+   "index": 40,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 10,
+   "height": 28,
+   "visible": false,
+   "value_fmt": " , ",
+   "value_vars": []
+  },
+  {
+   "index": 41,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 40,
+   "height": 28,
+   "visible": false,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    112
+   ]
+  },
+  {
+   "index": 42,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Överhettning S/H"
+  },
+  {
+   "index": 43,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 30,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    49
+   ]
+  },
+  {
+   "index": 44,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 43,
+   "height": 28,
+   "visible": true,
+   "value_fmt": " (%.1f)",
+   "value_vars": [
+    51
+   ]
+  },
+  {
+   "index": 45,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 10,
+   "height": 28,
+   "visible": true,
+   "value_fmt": " / ",
+   "value_vars": []
+  },
+  {
+   "index": 46,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 30,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    48
+   ]
+  },
+  {
+   "index": 47,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 43,
+   "height": 28,
+   "visible": true,
+   "value_fmt": " (%.1f)",
+   "value_vars": [
+    50
+   ]
+  },
+  {
+   "index": 48,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Förångning °C/bar"
+  },
+  {
+   "index": 49,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    53
+   ]
+  },
+  {
+   "index": 50,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 10,
+   "height": 28,
+   "visible": true,
+   "value_fmt": " / ",
+   "value_vars": []
+  },
+  {
+   "index": 51,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 40,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    57
+   ]
+  },
+  {
+   "index": 52,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Kondensering °C/bar"
+  },
+  {
+   "index": 53,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    54
+   ]
+  },
+  {
+   "index": 54,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 10,
+   "height": 28,
+   "visible": true,
+   "value_fmt": " / ",
+   "value_vars": []
+  },
+  {
+   "index": 55,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 40,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    58
+   ]
+  },
+  {
+   "index": 56,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Expansionsventil"
+  },
+  {
+   "index": 57,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.-1f%%",
+   "value_vars": [
+    52
+   ]
+  },
+  {
+   "index": 58,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Ström A"
+  },
+  {
+   "index": 59,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    55
+   ]
+  },
+  {
+   "index": 60,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "AC Choke °C"
+  },
+  {
+   "index": 61,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    77
+   ]
+  },
+  {
+   "index": 62,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Inverter °C"
+  },
+  {
+   "index": 63,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    79
+   ]
+  },
+  {
+   "index": 64,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 235,
+   "height": 28,
+   "visible": true,
+   "label": "Inverter Matningsspänning V"
+  },
+  {
+   "index": 65,
+   "kind": 3,
+   "x": 240,
+   "y": -28,
+   "width": 30,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    100
+   ]
+  },
+  {
+   "index": 66,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 235,
+   "height": 28,
+   "visible": true,
+   "label": "Inverter Motorspänning V"
+  },
+  {
+   "index": 67,
+   "kind": 3,
+   "x": 240,
+   "y": -28,
+   "width": 30,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    101
+   ]
+  },
+  {
+   "index": 68,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 235,
+   "height": 28,
+   "visible": true,
+   "label": "Inverter Motorström A"
+  },
+  {
+   "index": 69,
+   "kind": 3,
+   "x": 240,
+   "y": -28,
+   "width": 30,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    102
+   ]
+  },
+  {
+   "index": 70,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 235,
+   "height": 28,
+   "visible": true,
+   "label": "Inverter Motoreffekt kW"
+  },
+  {
+   "index": 71,
+   "kind": 3,
+   "x": 240,
+   "y": -28,
+   "width": 30,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    103
+   ]
+  },
+  {
+   "index": 72,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 235,
+   "height": 28,
+   "visible": true,
+   "label": "Inverter DC-Bus spänning V"
+  },
+  {
+   "index": 73,
+   "kind": 3,
+   "x": 240,
+   "y": -28,
+   "width": 30,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    104
+   ]
+  },
+  {
+   "index": 74,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 235,
+   "height": 28,
+   "visible": true,
+   "label": "Programversion VP-styrkort"
+  },
+  {
+   "index": 75,
+   "kind": 3,
+   "x": 240,
+   "y": -28,
+   "width": 175,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%lu",
+   "value_vars": [
+    65
+   ]
+  },
+  {
+   "index": 76,
+   "kind": 1,
+   "x": 350,
+   "y": 222,
+   "width": 50,
+   "height": 38,
+   "visible": true
+  },
+  {
+   "index": 77,
+   "kind": 1,
+   "x": 415,
+   "y": 222,
+   "width": 50,
+   "height": 38,
+   "visible": true
+  },
+  {
+   "index": 78,
+   "kind": 1,
+   "x": 350,
+   "y": 111,
+   "width": 115,
+   "height": 121,
+   "visible": true,
+   "label": "Aeroheat CM Wandregler"
+  },
+  {
+   "index": 79,
+   "kind": 1,
+   "x": 415,
+   "y": 55,
+   "width": 50,
+   "height": 50,
+   "visible": false,
+   "label": "Français"
+  },
+  {
+   "index": 80,
+   "kind": 3,
+   "x": 295,
+   "y": 167,
+   "width": 40,
+   "height": 28,
+   "visible": false,
+   "value_fmt": "%.-1f",
+   "value_vars": [
+    107
+   ]
+  },
+  {
+   "index": 81,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Kompressortemp °C"
+  },
+  {
+   "index": 82,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    110
+   ]
+  },
+  {
+   "index": 83,
+   "kind": 3,
+   "x": -20000,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": false,
+   "value_fmt": " (%.1f)",
+   "value_vars": [
+    128
+   ]
+  },
+  {
+   "index": 84,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Vätskerör temp °C"
+  },
+  {
+   "index": 85,
+   "kind": 3,
+   "x": 195,
+   "y": -28,
+   "width": 50,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    115
+   ]
+  },
+  {
+   "index": 86,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 235,
+   "height": 28,
+   "visible": true,
+   "label": "Avgiven värme (kW)"
+  },
+  {
+   "index": 87,
+   "kind": 3,
+   "x": 240,
+   "y": -28,
+   "width": 84,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    118
+   ]
+  },
+  {
+   "index": 88,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 235,
+   "height": 28,
+   "visible": true,
+   "label": "Avgiven kyla (kW)"
+  },
+  {
+   "index": 89,
+   "kind": 3,
+   "x": 240,
+   "y": -28,
+   "width": 84,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    121
+   ]
+  },
+  {
+   "index": 90,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 235,
+   "height": 28,
+   "visible": true,
+   "label": "Tillförd effekt (kW)"
+  },
+  {
+   "index": 91,
+   "kind": 3,
+   "x": 240,
+   "y": -28,
+   "width": 84,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    124
+   ]
+  },
+  {
+   "index": 92,
+   "kind": 3,
+   "x": 5,
+   "y": 195,
+   "width": 190,
+   "height": 28,
+   "visible": true,
+   "label": "Kompressorvärmare"
+  },
+  {
+   "index": 93,
+   "kind": 3,
+   "x": 195,
+   "y": 195,
+   "width": 60,
+   "height": 28,
+   "visible": true,
+   "label": "Från"
+  }
+ ],
+ "values": [
+  0,
+  0,
+  55,
+  4294967295,
+  83,
+  4294967295,
+  111,
+  4294967295,
+  139,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  167,
+  4294967295,
+  223,
+  4294967295,
+  251,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  0,
+  0,
+  18,
+  0,
+  170,
+  177,
+  278,
+  307,
+  177,
+  50,
+  336,
+  224,
+  110,
+  0,
+  9999,
+  50,
+  327,
+  224,
+  226,
+  0,
+  0,
+  84,
+  85,
+  19,
+  0,
+  0,
+  0,
+  0,
+  1,
+  20140605,
+  -28,
+  4286019447,
+  177,
+  170,
+  0,
+  0,
+  0,
+  0,
+  0,
+  -28,
+  4294967295,
+  0,
+  0,
+  0,
+  -28,
+  4294967295,
+  0,
+  -1,
+  -1,
+  0,
+  0,
+  -28,
+  4294967295,
+  0,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  0,
+  0,
+  0,
+  0,
+  0,
+  -20000,
+  0,
+  0,
+  -28,
+  4294967295,
+  0,
+  0,
+  0,
+  -28,
+  4294967295,
+  0,
+  -28,
+  4294967295,
+  0,
+  -28,
+  4294967295,
+  0,
+  -28,
+  4294967295,
+  655,
+  195,
+  4294967295,
+  0,
+  0,
+  0,
+  "Connection to 10.0.10.4 closed."
+ ]
+}

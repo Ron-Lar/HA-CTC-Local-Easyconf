@@ -123,3 +123,19 @@ def pumps() -> dict:
     import json
 
     return json.loads((FIXTURES / "pumps.json").read_text(encoding="utf-8"))
+
+
+@pytest.fixture()
+def page():
+    """A real page of a display, as the panel's own definition describes it.
+
+    Captured from the two houses: an i255 and an i550 Pro, their operation data
+    and history pages, with every caption resolved through the display's text
+    catalogue. The layouts differ enough that one pairing rule has to serve both.
+    """
+    import json
+
+    def load_page(name: str) -> dict:
+        return json.loads((FIXTURES / f"widgets_{name}.json").read_text(encoding="utf-8"))
+
+    return load_page

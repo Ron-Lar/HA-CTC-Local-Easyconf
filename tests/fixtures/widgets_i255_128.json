@@ -1,0 +1,598 @@
+{
+ "screen": 128,
+ "widgets": [
+  {
+   "index": 0,
+   "kind": 3,
+   "x": 50,
+   "y": 4,
+   "width": 300,
+   "height": 38,
+   "visible": true,
+   "label": "Driftinfo, Historik"
+  },
+  {
+   "index": 1,
+   "kind": 1,
+   "x": 5,
+   "y": 4,
+   "width": 38,
+   "height": 38,
+   "visible": true,
+   "label": "Dansk"
+  },
+  {
+   "index": 2,
+   "kind": 3,
+   "x": 5,
+   "y": 55,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Total drifttid h"
+  },
+  {
+   "index": 3,
+   "kind": 3,
+   "x": 250,
+   "y": 55,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    20
+   ]
+  },
+  {
+   "index": 4,
+   "kind": 3,
+   "x": 5,
+   "y": 83,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Högsta framledning °C"
+  },
+  {
+   "index": 5,
+   "kind": 3,
+   "x": 250,
+   "y": 83,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.-1f",
+   "value_vars": [
+    24
+   ]
+  },
+  {
+   "index": 6,
+   "kind": 3,
+   "x": 5,
+   "y": 111,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Energi el total (kWh)"
+  },
+  {
+   "index": 7,
+   "kind": 3,
+   "x": 250,
+   "y": 111,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    25
+   ]
+  },
+  {
+   "index": 8,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "EMXXX kWh"
+  },
+  {
+   "index": 9,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.-1f",
+   "value_vars": [
+    28
+   ]
+  },
+  {
+   "index": 10,
+   "kind": 3,
+   "x": 5,
+   "y": 139,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "label": "Kompressor"
+  },
+  {
+   "index": 11,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Avgiven värme totalt (kWh)"
+  },
+  {
+   "index": 12,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    22
+   ]
+  },
+  {
+   "index": 13,
+   "kind": 3,
+   "x": 5,
+   "y": 167,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Drift /24 h:m"
+  },
+  {
+   "index": 14,
+   "kind": 3,
+   "x": 250,
+   "y": 167,
+   "width": 20,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%02d",
+   "value_vars": [
+    27
+   ]
+  },
+  {
+   "index": 15,
+   "kind": 3,
+   "x": -20000,
+   "y": 167,
+   "width": 5,
+   "height": 28,
+   "visible": true,
+   "value_fmt": ":",
+   "value_vars": []
+  },
+  {
+   "index": 16,
+   "kind": 3,
+   "x": -20000,
+   "y": 167,
+   "width": 30,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%02d",
+   "value_vars": [
+    26
+   ]
+  },
+  {
+   "index": 17,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Antal starter /24 h"
+  },
+  {
+   "index": 18,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    23
+   ]
+  },
+  {
+   "index": 19,
+   "kind": 3,
+   "x": 5,
+   "y": 195,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Drifttid total"
+  },
+  {
+   "index": 20,
+   "kind": 3,
+   "x": 250,
+   "y": 195,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    21
+   ]
+  },
+  {
+   "index": 21,
+   "kind": 1,
+   "x": 350,
+   "y": 55,
+   "width": 116,
+   "height": 180,
+   "visible": true,
+   "label": "CTC GSi 12 (BE)"
+  },
+  {
+   "index": 22,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Antal starter"
+  },
+  {
+   "index": 23,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%u",
+   "value_vars": [
+    32
+   ]
+  },
+  {
+   "index": 24,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Kritiska larm räknare 1"
+  },
+  {
+   "index": 25,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    41
+   ]
+  },
+  {
+   "index": 26,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Kritiska larm räknare 2"
+  },
+  {
+   "index": 27,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    42
+   ]
+  },
+  {
+   "index": 28,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Kritiska larm räknare 3"
+  },
+  {
+   "index": 29,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    43
+   ]
+  },
+  {
+   "index": 30,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Kritiska larm räknare 4"
+  },
+  {
+   "index": 31,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    44
+   ]
+  },
+  {
+   "index": 32,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Energi el/30 dagar (kWh)"
+  },
+  {
+   "index": 33,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    47
+   ]
+  },
+  {
+   "index": 34,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Avgiven kyla totalt (kWh)"
+  },
+  {
+   "index": 35,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    50
+   ]
+  },
+  {
+   "index": 36,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Tillförd energi totalt (kWh)"
+  },
+  {
+   "index": 37,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    53
+   ]
+  },
+  {
+   "index": 38,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Avgiven värme/30 dagar (kWh)"
+  },
+  {
+   "index": 39,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    56
+   ]
+  },
+  {
+   "index": 40,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Avgiven kyla/30 dagar (kWh)"
+  },
+  {
+   "index": 41,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    59
+   ]
+  },
+  {
+   "index": 42,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Tillförd energi/30 dagar (kWh)"
+  },
+  {
+   "index": 43,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%d",
+   "value_vars": [
+    62
+   ]
+  },
+  {
+   "index": 44,
+   "kind": 3,
+   "x": 5,
+   "y": -28,
+   "width": 245,
+   "height": 28,
+   "visible": true,
+   "label": "Medeltemperatur ute/30 dagar °C"
+  },
+  {
+   "index": 45,
+   "kind": 3,
+   "x": 250,
+   "y": -28,
+   "width": 100,
+   "height": 28,
+   "visible": true,
+   "value_fmt": "%.1f",
+   "value_vars": [
+    65
+   ]
+  }
+ ],
+ "values": [
+  0,
+  0,
+  55,
+  83,
+  111,
+  -28,
+  139,
+  -28,
+  167,
+  -28,
+  195,
+  4294967295,
+  4294967295,
+  4294967295,
+  4294967295,
+  4294967295,
+  4294967295,
+  4294967295,
+  4294967295,
+  4294967295,
+  8653,
+  3670,
+  23171,
+  8,
+  600,
+  1,
+  46,
+  3,
+  0,
+  -20000,
+  -28,
+  4294967295,
+  2558,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  -28,
+  4294967295,
+  0,
+  0,
+  0,
+  0,
+  -28,
+  4294967295,
+  0,
+  -28,
+  4294967295,
+  0,
+  -28,
+  4294967295,
+  9357,
+  -28,
+  4294967295,
+  0,
+  -28,
+  4294967295,
+  0,
+  -28,
+  4294967295,
+  0,
+  -28,
+  4294967295,
+  0,
+  "Connection to 10.0.40.4 closed."
+ ]
+}
