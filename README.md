@@ -342,6 +342,30 @@ sent about your installation. The full list of fields and the reasoning:
 <https://stats.rnet.se/integritet>. The code that builds the report is
 `stats_extra.py`, and the client that sends it is `stats.py`.
 
+## Tests
+
+The suite in `tests/` runs without Home Assistant installed and is what CI
+runs: `pip install -r requirements-test.txt` and `python -m pytest -q`. It
+covers the protocol decoding, the menu reading, the dashboard layout and the
+report, all against captured fixtures from the two units; nothing in it opens
+a socket.
+
+`tests/test_homeassistant.py` is the exception. It drives the integration
+through a real Home Assistant core, from set-up to reload to the `number`
+service call that writes a control register, with both the Modbus client and
+the display replaced by stand-ins, and it checks the four things a unit test
+cannot: that a failed set-up closes its one Modbus socket, that a reload never
+has two clients open at once, that a setpoint reaches the right register as the
+right raw value and keeps being written until it is released, and that the menu
+is tried three times in total across reloads, not three times per reload. It
+needs `pytest-homeassistant-custom-component` and skips itself, with a note,
+when that is missing or when pytest-asyncio is not in auto mode:
+
+```sh
+pip install pytest-homeassistant-custom-component
+python -m pytest -o asyncio_mode=auto tests/test_homeassistant.py
+```
+
 ## Roadmap
 
 - **`test_counters_going_backwards_fall_back_to_lifetime`** puts its sample 400
