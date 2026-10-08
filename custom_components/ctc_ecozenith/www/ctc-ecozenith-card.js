@@ -18,6 +18,13 @@
  * own dialog for the entity, which is what the NIBE page settled on. The explanation
  * is also the hover text, since a hover alone never reaches a phone or a screen reader.
  * Every string goes into the page as text, never as HTML.
+ *
+ * The pure helpers at the top of the closure are what decides a write: which
+ * control a number gets, and what a typed field is taken to say. They are loaded
+ * into node by tests/test_card.py, so the closure hands them over and stops
+ * before the custom elements when there is no browser. Nothing is a global in
+ * either place: the NIBE card declares the same names at its top level, and the
+ * two may well be loaded on one page.
  */
 
 (() => {
@@ -26,6 +33,47 @@
   //: aim at, so it gets a field to type in instead: a room setpoint in tenths
   //: of a degree from 10 to 30 is 200 steps on 130 pixels.
   const SLIDER_STEPS = 130;
+
+  /* ---------------------------------------------------------- pure helpers */
+
+  function withUnit(value, unit) {
+    return unit ? `${value} ${unit}` : String(value);
+  }
+
+  /** Which control a number gets: a slider when its range has few enough steps
+   *  to aim at, a field to type in otherwise. Asked from the entity's own min,
+   *  max and step, so it has to wait for the first state: setConfig has no hass
+   *  yet, and asking there made everything a field. */
+  function widgetFor(min, max, step) {
+    const size = Number(step) || 1;
+    const steps = (Number(max) - Number(min)) / size;
+    // NaN fails both comparisons, so a number without a range gets a field.
+    return steps > 0 && steps <= SLIDER_STEPS ? "slider" : "field";
+  }
+
+  /** What a typed field holds: a finite number, or null when it holds nothing
+   *  a pump should be sent. Number("") is 0, and for the compressor's top speed
+   *  0 is a legal value that leaves the house cold until someone presses
+   *  Release, so an emptied field must never turn into a write. */
+  function parseFieldValue(text) {
+    if (text === null || text === undefined) return null;
+    const trimmed = String(text).trim();
+    if (trimmed === "") return null;
+    const value = Number(trimmed);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof customElements === "undefined") {
+    // Node, for tests/test_card.py: hand over the helpers and stop here, before
+    // anything below reaches for HTMLElement or document. A browser never takes
+    // this branch, so the page gets no globals from it.
+    if (typeof module !== "undefined") {
+      module.exports = { widgetFor, parseFieldValue, SLIDER_STEPS };
+    }
+    return;
+  }
+
+  /* ------------------------------------------------------------------ DOM */
 
   const STYLE = `
     /* A display rule of a card, or ha-card's own :host rule, would otherwise beat
@@ -67,22 +115,6 @@
       toggle();
     });
     return why;
-  }
-
-  function withUnit(value, unit) {
-    return unit ? `${value} ${unit}` : String(value);
-  }
-
-  /** What a typed field holds: a finite number, or null when it holds nothing
-   *  a pump should be sent. Number("") is 0, and for the compressor's top speed
-   *  0 is a legal value that leaves the house cold until someone presses
-   *  Release, so an emptied field must never turn into a write. */
-  function parseFieldValue(text) {
-    if (text === null || text === undefined) return null;
-    const trimmed = String(text).trim();
-    if (trimmed === "") return null;
-    const value = Number(trimmed);
-    return Number.isFinite(value) ? value : null;
   }
 
   /** Whether the user is holding this very control. The cards live in a shadow
@@ -428,8 +460,11 @@
 
       const attributes = (this._state(entityId) || {}).attributes || {};
       const step = Number(attributes.step) || 1;
-      const steps = (Number(attributes.max) - Number(attributes.min)) / step;
-      if (item.widget === "slider" || (item.widget !== "field" && steps > 0 && steps <= SLIDER_STEPS)) {
+      // The card's YAML may insist on one or the other; otherwise the range decides.
+      const kind = item.widget === "slider" || item.widget === "field"
+        ? item.widget
+        : widgetFor(attributes.min, attributes.max, attributes.step);
+      if (kind === "slider") {
         const slider = document.createElement("input");
         slider.type = "range";
         slider.min = attributes.min;
