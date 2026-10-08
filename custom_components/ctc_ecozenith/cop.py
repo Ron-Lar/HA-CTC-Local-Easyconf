@@ -432,16 +432,38 @@ def find_energy_totals(pages: list[Any]) -> tuple[Any | None, Any | None]:
 MODBUS_CONSUMPTION_KEY = "compressor_kwh"
 
 
-def modbus_consumption(data: dict[str, Any] | None) -> float | None:
-    """The consumed energy from Modbus, or None where the register is not used.
+def modbus_consumption_answered(data: dict[str, Any] | None) -> bool:
+    """Whether the controller answered for register 62341 at all.
 
-    A register that reads a clean zero is unused on CTC, not a new machine: no
-    coefficient of performance is worked out below 50 kWh anyway.
+    The coordinator only puts a key into its data when the block holding the
+    register was read, so the key being there says the register answered,
+    whatever it answered with. That is a different question from whether the
+    answer is a number worth dividing by, which :func:`modbus_consumption`
+    settles, and the two are kept apart on purpose: a register that answers
+    zero is fitted and can be found to be stuck, while one that never answers
+    has nothing to say about the machine.
+    """
+    return MODBUS_CONSUMPTION_KEY in (data or {})
+
+
+def modbus_consumption(data: dict[str, Any] | None) -> float | None:
+    """The consumed energy from Modbus, or None where there is no reading.
+
+    Zero is a reading and is kept. A counter standing at zero on a unit that
+    has been switched on for a day is the fault called ``stuck``, and the only
+    way to find it is to carry the zero through to :func:`counter_fault`.
+    Turning it into None here, as this once did, made such a machine look as
+    if the register were missing: on an i360, whose display has no consumed
+    energy counter, that meant no coefficient of performance sensors at all
+    until somebody reloaded the entry after the counter had moved. None is for
+    a register that was not read, a value that is not a number, and CTC's
+    sentinels for "no sensor fitted"; a counter below zero is none of those
+    and no reading either.
     """
     value = (data or {}).get(MODBUS_CONSUMPTION_KEY)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    if value <= 0 or value in SENTINELS:
+    if value < 0 or value in SENTINELS:
         return None
     return float(value)
 

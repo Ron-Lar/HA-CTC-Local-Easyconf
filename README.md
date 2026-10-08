@@ -32,7 +32,10 @@ on older display software, so that page has to be among the harvested ones. The
 energy consumed comes from the display's own counter where it has one. The older
 software has none, and there it comes from Modbus register 62341 instead, which
 holds the same number: 9166 kWh against the display's 9166.0 on an i255. It is
-read at the moment the display is, so the two always form a pair.
+read at the moment the display is, so the two always form a pair. A register
+that answers zero still counts as answered: the sensors exist from the start,
+and say in their attributes that the counter stands at zero, which is how a
+controller that never writes it is told from one that is simply new.
 
 A figure is shown as soon as it rests on something: ten kilowatt hours of
 consumption for the lifetime and yearly ones, three for a single day, which is

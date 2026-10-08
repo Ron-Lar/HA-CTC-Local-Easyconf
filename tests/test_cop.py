@@ -410,8 +410,10 @@ def test_the_newer_names_win_over_the_older_one(cop, const):
 
 def test_modbus_consumption_is_only_a_real_reading(cop):
     assert cop.modbus_consumption({"compressor_kwh": 9166}) == 9166.0
-    # A clean zero is an unused register on CTC, and the sentinels mean absent.
-    assert cop.modbus_consumption({"compressor_kwh": 0}) is None
+    # A clean zero is a reading too: it is what a stuck counter answers, and
+    # only a zero that gets through can be found to be one. The sentinels mean
+    # absent.
+    assert cop.modbus_consumption({"compressor_kwh": 0}) == 0.0
     assert cop.modbus_consumption({"compressor_kwh": 4294967295}) is None
     assert cop.modbus_consumption({"compressor_kwh": True}) is None
     assert cop.modbus_consumption({"compressor_kwh": "9166"}) is None
@@ -432,8 +434,11 @@ def test_consumption_is_taken_when_the_display_was_read(cop):
     # Never read yet: nothing to pair with.
     snapshot.update(None, {"compressor_kwh": 4020})
     assert snapshot.value == 4010.0
-    # A new display read with no usable Modbus value gives no pairing at all.
+    # A counter at zero is paired like any other reading; a sentinel is not.
     snapshot.update("t3", {"compressor_kwh": 0})
+    assert snapshot.value == 0.0
+    # A new display read with no usable Modbus value gives no pairing at all.
+    snapshot.update("t4", {"compressor_kwh": 4294967295})
     assert snapshot.value is None
 
 

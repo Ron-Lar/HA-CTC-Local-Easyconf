@@ -42,7 +42,7 @@ from .cop import (
     current_totals,
     find_energy_totals,
     find_operating_hours,
-    modbus_consumption,
+    modbus_consumption_answered,
     powered_on_hours,
 )
 from .const import (
@@ -358,7 +358,7 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
         history_page=bool(runtime.operating_hours),
         heat_counter=runtime.energy_out is not None,
         consumption_counter=runtime.energy_in is not None,
-        consumption_modbus=modbus_consumption(runtime.modbus.data) is not None,
+        consumption_modbus=modbus_consumption_answered(runtime.modbus.data),
         heat_total=heat is not None,
         consumption_total=consumed is not None,
         cop_floor=consumed is not None and not fault and consumed < MIN_CONSUMPTION_KWH,
@@ -535,13 +535,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         if (
             runtime.energy_out is not None
             and runtime.energy_in is None
-            and modbus_consumption(modbus.data) is not None
+            and modbus_consumption_answered(modbus.data)
         ):
             # The older display software, as on an i360, counts delivered heat
             # but not consumed energy. Modbus 62341 holds that number, and is
             # taken at the moment the display is read so the two stay a pair.
-            # Registered before the platforms, so the sensors that listen to
-            # the same coordinator see the new pairing when they update.
+            # The register only has to have answered, not to hold a number
+            # yet: whether a counter at zero is new or stuck is settled at
+            # every read by counter_fault, not once here, and a machine
+            # whose counter had not moved at set-up used to get no sensors
+            # at all until somebody reloaded the entry. Registered before
+            # the platforms, so the sensors that listen to the same
+            # coordinator see the new pairing when they update.
             snapshot = ConsumptionSnapshot()
             heat_key = runtime.energy_out.key
 
