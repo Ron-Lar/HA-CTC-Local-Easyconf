@@ -31,11 +31,27 @@ jobs:
           category: integration
 
   tests:
+    name: tests (pymodbus ${{ matrix.pymodbus }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The adapter is run against the floor the manifest allows, the version
+        # Home Assistant's own modbus integration ships, and whatever PyPI has
+        # today. The last leg is deliberately unpinned, past the manifest's own
+        # cap, so the weekly run meets a new major before a user does; it may
+        # not block a push over something the manifest already keeps out.
+        pymodbus: ["3.6.9", "3.13.1", "latest"]
+    continue-on-error: ${{ matrix.pymodbus == 'latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - run: pip install -r requirements-test.txt
+      - if: ${{ matrix.pymodbus != 'latest' }}
+        run: pip install "pymodbus==${{ matrix.pymodbus }}"
+      - if: ${{ matrix.pymodbus == 'latest' }}
+        run: pip install --upgrade pymodbus
+      - run: python -c "import pymodbus; print(pymodbus.__version__)"
       - run: pytest -q
