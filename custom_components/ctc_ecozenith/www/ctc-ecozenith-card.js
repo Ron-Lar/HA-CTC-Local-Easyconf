@@ -73,6 +73,18 @@
     return unit ? `${value} ${unit}` : String(value);
   }
 
+  /** What a typed field holds: a finite number, or null when it holds nothing
+   *  a pump should be sent. Number("") is 0, and for the compressor's top speed
+   *  0 is a legal value that leaves the house cold until someone presses
+   *  Release, so an emptied field must never turn into a write. */
+  function parseFieldValue(text) {
+    if (text === null || text === undefined) return null;
+    const trimmed = String(text).trim();
+    if (trimmed === "") return null;
+    const value = Number(trimmed);
+    return Number.isFinite(value) ? value : null;
+  }
+
   /** Whether the user is holding this very control. The cards live in a shadow
    *  root, where the document's own idea of what has focus is the card itself,
    *  so the question has to be put to the root the control is in. */
@@ -188,15 +200,21 @@
       return Boolean(item.hide_unavailable) && (!stateObj || HIDDEN_STATES.has(stateObj.state));
     }
 
+    /** The service call for a control, returned so the caller can see it
+     *  refused: Home Assistant answers a value outside min and max, or a write
+     *  the pump would not take, with a rejected promise and a toast of its own. */
     _call(entityId, value) {
       const domain = String(entityId).split(".")[0];
       if (domain === "select") {
-        this._hass.callService("select", "select_option", { entity_id: entityId, option: value });
-      } else if (domain === "number") {
-        this._hass.callService("number", "set_value", { entity_id: entityId, value: Number(value) });
-      } else if (domain === "button") {
-        this._hass.callService("button", "press", { entity_id: entityId });
+        return this._hass.callService("select", "select_option", { entity_id: entityId, option: value });
       }
+      if (domain === "number") {
+        return this._hass.callService("number", "set_value", { entity_id: entityId, value: Number(value) });
+      }
+      if (domain === "button") {
+        return this._hass.callService("button", "press", { entity_id: entityId });
+      }
+      return undefined;
     }
   }
 
@@ -357,8 +375,18 @@
       const domain = String(entityId).split(".")[0];
       const send = (value) => {
         container.dataset.pending = "1";
-        this._call(entityId, value);
-        setTimeout(() => { container.dataset.pending = "0"; }, 6000);
+        const settle = () => { container.dataset.pending = "0"; };
+        const timer = setTimeout(settle, 6000);
+        // A refused write is a rejected promise, and the reason is already on
+        // the screen as Home Assistant's toast. The row only has to stop looking
+        // busy, now rather than six seconds from now. No row of its own for the
+        // error, no range check and no clipping here: HA holds min and max, and
+        // clipping would send something other than what was typed. The promise
+        // wrapper also turns a call that throws outright into a refusal.
+        new Promise((resolve) => resolve(this._call(entityId, value))).catch(() => {
+          clearTimeout(timer);
+          settle();
+        });
       };
 
       if (domain === "button") {
@@ -434,13 +462,37 @@
       const unit = document.createElement("span");
       unit.className = "reading";
       unit.textContent = attributes.unit_of_measurement || "";
-      field.addEventListener("change", () => send(field.value));
+      // What the field last showed from the state, or last sent: a commit that
+      // asks for the same thing again is a tab through the field, or a blur
+      // after Enter, and must not become a second write to the pump.
+      let shown = NaN;
+      const commit = () => {
+        const value = parseFieldValue(field.value);
+        if (value === null) {
+          // Emptied, or holding something that is not a number: that asks for
+          // nothing, so the pump's own value goes back in.
+          const stateObj = this._state(entityId);
+          field.value = stateObj ? stateObj.state : "";
+          return;
+        }
+        if (value === shown) return;
+        shown = value;
+        send(value);
+      };
+      // Enter and leaving the field are the two ways of saying "this is it".
+      // The browser's change event would also fire on every click of the
+      // spinner arrows, one Modbus write per tenth of a degree.
+      field.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") commit();
+      });
+      field.addEventListener("blur", commit);
       container.append(field, unit);
       return () => {
         const stateObj = this._state(entityId);
         if (!stateObj) return;
         if (!holding(field)) {
           field.value = stateObj.state;
+          shown = Number(stateObj.state);
           if (String(field.value) === String(stateObj.state)) container.dataset.pending = "0";
         }
         field.disabled = stateObj.state === "unavailable";
