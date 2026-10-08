@@ -12,6 +12,7 @@ and it puts the panel back when it is done.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -22,6 +23,7 @@ from .catalogue import numeric_value
 from .const import (
     HARVEST_PATIENCE,
     RETRY_INTERVAL,
+    CONTROL_EXPIRY_SECONDS,
     CONTROL_KEEPALIVE_SECONDS,
     DOMAIN,
     MODBUS_SENSORS,
@@ -29,6 +31,7 @@ from .const import (
     ModbusSensor,
     SlowPage,
 )
+from .keepalive import Keepalive
 from .patience import Patience
 from .modbus_api import (
     REQUEST_TIMEOUT,
@@ -318,26 +321,67 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
 
 class CtcControlManager:
-    """Keep CTC's volatile control registers alive.
+    """Keep CTC's volatile control registers alive, and say truthfully which are.
 
     The 1000 block is write only and the controller forgets it roughly five
     minutes after the last write. Rewriting every minute keeps a wide margin, and
     stopping simply hands control back to the heat pump.
+
+    An override counts as in force only from a write that reached the unit, and
+    only while one has reached it within CONTROL_EXPIRY_SECONDS. The rule itself
+    is in keepalive.py; this is the Home Assistant side of it: the timer, the
+    log and the listeners.
     """
 
-    def __init__(self, hass: HomeAssistant, client: CtcModbusClient) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: CtcModbusClient,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
         self._hass = hass
         self._client = client
-        self._values: dict[int, int] = {}
+        self._state = Keepalive(CONTROL_EXPIRY_SECONDS)
+        # Wall clock rather than monotonic, because the entities show these
+        # moments as timestamps and one clock has to serve both.
+        self._clock = clock
         self._unsub = None
         self._listeners: list[Callable[[], None]] = []
 
     @property
     def active(self) -> dict[int, int]:
-        return dict(self._values)
+        return self._state.active
 
     def get(self, address: int) -> int | None:
-        return self._values.get(address)
+        return self._state.get(address)
+
+    def written_at(self, address: int) -> datetime | None:
+        """When a write of this address last reached the controller."""
+        return self._moment(self._state.written_at(address))
+
+    def valid_until(self, address: int) -> datetime | None:
+        """Until when the controller is known to hold this address."""
+        return self._moment(self._state.valid_until(address))
+
+    @staticmethod
+    def _moment(seconds: float | None) -> datetime | None:
+        if seconds is None:
+            return None
+        return datetime.fromtimestamp(seconds, tz=timezone.utc)
+
+    def written_attributes(self, address: int) -> dict[str, str]:
+        """The two moments as entity attributes, for the numbers and the selects.
+
+        Empty while nothing is in force, so an idle entity carries no stale times.
+        """
+        written = self.written_at(address)
+        until = self.valid_until(address)
+        if written is None or until is None:
+            return {}
+        return {
+            "senast skriven": written.isoformat(timespec="seconds"),
+            "gäller till": until.isoformat(timespec="seconds"),
+        }
 
     def async_add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
         """Call back whenever an override is set or released; returns the undo."""
@@ -354,13 +398,32 @@ class CtcControlManager:
             listener()
 
     async def async_set(self, address: int, raw: int | None) -> None:
-        """Set or release one control register."""
+        """Set or release one control register.
+
+        The value is recorded only once the write has reached the controller, so
+        a failed write never shows as control in force.
+        """
         if raw is None:
-            self._values.pop(address, None)
+            self._state.release(address)
+            if not self._state:
+                self._stop_timer()
             self._notify()
             return
-        self._values[address] = raw
-        await self._client.async_write(address, raw)
+        try:
+            await self._client.async_write(address, raw)
+        except CtcModbusError:
+            # A write that fails while an older value is in force counts against
+            # that value's time, like a failed refresh would.
+            if self._state.failed(address, self._clock()):
+                self._said_released(address)
+                if not self._state:
+                    self._stop_timer()
+                self._notify()
+            raise
+        recovered = self._state.written(address, raw, self._clock())
+        _LOGGER.debug("Control register %s set to %s", address, raw)
+        if recovered:
+            _LOGGER.info("Control register %s reached the controller again", address)
         self._ensure_timer()
         self._notify()
 
@@ -372,14 +435,12 @@ class CtcControlManager:
         has no release position of its own, which makes this the only way back
         from one short of restarting Home Assistant.
         """
-        self._values.clear()
-        if self._unsub is not None:
-            self._unsub()
-            self._unsub = None
+        self._state.clear()
+        self._stop_timer()
         self._notify()
 
     def _ensure_timer(self) -> None:
-        if self._unsub is not None or not self._values:
+        if self._unsub is not None or not self._state:
             return
         from homeassistant.helpers.event import async_track_time_interval
 
@@ -389,15 +450,58 @@ class CtcControlManager:
             timedelta(seconds=CONTROL_KEEPALIVE_SECONDS),
         )
 
-    async def _async_refresh(self, _now) -> None:
-        for address, raw in list(self._values.items()):
-            try:
-                await self._client.async_write(address, raw)
-            except CtcModbusError as err:
-                _LOGGER.warning("Could not refresh control register %s: %s", address, err)
-
-    async def async_stop(self) -> None:
+    def _stop_timer(self) -> None:
         if self._unsub is not None:
             self._unsub()
             self._unsub = None
-        self._values.clear()
+
+    async def _async_refresh(self, _now) -> None:
+        """Write every override again, and give up the ones the unit has forgotten.
+
+        A miss is a debug line, except the first of a run, which is a warning
+        that says what happens next. The release is one warning; a write that
+        reaches the unit again after misses is one info line.
+        """
+        changed = False
+        for address, raw in self._state.active.items():
+            try:
+                await self._client.async_write(address, raw)
+            except CtcModbusError as err:
+                now = self._clock()
+                if self._state.failed(address, now):
+                    self._said_released(address)
+                    changed = True
+                elif self._state.failures(address) == 1:
+                    until = self._moment(self._state.valid_until(address))
+                    _LOGGER.warning(
+                        "Could not refresh control register %s (%s). The controller holds "
+                        "the last value until about %s and the override is released then "
+                        "unless a write reaches it",
+                        address,
+                        err,
+                        until.isoformat(timespec="seconds") if until else "?",
+                    )
+                else:
+                    _LOGGER.debug("Could not refresh control register %s: %s", address, err)
+                continue
+            if self._state.written(address, raw, self._clock()):
+                _LOGGER.info("Control register %s reached the controller again", address)
+                changed = True
+            else:
+                _LOGGER.debug("Control register %s refreshed with %s", address, raw)
+        if changed:
+            if not self._state:
+                self._stop_timer()
+            self._notify()
+
+    def _said_released(self, address: int) -> None:
+        _LOGGER.warning(
+            "Control register %s released: no write has reached the controller for %s s, "
+            "so it has forgotten the value and Home Assistant no longer claims it",
+            address,
+            CONTROL_EXPIRY_SECONDS,
+        )
+
+    async def async_stop(self) -> None:
+        self._stop_timer()
+        self._state.clear()

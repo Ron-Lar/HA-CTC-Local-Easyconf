@@ -151,7 +151,10 @@ MODBUS: dict[str, str] = {
 
 _VOLATILE = (
     " Skrivs till ett flyktigt register som pumpen glömmer cirka fem minuter efter sista "
-    "skrivningen, så Home Assistant skriver om det varje minut så länge styrningen gäller."
+    "skrivningen, så Home Assistant skriver om det varje minut så länge styrningen gäller. "
+    "Styrningen räknas som aktiv först när en skrivning har nått pumpen, attributen senast "
+    "skriven och gäller till säger när det var och hur länge pumpen håller värdet, och når "
+    "ingen skrivning fram på fem minuter släpps den."
 )
 
 #: The control registers, by key.

@@ -101,6 +101,45 @@ def install() -> None:
     binary_sensor.BinarySensorDeviceClass = BinarySensorDeviceClass
     binary_sensor.BinarySensorEntity = BinarySensorEntity
 
+    number = _module("homeassistant.components.number")
+
+    class NumberMode(enum.Enum):
+        BOX = "box"
+        SLIDER = "slider"
+
+    class NumberEntity:
+        pass
+
+    number.NumberMode = NumberMode
+    number.NumberEntity = NumberEntity
+
+    select = _module("homeassistant.components.select")
+
+    class SelectEntity:
+        pass
+
+    select.SelectEntity = SelectEntity
+
+    const = _module("homeassistant.const")
+
+    class EntityCategory(enum.Enum):
+        CONFIG = "config"
+        DIAGNOSTIC = "diagnostic"
+
+    class UnitOfPower(enum.Enum):
+        KILO_WATT = "kW"
+
+    class UnitOfTemperature(enum.Enum):
+        CELSIUS = "°C"
+
+    class UnitOfTime(enum.Enum):
+        HOURS = "h"
+
+    const.EntityCategory = EntityCategory
+    const.UnitOfPower = UnitOfPower
+    const.UnitOfTemperature = UnitOfTemperature
+    const.UnitOfTime = UnitOfTime
+
     # The platforms do ``from . import CtcConfigEntry``, which would pull the
     # package's own __init__ and all of Home Assistant with it. The package is
     # a stub here (see conftest), so the name is simply given to it.
