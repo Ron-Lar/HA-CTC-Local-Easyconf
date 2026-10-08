@@ -32,13 +32,16 @@ from .const import (
 )
 from .patience import Patience
 from .modbus_api import (
+    REQUEST_TIMEOUT,
     CtcModbusClient,
     CtcModbusError,
+    CtcModbusTransportError,
     decode_pair,
     decode_signed,
     is_sentinel,
     plan_blocks,
 )
+from .poll import MissingBlocks, SlowRounds, read_round
 from .web_api import CtcWebClient, CtcWebError
 
 _LOGGER = logging.getLogger(__name__)
@@ -64,30 +67,55 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             MODBUS_SENSORS + MODBUS_SETTINGS if include_settings else MODBUS_SENSORS
         )
         self._blocks = plan_blocks(self.descriptions)
-        self._missing: set[int] = set()
+        #: Blocks this model has turned out not to have. Learnt per run, so a
+        #: restart gives every block a fresh chance.
+        self._missing = MissingBlocks()
+        self._slow = SlowRounds()
         #: The code behind an enum reading the table has no label for, by sensor
         #: key, so the number is still visible in the sensor's attributes.
         self.unknown_codes: dict[str, int] = {}
         self._said_codes: set[tuple[str, int]] = set()
-        # Cumulative count of register blocks that did not answer. Only used by
-        # the optional daily report, which sends the delta since it last ran.
+        # Cumulative count of register blocks that did not answer, or rounds
+        # that lost the connection. Only used by the optional daily report,
+        # which sends the delta since it last ran.
         self.read_failures = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
-        raw: dict[int, int] = {}
-        failures = 0
-        for start, count in self._blocks:
-            values = await self.client.async_read_one(start, count)
-            if values is None:
-                failures += 1
-                continue
-            for offset, value in enumerate(values):
-                raw[start + offset] = value
-        self.read_failures += failures
+        try:
+            result = await read_round(self.client, self._blocks, self._missing.missing)
+        except CtcModbusTransportError as err:
+            self.read_failures += 1
+            # Home Assistant logs the failure once, and the recovery, by itself.
+            raise UpdateFailed(f"the heat pump was lost at register {err.address}: {err}") from err
+        self.read_failures += len(result.unanswered) + len(result.dropped)
+
+        for start in self._missing.note(result):
+            count = next((n for s, n in self._blocks if s == start), 1)
+            _LOGGER.info(
+                "Registers %s to %s have not answered in %s rounds while the rest did, so "
+                "this model is taken not to have them and they are left out until Home "
+                "Assistant restarts",
+                start,
+                start + count - 1,
+                self._missing.patience,
+            )
+        interval = self.update_interval.total_seconds() if self.update_interval else 0.0
+        pace = self._slow.note(result.elapsed, interval)
+        if pace == "slow":
+            _LOGGER.warning(
+                "A Modbus round took %.1f s against an interval of %.0f s, so readings "
+                "are older than they look; a block that never answers costs %s s each "
+                "round until it is learnt as missing",
+                result.elapsed,
+                interval,
+                REQUEST_TIMEOUT,
+            )
+        elif pace == "recovered":
+            _LOGGER.info("Modbus rounds are back within the interval (%.1f s)", result.elapsed)
+
+        raw = result.raw
         if not raw:
             raise UpdateFailed("no Modbus register could be read")
-        if failures:
-            _LOGGER.debug("%s of %s register blocks did not answer", failures, len(self._blocks))
 
         data: dict[str, Any] = {}
         for description in self.descriptions:

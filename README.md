@@ -215,7 +215,18 @@ frequent writing can destroy the controller.
   resets it as soon as that client sends anything, which looks exactly like the
   unit being offline. Do not point a second tool at it while this is running.
   That includes a `modbus:` block in `configuration.yaml` pointing at the same
-  unit, which has to be removed before this integration can connect.
+  unit, which has to be removed before this integration can connect. The
+  integration owns its own session accordingly: the library is told never to
+  reconnect by itself, a client is closed before another is built, and a
+  connection that is found gone is given up at once and knocked on again,
+  after the controller's settle time, on the next poll.
+- **A register the model lacks is answered with silence.** The controller
+  simply does not reply, so such a block costs a full timeout every poll. After
+  three polls in a row where a block stayed silent while the rest answered, it
+  is left out until Home Assistant restarts, and the log says so once. A poll
+  where nothing answers, or where the connection is lost halfway, ends there
+  and the readings go unavailable, rather than waiting out every remaining
+  block against a dead line.
 - **CTC sets the pace.** The controller cannot pipeline and documents an update
   rate of one second, so requests are serialised, spaced out, and capped at a
   hundred registers each. It also needs a moment after the socket opens before

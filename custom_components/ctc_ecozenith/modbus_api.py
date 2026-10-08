@@ -322,14 +322,6 @@ class CtcModbusClient:
                 offset += chunk
         return out
 
-    async def async_read_one(self, address: int, count: int = 1) -> list[int] | None:
-        """Read, returning None instead of raising when the register is absent."""
-        try:
-            return await self.async_read(address, count)
-        except CtcModbusError as err:
-            _LOGGER.debug("%s", err)
-            return None
-
     async def async_write(self, address: int, value: int) -> None:
         """Write one holding register with function code 16, as CTC specifies."""
         async with self._lock:
