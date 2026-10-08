@@ -34,13 +34,16 @@ from .catalogue import (
     pages_to_storage,
 )
 from .cop import (
+    MIN_CONSUMPTION_KWH,
     ConsumptionSnapshot,
     CopTracker,
     cop_for_report,
+    counter_fault,
     current_totals,
     find_energy_totals,
     find_operating_hours,
     modbus_consumption,
+    powered_on_hours,
 )
 from .const import (
     CONF_CHECK_UPDATES,
@@ -331,6 +334,10 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
     # Recognising a counter and reading it are different things, so the report
     # says which of the two happened. See stats_extra.build_extra.
     heat, consumed = current_totals(runtime)
+    # And whether the numbers themselves are wrong. Only a fault carries the two
+    # totals with it: a machine that has simply not counted far enough yet is
+    # waiting, not broken, and sends nothing but the flag that says so.
+    fault = counter_fault(heat, consumed, powered_on_hours(runtime))
     return build_extra(
         entry.data.get("model"),
         has_display=runtime.web is not None,
@@ -348,6 +355,11 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
         consumption_modbus=modbus_consumption(runtime.modbus.data) is not None,
         heat_total=heat is not None,
         consumption_total=consumed is not None,
+        cop_floor=consumed is not None and not fault and consumed < MIN_CONSUMPTION_KWH,
+        cop_stuck=fault == "stuck",
+        cop_implausible=fault == "implausible",
+        heat_total_kwh=heat if fault else None,
+        consumption_total_kwh=consumed if fault else None,
         **cop_for_report(runtime),
     )
 
@@ -381,11 +393,7 @@ def commissioning_date(runtime: "CtcRuntime"):
     """
     from datetime import date, timedelta
 
-    if runtime.web is None or not runtime.operating_hours:
-        return None
-    data = runtime.web.data or {}
-    readings = [data.get(v.key) for v in runtime.operating_hours]
-    hours = max((h for h in readings if isinstance(h, (int, float)) and h > 0), default=None)
+    hours = powered_on_hours(runtime)
     if hours is None:
         return None
     return date.today() - timedelta(hours=hours)

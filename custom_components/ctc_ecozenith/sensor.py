@@ -25,7 +25,7 @@ from homeassistant.const import EntityCategory
 
 from . import CtcConfigEntry
 from .catalogue import display_state_class
-from .cop import current_totals
+from .cop import cop_reason, current_totals, lifetime_ratio, powered_on_hours
 from .const import DOMAIN, STATUS_UNKNOWN, ModbusSensor, SlowValue
 
 DEVICE_CLASSES = {
@@ -258,11 +258,10 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        out, consumed = current_totals(self._runtime)
         if self._span == "lifetime":
-            if out is None or consumed is None or consumed < 50:
-                return None
-            return round(out / consumed, 2)
+            # The whole life, whatever the rolling window has to say: the tracker
+            # answers with the yearly figure as soon as it has one.
+            return lifetime_ratio(*current_totals(self._runtime))
         result = self._result()
         # Reporting one span's figure under another span's name would be a
         # different number wearing the wrong label.
@@ -270,12 +269,29 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
-        attributes = self._result().as_attributes()
+        result = self._result()
+        attributes = result.as_attributes()
         attributes["tillförd energi ur"] = (
             "displayen" if self._runtime.energy_in is not None else "Modbus 62341"
         )
+        if self.native_value is None:
+            # An empty figure that says nothing is the thing people ask about.
+            out, consumed = current_totals(self._runtime)
+            basis = "lifetime" if self._span == "lifetime" else result.basis
+            reason = cop_reason(
+                None,
+                basis,
+                out if self._span == "lifetime" else result.energy_out,
+                consumed if self._span == "lifetime" else result.energy_in,
+                powered_on_hours(self._runtime),
+            )
+            if reason:
+                attributes["skäl"] = reason
         return attributes
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self.native_value is not None
+        # Available without a figure, on purpose: an unavailable entity shows no
+        # attributes, and the attributes are where the reason for the empty
+        # figure is written.
+        return self.coordinator.last_update_success

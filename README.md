@@ -34,6 +34,17 @@ software has none, and there it comes from Modbus register 62341 instead, which
 holds the same number: 9166 kWh against the display's 9166.0 on an i255. It is
 read at the moment the display is, so the two always form a pair.
 
+A figure is shown as soon as it rests on something: ten kilowatt hours of
+consumption for the lifetime and yearly ones, three for a single day, which is
+where the display's whole kilowatt hours stop being mostly rounding. What is not
+shown is a quotient outside 0.5 to 10, because that is not a performance figure
+but two counters that do not belong together. When a figure is missing the sensor
+says why in its attributes, under *skäl*: no sample old enough yet, too little
+energy so far, a counter standing still although the unit has been running, or a
+quotient that cannot be right. The sensor stays available and empty rather than
+going unavailable, because an unavailable entity shows no attributes and the
+reason is the point.
+
 ## The catch with the display, and what the integration does about it
 
 Only the page the panel is currently showing is kept up to date. Every other
@@ -237,10 +248,11 @@ created, which transports are in use, whether control is enabled, how many
 display pages are harvested and how many register reads failed. It also says
 whether a coefficient of performance is possible and, if not, why: whether the
 history page is harvested, whether the delivered heat counter was recognised on
-it, whether the energy consumed comes from the display or from Modbus, and
-whether each of those two counters actually handed over a number at the last
-read. Yes or no each time, never which page, what is on it or what the counters
-say.
+it, whether the energy consumed comes from the display or from Modbus, whether
+each of those two counters actually handed over a number at the last read, and
+which of three things is in the way, too little energy counted so far, a counter
+standing still although the unit has been running, or a quotient no heat pump
+could produce. Yes or no each time, never which page or what is on it.
 
 It also sends what the installation is made of and how well it performs: the
 indoor unit's model, the outdoor unit's model, the firmware in the display, in
@@ -254,8 +266,14 @@ sent, because they describe a production run. **The sequence number, which is
 what identifies your particular machine, is not sent.**
 
 It never sends a name, an address, an exact position, a full serial number, an
-entity name, a page name or a single measurement from the house, and your IP
-address is not stored or used to guess where you are. The position is rounded inside your
+entity name or a page name, and your IP address is not stored or used to guess
+where you are. **One measurement can leave the house, and only when it is wrong:**
+where a lifetime counter stands still although the unit has been running, or where
+the two counters give a quotient that cannot be right, the two totals in kilowatt
+hours are sent along with the flag. They are what separates a counter reading zero
+from one that was never read, and without that nothing about such an installation
+can be fixed. A machine that has merely not counted far enough yet sends no
+numbers, only the flag saying so. The position is rounded inside your
 own installation before anything is sent, and rounded again on the server, so a
 finer value does not exist in the database. Reports are stored per date, never per
 time of day, so they cannot show when anyone is home. What the backend accepts

@@ -106,6 +106,17 @@ def serial_made(raw: Any) -> str | None:
     return made if 1 <= week <= 53 else None
 
 
+def energy_value(raw: Any) -> float | None:
+    """A lifetime counter in kilowatt hours, or nothing when it is not a number."""
+    if raw is None:
+        return None
+    try:
+        value = round(float(raw), 1)
+    except (TypeError, ValueError):
+        return None
+    return value if 0.0 <= value <= 1_000_000.0 else None
+
+
 def cop_value(raw: Any) -> float | None:
     """A coefficient of performance, rejected unless it is physically sane."""
     if raw is None:
@@ -153,6 +164,11 @@ def build_extra(
     consumption_modbus: bool | None = None,
     heat_total: bool | None = None,
     consumption_total: bool | None = None,
+    cop_floor: bool | None = None,
+    cop_stuck: bool | None = None,
+    cop_implausible: bool | None = None,
+    heat_total_kwh: float | None = None,
+    consumption_total_kwh: float | None = None,
     cop_day: Any = None,
     cop_year: Any = None,
     cop_first_year: Any = None,
@@ -202,6 +218,13 @@ def build_extra(
         "consumption_modbus": consumption_modbus,
         "heat_total": heat_total,
         "consumption_total": consumption_total,
+        # Why no figure: the counters have not counted far enough yet, one of
+        # them stands still although the unit has been running, or the two give a
+        # quotient no heat pump could produce. The first is a machine waiting,
+        # the other two are faults.
+        "cop_floor": cop_floor,
+        "cop_stuck": cop_stuck,
+        "cop_implausible": cop_implausible,
     }
     payload["features"].update({k: bool(v) for k, v in flags.items() if v is not None})
 
@@ -221,11 +244,18 @@ def build_extra(
     # machine itself is never touched.
     made = serial_made(serial)
     product = serial_product(serial)
+    # The two lifetime counters themselves, and ONLY where they are wrong: a
+    # counter standing still or a pair whose quotient is impossible. There is no
+    # other way to tell a counter that reads zero from one the harvest never
+    # delivered, and that difference decides whether anything can be fixed. A
+    # machine that has merely not counted far enough yet sends no numbers.
     metrics = {
         "cop_day": cop_value(cop_day),
         "cop_year": cop_value(cop_year),
         "cop_first_year": cop_value(cop_first_year),
         "cop_lifetime": cop_value(cop_lifetime),
+        "heat_total_kwh": energy_value(heat_total_kwh),
+        "consumption_total_kwh": energy_value(consumption_total_kwh),
         "built_year": 2000 + int(made[:2]) if made else None,
         "built_week": int(made[2:]) if made else None,
         "product_code": int(product) if product else None,

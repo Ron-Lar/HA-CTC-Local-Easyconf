@@ -29,11 +29,27 @@ _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 1
 
-#: Below this the divisor is noise rather than a measurement. A year needs a
-#: real number behind it; a single day is allowed to work with much less, since
-#: a day of heating is a few tens of kilowatt hours at most.
-MIN_CONSUMPTION_KWH = 50.0
+#: Below this the divisor is noise rather than a measurement. The two floors are
+#: not the same kind of number, which is why they are so far apart. A lifetime
+#: total is thousands of kilowatt hours, so rounding is irrelevant and the floor
+#: only asks whether the machine has done anything at all: ten is enough, and
+#: fifty, which this used to be, held back figures that were perfectly good. A
+#: single day's delta is a handful of whole kilowatt hours, and since the display
+#: counts in whole ones, two readings carry up to a kilowatt hour of rounding
+#: between them. At three that is a third at worst, which is the most a daily
+#: figure can carry and still mean something; at one it would be all of it.
+MIN_CONSUMPTION_KWH = 10.0
 MIN_CONSUMPTION_KWH_DAY = 3.0
+
+#: A quotient outside this is not a performance figure. It is two counters that
+#: do not belong together, or one of them standing still: a heat pump does not
+#: deliver less than it is given, and nothing delivers ten times its input.
+COP_MIN = 0.5
+COP_MAX = 10.0
+
+#: How long the unit must have been switched on before a counter standing at
+#: zero is a fault rather than a machine that has not got going yet.
+RUNNING_HOURS = 24
 
 #: A sample has to be this old before it can serve as yesterday. The counters
 #: are whole kilowatt hours, so a shorter span divides two small integers and
@@ -81,10 +97,87 @@ def _parse(stamp: str) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def _ratio(out: float, consumed: float) -> float | None:
-    if consumed < MIN_CONSUMPTION_KWH:
+def implausible(value: float | None) -> bool:
+    """Whether a quotient is outside what a heat pump can actually do."""
+    return value is not None and not (COP_MIN <= value <= COP_MAX)
+
+
+def _ratio(out: float, consumed: float, floor: float = MIN_CONSUMPTION_KWH) -> float | None:
+    if consumed < floor:
         return None
-    return round(out / consumed, 2)
+    value = round(out / consumed, 2)
+    return None if implausible(value) else value
+
+
+def lifetime_ratio(out: float | None, consumed: float | None) -> float | None:
+    """The figure over the whole life, or nothing when the counters cannot carry one."""
+    if out is None or consumed is None:
+        return None
+    return _ratio(out, consumed)
+
+
+def powered_on_hours(runtime: Any) -> float | None:
+    """The hours the unit says it has been switched on, if the page is harvested."""
+    if getattr(runtime, "web", None) is None or not getattr(runtime, "operating_hours", None):
+        return None
+    data = runtime.web.data or {}
+    readings = [data.get(value.key) for value in runtime.operating_hours]
+    return max(
+        (h for h in readings if isinstance(h, (int, float)) and not isinstance(h, bool) and h > 0),
+        default=None,
+    )
+
+
+def counter_fault(
+    out: float | None, consumed: float | None, hours: float | None
+) -> str | None:
+    """Which fault the two counters show, or None when they merely need time.
+
+    ``stuck`` is a counter standing at zero on a unit that has been switched on
+    for a day, which is what CTC's controllers do on installations where these
+    counters are never written. ``implausible`` is two numbers whose quotient no
+    heat pump could produce, so they are not the pair they are taken for. A new
+    machine that has simply not counted far enough yet is neither.
+    """
+    if out is None or consumed is None:
+        return None
+    if hours is not None and hours >= RUNNING_HOURS and (out <= 0 or consumed <= 0):
+        return "stuck"
+    if consumed > 0 and implausible(round(out / consumed, 2)):
+        return "implausible"
+    return None
+
+
+def cop_reason(
+    value: float | None,
+    basis: str,
+    energy_out: float | None,
+    energy_in: float | None,
+    hours: float | None = None,
+) -> str | None:
+    """Why a figure is missing, in words the owner can act on or dismiss.
+
+    An empty sensor that says nothing is the thing people ask about, so it says
+    which of the reasons it is: no sample yet, too little energy so far, a
+    counter standing still, or two counters that do not add up.
+    """
+    if value is not None:
+        return None
+    if basis == "first_year" and not energy_in:
+        return "första året är inte fullt ännu"
+    if energy_out is None or energy_in is None:
+        if basis == "day":
+            return "väntar på ett prov som är 20 till 30 timmar gammalt"
+        return "räknarna har inte lästs"
+    fault = counter_fault(energy_out, energy_in, hours)
+    if fault == "stuck":
+        return "räknaren står på noll fast enheten varit igång, styrenheten fyller den inte"
+    if fault == "implausible":
+        return f"kvoten {round(energy_out / energy_in, 2)} är orimlig, räknarna hör inte ihop"
+    floor = MIN_CONSUMPTION_KWH_DAY if basis == "day" else MIN_CONSUMPTION_KWH
+    if energy_in < floor:
+        return f"för lite energi ännu, {energy_in:.1f} av {floor:.0f} kWh"
+    return None
 
 
 class CopTracker:
@@ -229,10 +322,11 @@ class CopTracker:
         if delta_out < 0 or delta_in < 0:
             return CopResult(None, "day", 0)
         hours = (when - _parse(stamp)).total_seconds() / 3600
-        if delta_in < MIN_CONSUMPTION_KWH_DAY:
+        value = _ratio(delta_out, delta_in, MIN_CONSUMPTION_KWH_DAY)
+        if value is None:
             return CopResult(None, "day", round(hours / 24), round(delta_out, 1), round(delta_in, 1))
         return CopResult(
-            round(delta_out / delta_in, 2),
+            value,
             "day",
             max(1, round(hours / 24)),
             round(delta_out, 1),

@@ -205,3 +205,41 @@ def test_a_located_counter_without_a_reading_is_reported_as_such(cop, stats_extr
     assert payload["features"]["consumption_counter"] is True
     assert payload["features"]["heat_total"] is False
     assert payload["features"]["consumption_total"] is False
+
+
+def test_only_a_wrong_counter_sends_its_number(cop, stats_extra):
+    """The counters themselves travel on a fault, and never otherwise.
+
+    They are a measurement from the house, so they go where they settle
+    something: a counter reading zero and one that was never read look the same
+    in a report that carries neither.
+    """
+    def payload(out, consumed, hours):
+        fault = cop.counter_fault(out, consumed, hours)
+        return stats_extra.build_extra(
+            "EcoZenith i360",
+            has_display=True,
+            control_enabled=False,
+            page_count=6,
+            read_failures=0,
+            heat_total=out is not None,
+            consumption_total=consumed is not None,
+            cop_floor=consumed is not None and not fault and consumed < cop.MIN_CONSUMPTION_KWH,
+            cop_stuck=fault == "stuck",
+            cop_implausible=fault == "implausible",
+            heat_total_kwh=out if fault else None,
+            consumption_total_kwh=consumed if fault else None,
+        )
+
+    stuck = payload(0.0, 0.0, 20000)
+    assert stuck["features"]["cop_stuck"] is True
+    assert stuck["metrics"] == {"heat_total_kwh": 0.0, "consumption_total_kwh": 0.0}
+
+    fresh = payload(9.0, 4.0, 2)
+    assert fresh["features"]["cop_floor"] is True
+    assert fresh["features"]["cop_stuck"] is False
+    assert "heat_total_kwh" not in fresh.get("metrics", {})
+
+    working = payload(22499.0, 9116.0, 20000)
+    assert working["features"]["cop_floor"] is False
+    assert "metrics" not in working or "consumption_total_kwh" not in working["metrics"]

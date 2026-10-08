@@ -63,7 +63,21 @@ def test_counters_going_backwards_fall_back_to_lifetime(cop):
 
 def test_too_little_consumption_is_not_a_measurement(cop):
     tracker = cop.CopTracker(FakeStore())
-    assert tracker.result(30, 10, today=date(2026, 9, 9)).value is None
+    assert tracker.result(9, 3, today=date(2026, 9, 9)).value is None
+    # Ten kilowatt hours is enough to divide by: rounding is a twentieth of that,
+    # and holding a sound figure back until fifty only made it look like nothing
+    # was there at all.
+    assert tracker.result(30, 10, today=date(2026, 9, 9)).value == 3.0
+
+
+def test_a_quotient_no_heat_pump_could_produce_is_not_shown(cop):
+    tracker = cop.CopTracker(FakeStore())
+    # A delivered heat counter standing still beside a consumption counter that
+    # runs: the numbers exist, the quotient means nothing.
+    assert tracker.result(0, 9100, today=date(2026, 9, 9)).value is None
+    assert tracker.result(200000, 9100, today=date(2026, 9, 9)).value is None
+    assert cop.implausible(0.2) and cop.implausible(11.0)
+    assert not cop.implausible(2.47) and not cop.implausible(None)
 
 
 def test_missing_counters_give_nothing(cop):
@@ -449,3 +463,32 @@ def test_totals_prefer_the_display_counter_when_there_is_one(cop):
         consumption_snapshot=snapshot,
     )
     assert cop.current_totals(runtime) == (22633.0, 9166.0)
+
+
+# ------------------------------------- why a figure is missing, and when it is a fault
+
+
+def test_a_counter_standing_still_on_a_running_unit_is_a_fault(cop):
+    # What Portugal's i550 does: the consumption counter is never written while
+    # the unit has been switched on for years.
+    assert cop.counter_fault(0.0, 0.0, 20000) == "stuck"
+    assert cop.counter_fault(22499.0, 0.0, 20000) == "stuck"
+    # A machine that has just been commissioned is waiting, not broken.
+    assert cop.counter_fault(0.0, 0.0, 3) is None
+    assert cop.counter_fault(0.0, 0.0, None) is None
+
+
+def test_two_counters_that_do_not_belong_together_are_a_fault(cop):
+    assert cop.counter_fault(300.0, 9100.0, 20000) == "implausible"
+    assert cop.counter_fault(22499.0, 9116.0, 20000) is None
+
+
+def test_a_missing_figure_says_which_reason_it_is(cop):
+    assert cop.cop_reason(2.47, "lifetime", 22499, 9116) is None
+    assert "20 till 30 timmar" in cop.cop_reason(None, "day", None, None)
+    assert "inte lästs" in cop.cop_reason(None, "lifetime", None, None)
+    assert "står på noll" in cop.cop_reason(None, "lifetime", 0.0, 0.0, 20000)
+    assert "orimlig" in cop.cop_reason(None, "lifetime", 300.0, 9100.0, 20000)
+    for_little = cop.cop_reason(None, "lifetime", 9.0, 4.0, 2)
+    assert "för lite energi" in for_little and "4.0 av 10 kWh" in for_little
+    assert "första året" in cop.cop_reason(None, "first_year", None, None)
