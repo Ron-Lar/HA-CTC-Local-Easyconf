@@ -61,7 +61,7 @@ def test_one_client_serves_every_read(quick, library, modbus_api, host):
     async def scenario():
         for _ in range(5):
             await client.async_read(62000, 3)
-        await client.async_write(1000, 1)
+        await client.async_write(1010, 1)
 
     run(scenario())
     assert len(library.clients) == 1
@@ -175,7 +175,7 @@ def test_two_callers_share_the_one_connection(quick, library, modbus_api, host):
         return await asyncio.gather(
             client.async_read(62000, 1),
             client.async_read(62100, 1),
-            client.async_write(1000, 7),
+            client.async_write(1010, 7),
         )
 
     assert run(scenario()) == [[62000], [62100], None]
@@ -303,27 +303,27 @@ def test_writes_use_function_16_one_register_at_a_time(quick, library, modbus_ap
     client = modbus_api.CtcModbusClient(host)
 
     async def scenario():
-        await client.async_write(1000, 5)
-        await client.async_write(1001, -1)
+        await client.async_write(1010, 5)
+        await client.async_write(1033, -1)
         await client.async_write(1002, 70000)
 
     run(scenario())
-    assert library.controller.written == [(1000, [5]), (1001, [65535]), (1002, [70000 & 0xFFFF])]
+    assert library.controller.written == [(1010, [5]), (1033, [65535]), (1002, [70000 & 0xFFFF])]
     assert all(kind == "write" for kind, *_ in library.requests)
 
 
 def test_write_failures_are_sorted_like_reads(quick, library, modbus_api, host):
-    library.controller.silent.add(1000)
-    library.controller.gone_before.add(1001)
+    library.controller.silent.add(1010)
+    library.controller.gone_before.add(1033)
     client = modbus_api.CtcModbusClient(host)
 
     async def scenario():
         with pytest.raises(modbus_api.CtcModbusSilence):
-            await client.async_write(1000, 1)
+            await client.async_write(1010, 1)
         assert library.alive, "silence on a write keeps the connection too"
         with pytest.raises(modbus_api.CtcModbusTransportError) as caught:
-            await client.async_write(1001, 1)
-        assert caught.value.address == 1001
+            await client.async_write(1033, 1)
+        assert caught.value.address == 1033
         assert library.alive == []
 
     run(scenario())
