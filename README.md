@@ -244,7 +244,8 @@ write to 61500, 61503 or 62000 never reaches the wire.
 - **Absent hardware still answers.** The controller replies for ten heat pumps
   and four heating systems whatever is actually installed, with plausible
   numbers. Readings marked as missing use CTC's own markers, plus or minus 9999
-  and 10000 and 32767, which are filtered out.
+  and 10000 and 32767, and a 32 bit counter of all ones, which are filtered out
+  after the sign is applied, so a negative marker cannot pass as a temperature.
 - **The web interface is undocumented.** A firmware update can change it. Modbus
   is documented and will keep working.
 - **The coefficient of performance is untested on an i360.** Going by CTC's

@@ -21,7 +21,6 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .catalogue import numeric_value
 from .const import (
     HARVEST_PATIENCE,
-    enum_label,
     RETRY_INTERVAL,
     CONTROL_KEEPALIVE_SECONDS,
     DOMAIN,
@@ -36,9 +35,7 @@ from .modbus_api import (
     CtcModbusClient,
     CtcModbusError,
     CtcModbusTransportError,
-    decode_pair,
-    decode_signed,
-    is_sentinel,
+    decode_reading,
     plan_blocks,
 )
 from .poll import MissingBlocks, SlowRounds, read_round
@@ -125,39 +122,33 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return data
 
     def _decode(self, description: ModbusSensor, raw: dict[int, int]) -> Any:
-        if description.address not in raw:
-            return None
-        first = raw[description.address]
-        if description.count == 2:
-            second = raw.get(description.address + 1)
-            if second is None:
-                return None
-            combined = decode_pair(first, second)
-            return round(combined * description.scale, 3)
-        if is_sentinel(first):
-            return None
-        value = decode_signed(first) if description.signed else first
-        if description.enum is not None:
-            # A label of the integration's own making ("Okänd (12)") is not one of
-            # the sensor's options, and Home Assistant answers a state that is not
-            # with an exception on every write: the entity then stops updating at
-            # all. VSH's i255 sat in system status 12 behind exactly that.
-            label, unknown = enum_label(description.enum, value)
-            if unknown is None:
-                self.unknown_codes.pop(description.key, None)
-            else:
-                self.unknown_codes[description.key] = unknown
-                if (description.key, unknown) not in self._said_codes:
-                    self._said_codes.add((description.key, unknown))
-                    _LOGGER.info(
-                        "%s answered with code %s, which the table has no label for, so the "
-                        "sensor reads %s and carries the code as an attribute",
-                        description.key,
-                        unknown,
-                        label,
-                    )
-            return label
-        return round(value * description.scale, 3)
+        """The reading for one description, with the bookkeeping around it.
+
+        The decoding itself is decode_reading in modbus_api, free of Home
+        Assistant and tested on its own; this keeps the codes the table has no
+        label for, so the sensor can carry the number as an attribute.
+        """
+        reading = decode_reading(description, raw)
+        if description.enum is None or reading.value is None:
+            return reading.value
+        # A label of the integration's own making ("Okänd (12)") is not one of
+        # the sensor's options, and Home Assistant answers a state that is not
+        # with an exception on every write: the entity then stops updating at
+        # all. VSH's i255 sat in system status 12 behind exactly that.
+        if reading.unknown is None:
+            self.unknown_codes.pop(description.key, None)
+        else:
+            self.unknown_codes[description.key] = reading.unknown
+            if (description.key, reading.unknown) not in self._said_codes:
+                self._said_codes.add((description.key, reading.unknown))
+                _LOGGER.info(
+                    "%s answered with code %s, which the table has no label for, so the "
+                    "sensor reads %s and carries the code as an attribute",
+                    description.key,
+                    reading.unknown,
+                    reading.value,
+                )
+        return reading.value
 
 
 class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
