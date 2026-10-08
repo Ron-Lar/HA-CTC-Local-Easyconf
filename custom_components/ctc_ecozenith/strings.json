@@ -72,6 +72,9 @@
           "restore_page": "Put the panel back afterwards"
         }
       }
+    },
+    "abort": {
+      "panel_busy": "The panel is in use right now: the integration is reading the display's pages or walking its menu. Try again in a moment. Nothing has been changed."
     }
   },
   "issues": {

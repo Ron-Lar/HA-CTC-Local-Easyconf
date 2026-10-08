@@ -21,7 +21,9 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .catalogue import (
+    PanelBusy,
     async_discover_pages,
+    async_rescan_pages,
     menu_after_rescan,
     pages_from_storage,
     pages_to_storage,
@@ -488,6 +490,26 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             description_placeholders=STATS_PLACEHOLDERS,
         )
 
+    def _web_client(self) -> CtcWebClient:
+        """The display's client for a walk started from the options.
+
+        A loaded entry's own client, so that this walk, the harvest, the menu
+        re-read and the walk to the system information page all take the same
+        panel lock: two walkers on one panel record routes that are wrong, and
+        those are then saved for good. A client of its own only while the entry
+        is not loaded, when nobody else is walking.
+        """
+        runtime = getattr(self._entry, "runtime_data", None)
+        client = getattr(runtime, "web_client", None)
+        if client is not None:
+            return client
+        return CtcWebClient(
+            async_get_clientsession(self.hass),
+            self._entry.data[CONF_HOST],
+            self._entry.data.get(CONF_WEB_PORT, DEFAULT_WEB_PORT),
+            int(self._entry.options.get(CONF_LANGUAGE, LANG_SWEDISH)),
+        )
+
     async def async_step_rescan(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -513,15 +535,13 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
                 data[CONF_MENU_VERSION] = await _async_version(self.hass)
             return self.async_create_entry(title="", data=data)
 
-        session = async_get_clientsession(self.hass)
-        client = CtcWebClient(
-            session,
-            self._entry.data[CONF_HOST],
-            self._entry.data.get(CONF_WEB_PORT, DEFAULT_WEB_PORT),
-            self._entry.options.get(CONF_LANGUAGE, LANG_SWEDISH),
-        )
         try:
-            discovered = await async_discover_pages(client, require_root=True)
+            discovered = await async_rescan_pages(self._web_client())
+        except PanelBusy:
+            # The harvest, or a walk through the menu, holds the panel. A form
+            # that waited for it would hang for minutes, so it says so instead
+            # and is asked again in a moment. Nothing has been saved.
+            return self.async_abort(reason="panel_busy")
         except CtcWebError as err:
             _LOGGER.warning("Could not read the display's menu: %s", err)
             discovered = []

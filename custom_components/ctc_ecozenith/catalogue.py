@@ -503,6 +503,33 @@ async def async_discover_pages(
     return [page for page in discovered if page.values]
 
 
+class PanelBusy(Exception):
+    """Somebody else holds the panel: the harvest, the menu re-read or the walk."""
+
+
+async def async_rescan_pages(client: CtcWebClient) -> list[SlowPage]:
+    """Read the menu again for a form, under the harvester's own panel lock.
+
+    The harvest, the menu re-read after an update and the walk to the system
+    information page all take ``client.panel`` before they move the display,
+    and a "read the menu again" from the options has to take the same lock:
+    two walkers on one panel record routes that are wrong, and those routes
+    are then saved in the options for good. A form cannot wait for the lock,
+    though. A harvest holds the panel for as long as its pages take, and a
+    dialog that hangs for minutes is a dialog somebody closes and opens again.
+    So a panel that is already taken is answered with :class:`PanelBusy` at
+    once and only a free one is walked. The look and the take happen with
+    nothing awaited in between, so the harvester cannot slip in between them.
+    """
+    if client.panel.locked():
+        raise PanelBusy
+    async with client.panel:
+        # A second reading, like the one after an update, only counts from a
+        # verified operation data root: a single page in place of the whole
+        # menu would be a loss (see async_discover_pages).
+        return await async_discover_pages(client, require_root=True)
+
+
 async def _async_explore(
     client: CtcWebClient,
     page_map: dict[int, list[int]],

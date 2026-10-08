@@ -72,6 +72,9 @@
           "restore_page": "Ställ tillbaka panelen efteråt"
         }
       }
+    },
+    "abort": {
+      "panel_busy": "Panelen används just nu: integrationen läser displayens sidor eller går genom menyn. Försök om en stund. Inget har ändrats."
     }
   },
   "issues": {
