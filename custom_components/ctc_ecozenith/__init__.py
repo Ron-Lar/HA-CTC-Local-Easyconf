@@ -279,7 +279,9 @@ async def _async_reread_menu(
     """
     options = entry.options
     async with client.panel:
-        discovered = await async_discover_pages(client)
+        # Without the operation data root there is no menu to read, only the
+        # page the panel happens to show, and that must not replace the menu.
+        discovered = await async_discover_pages(client, require_root=True)
     if not discovered:
         spent = _MENU_TRIES.get(entry.entry_id, 0)
         if spent >= MENU_READ_TRIES:
