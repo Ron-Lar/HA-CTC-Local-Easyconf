@@ -207,7 +207,10 @@ five minutes.
 
 The stored settings in the 61500 block are exposed read only and never written.
 CTC states plainly that the number of write cycles there is limited and that
-frequent writing can destroy the controller.
+frequent writing can destroy the controller. That is enforced in code, not left
+to convention: the Modbus client refuses any address outside the control
+registers before it even takes the connection, and the test suite checks that a
+write to 61500, 61503 or 62000 never reaches the wire.
 
 ## Known limits
 
