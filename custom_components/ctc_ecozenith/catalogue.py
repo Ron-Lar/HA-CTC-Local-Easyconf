@@ -330,17 +330,28 @@ async def async_page_values(
     return found
 
 
-async def async_discover_pages(client: CtcWebClient) -> list[SlowPage]:
+async def async_discover_pages(
+    client: CtcWebClient, require_root: bool = False
+) -> list[SlowPage]:
     """Walk the operation data subtree and describe every page it contains.
 
     The panel moves while this runs and is put back where it started. Only the
-    operation data subtree is entered. That subtree is read only on every CTC
-    model checked, so a tap landing slightly off cannot change a setting.
+    operation data subtree is entered, and only once its root has been found
+    and verified. That subtree is read only on every CTC model checked, so a
+    tap landing slightly off cannot change a setting; the menus around it are
+    not, and a panel left in Avancerat or on a settings page must not be swept.
+    So where the root cannot be found, nothing is pressed: the page the panel
+    is showing is read as it stands and offered on its own, or, with
+    ``require_root``, nothing is offered at all. The two readers that fold a
+    reading into a stored menu ask for that, since one page in place of the
+    whole menu would be a loss, not a reading.
 
     Layout differs between models: an i255 puts a tab strip along the bottom, an
     i550 Pro does not. Rather than guess, every plausible control on the root
     page is tried once and the tap that reached each page is recorded, so poll
-    time can replay a known route instead of deriving one again.
+    time can replay a known route instead of deriving one again. The sweep
+    stops the moment it cannot get back to the root, because every tap it
+    makes is meant for a page it has verified it is on.
     """
     page_map = await client.async_screen_map(refresh=True)
     origin = await client.async_current_page()
@@ -350,12 +361,20 @@ async def async_discover_pages(client: CtcWebClient) -> list[SlowPage]:
     try:
         root = await _async_operation_root(client, page_map, origin)
         if root is None:
+            if require_root:
+                _LOGGER.warning(
+                    "Could not find the operation data menu; nothing was pressed and no page was read"
+                )
+                return []
             _LOGGER.warning(
-                "Could not find the operation data menu; offering the current page only"
+                "Could not find the operation data menu; reading the page the panel is "
+                "showing and pressing nothing"
             )
-            root = await client.async_current_page()
-        await _async_collect(client, page_map, root, discovered, visited, [])
-        await _async_explore(client, page_map, root, discovered, visited)
+            here = await client.async_current_page()
+            await _async_collect(client, page_map, here, discovered, visited, [])
+        else:
+            await _async_collect(client, page_map, root, discovered, visited, [])
+            await _async_explore(client, page_map, root, discovered, visited)
     finally:
         await _async_restore(client, page_map, origin)
 
@@ -376,24 +395,32 @@ async def _async_explore(
     tap from the root, an i550 Pro hides the heat pump's own page behind a
     second tab strip, and that page is the one carrying the model, the control
     board's firmware and the delivered heat.
+
+    The sweep ends early the moment the root cannot be regained: from then on
+    the panel is on a page nobody chose, and the pages found so far are kept.
     """
-    taps = await _async_tap_pages(client, page_map, root, root, into, visited, max_taps)
+    taps, intact = await _async_tap_pages(client, page_map, root, root, into, visited, max_taps)
 
     # Second level: pages found above that carry a strip of their own.
     for page in [p.page for p in list(into) if p.page != root]:
-        if taps >= max_taps:
+        if not intact or taps >= max_taps:
             break
         if not await _async_return_to_root(client, page_map, root):
+            intact = False
             break
-        before = await client.async_current_page()
         route = next((p.route for p in into if p.page == page), [])
-        for x, y in route:
-            await client.async_click(page_map.get(await client.async_current_page(), []), x, y)
-        if await client.async_current_page() != page:
+        if not await _async_replay(client, page_map, route, page):
             continue
-        taps += await _async_tap_pages(
+        more, intact = await _async_tap_pages(
             client, page_map, page, root, into, visited, max_taps - taps, route
         )
+        taps += more
+    if not intact:
+        _LOGGER.warning(
+            "Lost the way back to the operation data menu, so the sweep stopped early; "
+            "the pages found so far are kept"
+        )
+        return
     await _async_return_to_root(client, page_map, root)
 
 
@@ -406,19 +433,27 @@ async def _async_tap_pages(
     visited: set[int],
     budget: int,
     prefix: list[tuple[int, int]] | None = None,
-) -> int:
-    """Tap every target on one page, recording where each tap led."""
+) -> tuple[int, bool]:
+    """Tap every target on one page, recording where each tap led.
+
+    Returns the taps spent and whether the root was still within reach at the
+    end. Every tap is made on a page the sweep has just verified it is on: a
+    tap that led somewhere is followed by the way back, and when the root
+    itself cannot be regained the page's remaining targets are given up rather
+    than pressed from wherever the panel ended up. When the root is reached but
+    the route to this page is not, this page is given up and the sweep goes on
+    from the root.
+    """
     targets = await _async_tap_targets(client, page_map, page)
     taps = 0
     for x, y in targets:
         if taps >= budget:
             break
-        here = await client.async_current_page()
-        if here != page:
-            # Getting back may fail on one target without the rest being lost,
-            # so this carries on rather than giving up on the whole page.
-            if not await _async_return_to(client, page_map, root, page, prefix):
-                continue
+        if await client.async_current_page() != page:
+            if not await _async_return_to_root(client, page_map, root):
+                return taps, False
+            if page != root and not await _async_replay(client, page_map, prefix, page):
+                break
         taps += 1
         await client.async_click(page_map.get(page, []), x, y)
         landed = await client.async_current_page()
@@ -427,22 +462,17 @@ async def _async_tap_pages(
         await _async_collect(
             client, page_map, landed, into, visited, list(prefix or []) + [(x, y)]
         )
-    return taps
+    return taps, True
 
 
-async def _async_return_to(
+async def _async_replay(
     client: CtcWebClient,
     page_map: dict[int, list[int]],
-    root: int,
+    route: list[tuple[int, int]] | None,
     page: int,
-    prefix: list[tuple[int, int]] | None,
 ) -> bool:
-    """Walk back to a page, through the root when there is a route to replay."""
-    if page == root:
-        return await _async_return_to_root(client, page_map, root)
-    if not await _async_return_to_root(client, page_map, root):
-        return False
-    for x, y in prefix or []:
+    """Replay a recorded route from the root and say whether it arrived."""
+    for x, y in route or []:
         await client.async_click(page_map.get(await client.async_current_page(), []), x, y)
     return await client.async_current_page() == page
 
@@ -655,6 +685,26 @@ def menu_wait(last: float | None, now: float, interval: float) -> float:
     if last is None:
         return 0.0
     return max(0.0, interval - (now - last))
+
+
+def menu_after_rescan(
+    stored_menu: list[SlowPage],
+    stored_selection: list[SlowPage],
+    discovered: list[SlowPage],
+) -> tuple[list[SlowPage], bool]:
+    """The menu to offer after "read the menu again", and whether it is fresh.
+
+    A reading that gave nothing is not a menu with no pages on it, it is a
+    reading that did not happen: the display was busy, or the operation data
+    menu could not be found. Writing it would wipe the menu an earlier reading
+    built, and every tick box with it. So the stored menu stands, and since it
+    is not fresh the version stamp is left alone and the reading stays owed.
+    An installation from before the whole menu was kept has only its harvested
+    pages to fall back on.
+    """
+    if discovered:
+        return discovered, True
+    return (stored_menu or stored_selection), False
 
 
 def merge_menu(

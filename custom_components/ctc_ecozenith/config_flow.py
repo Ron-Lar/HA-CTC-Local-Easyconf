@@ -20,7 +20,12 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
-from .catalogue import async_discover_pages, pages_from_storage, pages_to_storage
+from .catalogue import (
+    async_discover_pages,
+    menu_after_rescan,
+    pages_from_storage,
+    pages_to_storage,
+)
 from .const import (
     CONF_CHECK_UPDATES,
     CONF_ENABLE_CONTROL,
@@ -370,6 +375,9 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, entry: config_entries.ConfigEntry) -> None:
         self._entry = entry
         self._pages: list[Any] = []
+        #: Whether ``_pages`` came off the panel just now, or out of storage
+        #: because the panel would not give the menu up.
+        self._fresh = False
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -483,23 +491,27 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
     async def async_step_rescan(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Walk the display's menu again and re-offer the tick boxes."""
+        """Walk the display's menu again and re-offer the tick boxes.
+
+        A reading that gave nothing leaves the stored menu as it is: the tick
+        boxes are offered from storage and the version stamp is not touched, so
+        the reading is still owed. See catalogue.menu_after_rescan.
+        """
         if user_input is not None:
             chosen = {int(page) for page in user_input.get(CONF_SLOW_PAGES, [])}
             keep = [page for page in self._pages if page.page in chosen]
-            return self.async_create_entry(
-                title="",
-                data={
-                    **self._entry.options,
-                    CONF_SLOW_PAGES: pages_to_storage(keep),
-                    CONF_MENU: pages_to_storage(self._pages),
-                    CONF_MENU_VERSION: await _async_version(self.hass),
-                    CONF_SLOW_INTERVAL: int(
-                        user_input.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)
-                    ),
-                    CONF_RESTORE_PAGE: user_input.get(CONF_RESTORE_PAGE, True),
-                },
-            )
+            data = {
+                **self._entry.options,
+                CONF_SLOW_PAGES: pages_to_storage(keep),
+                CONF_MENU: pages_to_storage(self._pages),
+                CONF_SLOW_INTERVAL: int(
+                    user_input.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)
+                ),
+                CONF_RESTORE_PAGE: user_input.get(CONF_RESTORE_PAGE, True),
+            }
+            if self._fresh:
+                data[CONF_MENU_VERSION] = await _async_version(self.hass)
+            return self.async_create_entry(title="", data=data)
 
         session = async_get_clientsession(self.hass)
         client = CtcWebClient(
@@ -509,12 +521,15 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             self._entry.options.get(CONF_LANGUAGE, LANG_SWEDISH),
         )
         try:
-            self._pages = await async_discover_pages(client)
+            discovered = await async_discover_pages(client, require_root=True)
         except CtcWebError as err:
             _LOGGER.warning("Could not read the display's menu: %s", err)
-            self._pages = pages_from_storage(
-                self._entry.options.get(CONF_SLOW_PAGES, [])
-            )
+            discovered = []
+        self._pages, self._fresh = menu_after_rescan(
+            pages_from_storage(self._entry.options.get(CONF_MENU)),
+            pages_from_storage(self._entry.options.get(CONF_SLOW_PAGES)),
+            discovered,
+        )
 
         already = [
             page.page for page in pages_from_storage(self._entry.options.get(CONF_SLOW_PAGES, []))
