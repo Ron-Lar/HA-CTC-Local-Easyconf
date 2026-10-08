@@ -37,7 +37,7 @@ import gzip
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import aiohttp
 
@@ -74,6 +74,9 @@ class Widget:
     #: serial number, the MAC address and the firmware versions, which are
     #: written once and therefore readable whatever page the panel is showing.
     text_value: str | None = None
+    #: The catalogue entry ``label`` was read from, kept so the same caption can
+    #: be looked up in another language without resolving the screen again.
+    text_id: int | None = None
 
     @property
     def centre(self) -> tuple[int, int]:
@@ -203,6 +206,53 @@ def _select_from_group(group: Any, selector: int) -> tuple[str, int] | None:
         pos += 3 if code in (0, 1, 2) else 2
         ordinal += 1
     return None
+
+
+def _var_resolver(values: list[Any], globals_: list[Any]) -> Callable[[int, int], int]:
+    """Build the lookup a screen definition's references are read through.
+
+    Kind 0 reads the global variables, kind 1 the screen's own, and anything
+    else is the literal value. A slot that is missing or holds text reads as -1,
+    the same marker the display uses for nothing.
+    """
+
+    def var_value(kind: int, val: int) -> int:
+        if kind == 0:
+            got = globals_[val] if val < len(globals_) else -1
+        elif kind == 1:
+            got = values[val] if val < len(values) else -1
+        else:
+            return val
+        return got if isinstance(got, int) else -1
+
+    return var_value
+
+
+def _picked_entry(
+    definition: ScreenDef, entry: list, kind: int, var_value: Callable[[int, int], int]
+) -> tuple[str, int] | None:
+    """Follow a widget's text array index through t0 and t1.
+
+    Images carry the index at position 10, text elements at position 12, and
+    other widget kinds carry none. The result is ``("text", text id)`` or
+    ``("fmt", t2 index)``, or None when the chain runs off the end of a table.
+    """
+    if kind in (0, 1):
+        slot_pos = 10
+    elif kind in (2, 3):
+        slot_pos = 12
+    else:
+        return None
+    if slot_pos >= len(entry) or not isinstance(entry[slot_pos], int):
+        return None
+    base = entry[slot_pos] * 3
+    if base + 2 >= len(definition.t0):
+        return None
+    selector = var_value(definition.t0[base], definition.t0[base + 1])
+    group_index = definition.t0[base + 2]
+    if not isinstance(group_index, int) or group_index >= len(definition.t1):
+        return None
+    return _select_from_group(definition.t1[group_index], selector)
 
 
 def _primary_variant(spec: Any) -> tuple[str | None, list[int]]:
@@ -345,14 +395,26 @@ class CtcWebClient:
         return values[0]
 
     async def async_text(self, text_id: int, language: int | None = None) -> str:
+        """One label out of the display's text catalogue, or "" if it would not say.
+
+        Only an answer is kept. A failure used to be cached as "" as well, for
+        the rest of the run: the home screen is recognised by the English
+        caption "Operation data", read through this very cache, so a label that
+        was slow twice during one bad minute left every harvest after it unable
+        to find home until Home Assistant was restarted. The failure is still
+        swallowed rather than raised, because one label must not take a whole
+        screen with it; it is simply asked for again next time.
+        """
         lang = self._language if language is None else language
         cache_key = text_id if language is None else -(text_id * 100 + language)
-        if cache_key in self._text_cache:
-            return self._text_cache[cache_key]
+        cached = self._text_cache.get(cache_key)
+        if cached is not None:
+            return cached
         try:
             value = (await self._request(f"/txt/{lang}/{text_id}")).strip()
-        except CtcWebError:
-            value = ""
+        except CtcWebError as err:
+            _LOGGER.debug("Text %s in language %s was not answered: %s", text_id, lang, err)
+            return ""
         self._text_cache[cache_key] = value
         return value
 
@@ -383,14 +445,7 @@ class CtcWebClient:
             values = await self.async_vars(screen)
         if globals_ is None:
             globals_ = await self.async_vars("glob")
-
-        def var_value(kind: int, val: int) -> int:
-            if kind == 0:
-                return globals_[val] if val < len(globals_) else -1  # type: ignore[return-value]
-            if kind == 1:
-                got = values[val] if val < len(values) else -1
-                return got if isinstance(got, int) else -1
-            return val
+        var_value = _var_resolver(values, globals_)
 
         def ref(index: int) -> int:
             if index * 2 >= len(definition.v0):
@@ -438,36 +493,13 @@ class CtcWebClient:
                 widgets.append(widget)
                 continue
 
-            # Images carry their text array index at position 10, text elements
-            # at position 12. Other widget kinds carry none.
-            if widget.kind in (0, 1):
-                slot_pos = 10
-            elif widget.kind in (2, 3):
-                slot_pos = 12
-            else:
-                widgets.append(widget)
-                continue
-            if slot_pos >= len(entry) or not isinstance(entry[slot_pos], int):
-                widgets.append(widget)
-                continue
-
-            arr = entry[slot_pos]
-            base = arr * 3
-            if base + 2 >= len(definition.t0):
-                widgets.append(widget)
-                continue
-            selector = var_value(definition.t0[base], definition.t0[base + 1])
-            group_index = definition.t0[base + 2]
-            if not isinstance(group_index, int) or group_index >= len(definition.t1):
-                widgets.append(widget)
-                continue
-            group = definition.t1[group_index]
-            picked = _select_from_group(group, selector)
+            picked = _picked_entry(definition, entry, widget.kind, var_value)
             if picked is None:
                 widgets.append(widget)
                 continue
             kind, payload = picked
             if kind == "text":
+                widget.text_id = payload
                 widget.label = await self.async_text(payload)
             elif kind == "fmt" and payload < len(definition.t2):
                 spec = definition.t2[payload]
@@ -478,44 +510,55 @@ class CtcWebClient:
             widgets.append(widget)
         return widgets
 
-    async def async_english_label(self, screen: int, widget: Widget) -> str | None:
+    async def async_english_label(
+        self,
+        screen: int,
+        widget: Widget,
+        values: list[Any] | None = None,
+        globals_: list[Any] | None = None,
+    ) -> str | None:
         """Resolve a widget's label in English, which is model independent.
 
         Text ids differ between models, 532 on an i255 and 570 on an i550 Pro for
         the same menu item, so navigation matches on the English string instead.
+
+        A widget rendered by :meth:`async_widgets` carries the text id it was
+        drawn with, so this is one lookup in the text cache and no second
+        reading of the screen's variables. Those used to be fetched again for
+        every widget, forty to sixty requests per hop to the home screen against
+        a server that drops connections above five in flight. The variables are
+        only needed for a widget built some other way, and a caller that has
+        them passes them in rather than have them fetched.
         """
+        text_id = widget.text_id
+        if text_id is None:
+            text_id = await self._async_text_id(screen, widget, values, globals_)
+        if text_id is None:
+            return None
+        return await self.async_text(text_id, language=0)
+
+    async def _async_text_id(
+        self,
+        screen: int,
+        widget: Widget,
+        values: list[Any] | None,
+        globals_: list[Any] | None,
+    ) -> int | None:
+        """Work out which catalogue entry a widget's caption comes from."""
         definition = await self.async_screen_def(screen)
         if widget.index >= len(definition.c1):
             return None
         entry = definition.c1[widget.index]
         if not isinstance(entry, list):
             return None
-        slot_pos = 10 if widget.kind in (0, 1) else 12
-        if slot_pos >= len(entry) or not isinstance(entry[slot_pos], int):
-            return None
-        base = entry[slot_pos] * 3
-        if base + 2 >= len(definition.t0):
-            return None
-        values = await self.async_vars(screen)
-        globals_ = await self.async_vars("glob")
-
-        def var_value(kind: int, val: int) -> int:
-            if kind == 0:
-                got = globals_[val] if val < len(globals_) else -1
-            elif kind == 1:
-                got = values[val] if val < len(values) else -1
-            else:
-                return val
-            return got if isinstance(got, int) else -1
-
-        selector = var_value(definition.t0[base], definition.t0[base + 1])
-        group_index = definition.t0[base + 2]
-        if not isinstance(group_index, int) or group_index >= len(definition.t1):
-            return None
-        picked = _select_from_group(definition.t1[group_index], selector)
+        if values is None:
+            values = await self.async_vars(screen)
+        if globals_ is None:
+            globals_ = await self.async_vars("glob")
+        picked = _picked_entry(definition, entry, widget.kind, _var_resolver(values, globals_))
         if picked is None or picked[0] != "text":
             return None
-        return await self.async_text(picked[1], language=0)
+        return picked[1]
 
     async def async_find_widget(self, screen: int, label: str) -> Widget | None:
         """Return the first visible widget whose label matches, case folded."""
