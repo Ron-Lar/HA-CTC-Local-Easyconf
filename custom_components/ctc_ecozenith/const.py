@@ -330,6 +330,18 @@ CONTROL_SELECTS: Final[tuple[ControlRegister, ...]] = (
 CONTROL_VDI_REGISTER: Final = 1100
 VDI_COUNT: Final = 8
 
+#: Every address the integration may ever write. Derived from the tables above
+#: rather than typed out, so a new ControlRegister is let through by itself and
+#: nothing else ever is: the Modbus client refuses any other address before it
+#: takes the connection. The 61500 block lives in EEPROM with a limited number
+#: of write cycles, and a write that lands there by mistake cannot be undone, so
+#: the promise that it is never written is kept here and proved by the tests
+#: instead of resting on convention.
+CONTROL_ADDRESSES: Final[frozenset[int]] = frozenset(
+    {register.address for register in CONTROL_NUMBERS + CONTROL_SELECTS}
+    | {CONTROL_VDI_REGISTER}
+)
+
 # How often the volatile control registers are refreshed. CTC requires at least
 # every five minutes; a minute leaves a wide margin.
 CONTROL_KEEPALIVE_SECONDS: Final = 60

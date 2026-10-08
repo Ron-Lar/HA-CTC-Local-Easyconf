@@ -39,7 +39,7 @@ import logging
 import time
 from typing import Any
 
-from .const import SENTINELS, ModbusSensor
+from .const import CONTROL_ADDRESSES, SENTINELS, ModbusSensor
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -323,7 +323,18 @@ class CtcModbusClient:
         return out
 
     async def async_write(self, address: int, value: int) -> None:
-        """Write one holding register with function code 16, as CTC specifies."""
+        """Write one holding register with function code 16, as CTC specifies.
+
+        Nothing but the volatile control registers may be written, whoever is
+        asking. The check comes before the lock, so a refused write never waits
+        for the connection and never touches it: this is the one hard guard
+        against a write landing in the 61500 block, whose EEPROM wears out.
+        """
+        if address not in CONTROL_ADDRESSES:
+            raise CtcModbusError(
+                f"refusing to write register {address}: only CTC's volatile control "
+                "registers in the 1000 block may be written"
+            )
         async with self._lock:
             client = await self._ensure_client()
             kwargs = self._slave_kwargs(client, "write_registers")
