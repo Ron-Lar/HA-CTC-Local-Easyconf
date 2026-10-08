@@ -170,8 +170,8 @@ def test_the_whole_chain_against_a_loopback_controller(modbus_api, monkeypatch):
         # Whatever this pymodbus did with the line after the silence, the next
         # register still answers, on the same connection or a fresh one.
         assert await client.async_read(62000, 1) == [62000]
-        await client.async_write(1000, 5)
-        assert controller.written == [(1000, [5])]
+        await client.async_write(1010, 5)
+        assert controller.written == [(1010, [5])]
 
         await controller.vanish()
         # The library notices the line go on its own; wait for that rather than
