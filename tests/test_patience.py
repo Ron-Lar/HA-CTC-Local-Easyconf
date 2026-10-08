@@ -80,7 +80,7 @@ class FakeSession:
 
 def test_a_slow_reading_is_asked_for_once_more(web_api):
     session = FakeSession(["timeout", "ok"])
-    client = web_api.CtcWebClient(session, "10.0.0.1")
+    client = web_api.CtcWebClient(session, "192.0.2.1")
     assert run(client.async_vars(7)) == [1, 2, 3]
     assert [kind for kind, _url, _t in session.calls] == ["get", "get"]
     # The second attempt waits longer than the first.
@@ -89,7 +89,7 @@ def test_a_slow_reading_is_asked_for_once_more(web_api):
 
 def test_a_reading_that_never_comes_is_a_failure(web_api):
     session = FakeSession(["timeout", "timeout"])
-    client = web_api.CtcWebClient(session, "10.0.0.1")
+    client = web_api.CtcWebClient(session, "192.0.2.1")
     try:
         run(client.async_vars(7))
     except web_api.CtcWebError as err:
@@ -103,7 +103,7 @@ def test_a_tap_is_never_repeated(web_api):
     # A tap that landed and only looked like a failure would move the panel
     # a second time, which is the one thing that must not happen.
     session = FakeSession(["timeout"])
-    client = web_api.CtcWebClient(session, "10.0.0.1")
+    client = web_api.CtcWebClient(session, "192.0.2.1")
     try:
         run(client.async_click([1], 100, 100))
     except web_api.CtcWebError:

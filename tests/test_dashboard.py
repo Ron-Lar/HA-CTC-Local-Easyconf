@@ -628,6 +628,6 @@ def test_the_address_of_the_web_interface(const):
     The display answers the same page for any main.* address, and the port is
     only written out when it is not the usual one.
     """
-    assert const.web_interface_url("10.0.40.55") == "http://10.0.40.55/main.html"
-    assert const.web_interface_url("10.0.40.55", 80) == "http://10.0.40.55/main.html"
-    assert const.web_interface_url("10.0.40.55", 8080) == "http://10.0.40.55:8080/main.html"
+    assert const.web_interface_url("192.0.2.55") == "http://192.0.2.55/main.html"
+    assert const.web_interface_url("192.0.2.55", 80) == "http://192.0.2.55/main.html"
+    assert const.web_interface_url("192.0.2.55", 8080) == "http://192.0.2.55:8080/main.html"

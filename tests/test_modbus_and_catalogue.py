@@ -341,7 +341,7 @@ def test_a_reconnect_waits_out_the_last_close(modbus_api):
     A reload closes and connects again in the same breath, which the controller
     answers with a reset, so the new connection waits for the slot instead.
     """
-    unit = ("10.0.0.5", 502)
+    unit = ("192.0.2.5", 502)
     assert modbus_api.settle_wait(*unit, 1000.0) == 0.0  # never seen before
     modbus_api.note_close(*unit, 1000.0)
     assert modbus_api.settle_wait(*unit, 1000.0) == modbus_api.CLOSE_SETTLE
@@ -349,7 +349,7 @@ def test_a_reconnect_waits_out_the_last_close(modbus_api):
     assert modbus_api.settle_wait(*unit, 1000.0 + modbus_api.CLOSE_SETTLE) == 0.0
     assert modbus_api.settle_wait(*unit, 2000.0) == 0.0
     # Another pump on the network is not kept waiting by this one.
-    assert modbus_api.settle_wait("10.0.0.6", 502, 1000.0) == 0.0
+    assert modbus_api.settle_wait("192.0.2.6", 502, 1000.0) == 0.0
 
 
 def test_every_reading_is_created_switched_on(const):

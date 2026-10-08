@@ -307,6 +307,10 @@ seen only by whoever runs the service.
 The point is to know which versions are actually in the field, which parts are
 worth maintaining and whether something is failing on units other than mine.
 
+The first report after each start of the integration is also written out in
+full to Home Assistant's log at info level, so you can read exactly what left
+your installation before deciding whether to keep it on.
+
 To opt out: *Settings, Devices and services, CTC Local Easyconf, Configure, Send
 anonymous usage statistics.* Switching it off also erases what has already been
 sent about your installation. The full list of fields and the reasoning:
