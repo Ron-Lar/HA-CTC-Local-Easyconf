@@ -440,3 +440,26 @@ def test_a_heading_over_the_rows_names_nothing(catalogue, web_api, page):
     """"Kompressor" stands over the i255's history rows and owns no reading."""
     named = _named_by_variable(catalogue, web_api, page("i255_128"))
     assert "Kompressor" not in named.values()
+
+
+# ----------------------------------------- a status code the table has no name for
+
+
+def test_a_status_code_without_a_label_reads_as_an_option_and_keeps_its_number(const):
+    assert const.enum_label(const.STATUS_SYSTEM, 5) == ("Varmvatten", None)
+    # VSH's i255 answered 12. "Okänd (12)" is not one of the sensor's options, and
+    # Home Assistant answers a state that is not with an exception on every write,
+    # so the sensor stopped updating and the log filled up instead.
+    assert const.enum_label(const.STATUS_SYSTEM, 12) == (const.STATUS_UNKNOWN, 12)
+    assert const.STATUS_UNKNOWN not in const.STATUS_SYSTEM.values()
+
+
+def test_the_reading_for_an_unlabelled_code_is_offered_as_an_option():
+    import pathlib
+
+    source = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "custom_components" / "ctc_ecozenith" / "sensor.py"
+    ).read_text(encoding="utf-8")
+    assert "[*description.enum.values(), STATUS_UNKNOWN]" in source
+    assert '{"kod": code}' in source, "koden ska finnas kvar som attribut"
