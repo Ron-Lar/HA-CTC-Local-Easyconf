@@ -270,25 +270,43 @@ write to 61500, 61503 or 62000 never reaches the wire.
 
 ## Anonymous statistics
 
-The integration sends one report per day to <https://stats.rnet.se>: which
-version of the integration you run, your Home Assistant version and
-installation type, the country you have set in Home Assistant itself, an
-approximate position rounded to about 11 km, how many entities the integration
-created, which transports are in use, whether control is enabled, how many
-display pages are harvested and how many register reads failed. It also says
-whether a coefficient of performance is possible and, if not, why: whether the
-history page is harvested, whether the delivered heat counter was recognised on
-it, whether the energy consumed comes from the display or from Modbus, whether
-each of those two counters actually handed over a number at the last read, and
-which of three things is in the way, too little energy counted so far, a counter
-standing still although the unit has been running, or a quotient no heat pump
-could produce. Yes or no each time, never which page or what is on it.
+The integration sends one report per day to <https://stats.rnet.se>. The
+client shared by the beolink integrations, `stats.py`, puts in it: which
+version of the integration you run, your Home Assistant version, installation
+type and Python version, the language and the country you have set in Home
+Assistant itself, an approximate position rounded to about 11 km, how many
+entities and devices the integration created, a hash of Home Assistant's
+instance id so that beolink integrations on the same installation can be seen
+to be on the same installation (the id itself never leaves the house, and the
+server hashes the hash again before storing it), how many warnings and errors
+the integration's own logger wrote since the previous report, never a message,
+and the config entry's state by Home Assistant's own name for it, such as
+loaded or waiting to be set up again, never the reason.
+
+This integration's own part, `stats_extra.py`, adds which transports are in
+use, whether control is enabled, how many display pages are harvested and how
+many register reads failed. It also says whether a coefficient of performance
+is possible and, if not, why: whether the history page is harvested, whether
+the delivered heat counter was recognised on it, whether the energy consumed
+comes from the display or from Modbus (for Modbus, whether register 62341
+answered at all, whatever it answered), whether each of those two counters
+actually handed over a number at the last read, and which of three things is in
+the way, too little energy counted so far, a counter standing still although
+the unit has been running, or a quotient no heat pump could produce. Yes or no
+each time, never which page or what is on it.
 
 It also sends what the installation is made of and how well it performs: the
 indoor unit's model, the outdoor unit's model, the firmware in the display, in
 the heat pump's control board and in the control unit, the week the machine was
 built, and its coefficient of performance over the last day, over a rolling
-year and over its lifetime.
+year, over the machine's first year and over its lifetime.
+
+The flags and the numbers the report can carry are two closed lists next to
+the code that builds it, `FEATURE_KEYS` and `METRIC_KEYS` in `stats_extra.py`,
+and a test builds the report with everything set and fails the moment it grows
+a key that is not on them. This text, the consent text under Configure and the
+list at <https://stats.rnet.se/integritet> are kept to those lists, so the
+promise and the report cannot drift apart unnoticed.
 
 CTC writes a serial number as three groups of four digits: which product it is,
 the year and week it was made, and a sequence number. The first two groups are

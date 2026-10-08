@@ -146,6 +146,44 @@ class ErrorCounter:
         return change
 
 
+#: Every flag the report can carry under "features" and every number under
+#: "metrics": two closed lists, kept beside the code that builds them and named
+#: one by one in the consent text, the README and stats.rnet.se/integritet. A
+#: test builds the report with everything set and requires the key sets to match
+#: these exactly, so a key cannot turn up in the report without being written
+#: here, and nothing written here goes unmentioned in what the owner agreed to.
+FEATURE_KEYS = frozenset(
+    {
+        "modbus",
+        "display",
+        "control",
+        "pages",
+        "history_page",
+        "heat_counter",
+        "consumption_counter",
+        "consumption_modbus",
+        "heat_total",
+        "consumption_total",
+        "cop_floor",
+        "cop_stuck",
+        "cop_implausible",
+    }
+)
+METRIC_KEYS = frozenset(
+    {
+        "cop_day",
+        "cop_year",
+        "cop_first_year",
+        "cop_lifetime",
+        "heat_total_kwh",
+        "consumption_total_kwh",
+        "built_year",
+        "built_week",
+        "product_code",
+    }
+)
+
+
 def build_extra(
     model: str | None,
     *,
