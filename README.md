@@ -69,6 +69,10 @@ So the display is treated as a supplement, not the base:
 - The panel is put back where it was afterwards.
 - If the panel is not where the integration left it, somebody is standing at it,
   and that cycle is skipped.
+- Reading the menu again from Configure takes the same turn at the panel as
+  the harvest and the walk to the system information page, so two of them can
+  never walk it at once. Is the panel busy when you ask, the dialog says so and
+  nothing is changed; ask again in a moment.
 
 There is no second session to escape this with. The `/click2/` and `/scroll2/`
 endpoints exist in the display's own JavaScript but the firmware answers 400 to

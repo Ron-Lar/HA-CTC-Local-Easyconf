@@ -414,6 +414,11 @@ class CtcRuntime:
     modbus: CtcModbusCoordinator
     control: CtcControlManager
     device: DeviceInfo
+    #: The display's client, kept whether or not any page is harvested. Its
+    #: panel lock is the one thing that keeps the harvest, the menu re-read,
+    #: the walk to the system information page and a "read the menu again"
+    #: from the options from walking the same physical panel at once.
+    web_client: CtcWebClient
     web: CtcWebCoordinator | None = None
     pages: list[SlowPage] = field(default_factory=list)
     control_enabled: bool = False
@@ -512,6 +517,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         modbus=modbus,
         control=CtcControlManager(hass, modbus_client),
         device=device,
+        web_client=web_client,
         control_enabled=bool(options.get(CONF_ENABLE_CONTROL, True)),
         identity=identity,
     )
