@@ -156,6 +156,32 @@ class ModbusSensor:
     enum: dict[int, str] | None = None
     enabled_default: bool = True
     icon: str | None = None
+    #: Something about the unit rather than what it is doing, which Home
+    #: Assistant files under the device's diagnostics.
+    diagnostic: bool = False
+
+
+#: The device class a unit implies, by the name sensor.py maps onto Home
+#: Assistant's classes. Shared by the register table, which only names a class
+#: where the unit does not give it, and the display rows, which never name one.
+#: Hours and minutes are durations, so operating hours convert and graph as time.
+UNIT_DEVICE_CLASSES: Final = {
+    "°C": "temperature",
+    "kW": "power",
+    "kWh": "energy",
+    "A": "current",
+    "V": "voltage",
+    "bar": "pressure",
+    "h": "duration",
+    "min": "duration",
+}
+
+
+def device_class_for(unit: str | None, declared: str | None = None) -> str | None:
+    """The device class a reading gets: what the table says, else what its unit implies."""
+    if declared:
+        return declared
+    return UNIT_DEVICE_CLASSES.get(unit or "")
 
 
 STATUS_SYSTEM: Final = {
@@ -277,9 +303,10 @@ MODBUS_SENSORS: Final[tuple[ModbusSensor, ...]] = (
     # cent reports 662, which read as a whole number would be nonsense.
     ModbusSensor("sg_mode", 62301, "SmartGrid-läge", 1, None, None, None, enum=SG_MODE, icon="mdi:transmission-tower"),
     # The control unit's own software, which CTC reports as a number and a year
-    # in two neighbouring registers. Diagnostics, so no state class.
-    ModbusSensor("control_sw", 62244, "Programversion styrenhet", 1, None, None, None, icon="mdi:chip"),
-    ModbusSensor("control_sw_year", 62245, "Programversion styrenhet, år", 1, None, None, None, icon="mdi:chip"),
+    # in two neighbouring registers. Diagnostics, so no state class, and filed
+    # with the device's diagnostics like the display's own version rows.
+    ModbusSensor("control_sw", 62244, "Programversion styrenhet", 1, None, None, None, icon="mdi:chip", diagnostic=True),
+    ModbusSensor("control_sw_year", 62245, "Programversion styrenhet, år", 1, None, None, None, icon="mdi:chip", diagnostic=True),
     # 62331 is documented as supplied power per heat pump. On an i550 Pro it
     # reads 65.5 with the compressor stopped, which cannot be kilowatts, so it
     # is off by default until it can be confirmed on a running unit.

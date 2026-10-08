@@ -26,8 +26,10 @@ from homeassistant.const import EntityCategory
 from . import CtcConfigEntry
 from .catalogue import display_state_class
 from .cop import cop_reason, current_totals, lifetime_ratio, powered_on_hours
-from .const import DOMAIN, STATUS_UNKNOWN, ModbusSensor, SlowValue
+from .const import DOMAIN, STATUS_UNKNOWN, ModbusSensor, SlowValue, device_class_for
 
+# By the names const.py uses, so the choice of class can be tested without
+# Home Assistant installed.
 DEVICE_CLASSES = {
     "temperature": SensorDeviceClass.TEMPERATURE,
     "power": SensorDeviceClass.POWER,
@@ -35,6 +37,7 @@ DEVICE_CLASSES = {
     "current": SensorDeviceClass.CURRENT,
     "voltage": SensorDeviceClass.VOLTAGE,
     "pressure": SensorDeviceClass.PRESSURE,
+    "duration": SensorDeviceClass.DURATION,
 }
 
 UNITS = {
@@ -50,17 +53,6 @@ UNITS = {
     "%": "%",
     "rps": "rps",
     "ppm": "ppm",
-}
-
-# Units that imply what the reading is, used to give display values a device
-# class the display itself never states.
-UNIT_TO_CLASS = {
-    "°C": SensorDeviceClass.TEMPERATURE,
-    "kW": SensorDeviceClass.POWER,
-    "kWh": SensorDeviceClass.ENERGY,
-    "A": SensorDeviceClass.CURRENT,
-    "V": SensorDeviceClass.VOLTAGE,
-    "bar": SensorDeviceClass.PRESSURE,
 }
 
 
@@ -114,11 +106,15 @@ class CtcModbusSensor(CoordinatorEntity, SensorEntity):
         self._attr_entity_registry_enabled_default = description.enabled_default
         if description.icon:
             self._attr_icon = description.icon
+        if description.diagnostic:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
         if description.enum is None:
             self._attr_native_unit_of_measurement = UNITS.get(
                 description.unit or "", description.unit
             )
-            self._attr_device_class = DEVICE_CLASSES.get(description.device_class or "")
+            self._attr_device_class = DEVICE_CLASSES.get(
+                device_class_for(description.unit, description.device_class) or ""
+            )
             if description.state_class == "total_increasing":
                 self._attr_state_class = SensorStateClass.TOTAL_INCREASING
             elif description.state_class == "measurement":
@@ -169,7 +165,7 @@ class CtcDisplaySensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = runtime.device
         unit = value.unit
         self._attr_native_unit_of_measurement = UNITS.get(unit or "", unit)
-        device_class = UNIT_TO_CLASS.get(unit or "")
+        device_class = DEVICE_CLASSES.get(device_class_for(unit) or "")
         if device_class is not None:
             self._attr_device_class = device_class
         state_class = display_state_class(unit, value.label)
