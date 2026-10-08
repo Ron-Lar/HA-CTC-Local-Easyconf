@@ -60,6 +60,7 @@ from .const import (
     CONF_SLOW_PAGES,
     RELEASES_API,
     RELEASES_PAGE,
+    CONF_TRY_QUICK_MENU,
     CONF_VISIT_SYSTEM_INFO,
     CONF_WEB_PORT,
     DEFAULT_FAST_INTERVAL,
@@ -234,6 +235,9 @@ async def _async_catch_up(
                     found = await async_read_identity_via_panel(
                         client,
                         restore=runtime.web.async_restore_page if runtime.web else None,
+                        # Not in the options form: the press behind it has never
+                        # been tried on a real panel, see const.CONF_TRY_QUICK_MENU.
+                        quick_menu=bool(entry.options.get(CONF_TRY_QUICK_MENU, False)),
                     )
                 merged = runtime.identity.merged_with(found)
                 if merged.as_dict() != runtime.identity.as_dict():

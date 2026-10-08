@@ -73,16 +73,24 @@ OPERATION_DATA_LABEL_EN: Final = "Operation data"
 # quick start, reinstallation and a firmware update, and the panel is shared
 # with whoever is standing at it, so anything unnamed is left alone.
 SYSTEM_INFO_LABEL_EN: Final = "System information"
-# Display before Service, so the service menu is only opened where the page is
-# not anywhere else. "Installer" is what the panel calls Avancerat in English.
+# "Installer" is what the panel calls Avancerat in English, and "Display setup"
+# is the display menu under another name. Service is not here on purpose: the
+# page has never been found under it on any model, and that menu is the one
+# the walk exists to stay out of. The options texts list these menus, and a
+# test derives what they may say from this tuple.
 NAV_ALLOWED_EN: Final = (
     "Advanced",
     "Installer",
     "Display",
     "Display setup",
-    "Service",
     "System information",
 )
+#: Whether the walk may also open the panel's own menu button on the home
+#: screen, where an i550 Pro is thought to keep the system information page.
+#: That is the one press made without a caption to go by, and it has never met
+#: a real i550 Pro, so it sleeps: off by default and not offered in the options
+#: form, to be switched on by hand for a trial with someone at the panel.
+CONF_TRY_QUICK_MENU: Final = "try_quick_menu"
 #: A caption this high up is the page's own heading, not a control: the
 #: installer page is titled "Avancerat", which is "Installer" in English, and
 #: pressing a heading does nothing at all. Same rule as the catalogue's.

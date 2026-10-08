@@ -207,16 +207,19 @@ class QuickPanel(FakePanel):
         return await super().async_click(screens, x, y)
 
 
-def test_the_page_behind_the_quick_menu_is_found(identity, web_api):
+def test_the_page_behind_the_quick_menu_is_found_when_asked_for(identity, web_api):
+    # The branch sleeps until it has been tried at a real panel; asked for, it
+    # still works. That it is never taken unasked is tested in
+    # test_walk_allow_list.py.
     panel = QuickPanel(web_api, QUICK, {60: SYSTEM_ROWS}, start=1)
-    found = run(identity.async_read_identity_via_panel(panel))
+    found = run(identity.async_read_identity_via_panel(panel, quick_menu=True))
     assert found.serial == "720825408489"
     assert panel.pressed.count("menu button") == 1
 
 
 def test_an_empty_quick_menu_is_stepped_out_of(identity, web_api):
     panel = QuickPanel(web_api, {1: [("Operation data", "Driftinfo", 20)], 488: []}, start=1)
-    found = run(identity.async_read_identity_via_panel(panel))
+    found = run(identity.async_read_identity_via_panel(panel, quick_menu=True))
     assert found.is_empty
     assert panel.page == 1
 
@@ -238,18 +241,22 @@ def test_an_icon_that_reads_like_the_page_is_never_trusted(identity, web_api):
     assert "Function test" not in panel.pressed
 
 
-def test_the_service_menu_is_left_for_last(identity, web_api):
-    # Where the page is somewhere else, the service menu is never opened.
+def test_the_service_menu_is_never_opened(identity, web_api):
+    # Even where the page lies nowhere else, the service menu stays shut: it
+    # holds a function test, a compressor quick start and reinstallation, and
+    # the page has never been found under it on any model. Going without the
+    # serial number is the price, and the repairs view asks the owner instead.
     tree = {
         1: [("Advanced", "Avancerat", 61)],
         61: [("Service", "Service", 50), ("Display", "Display", 40)],
-        40: [("System information", "Systeminformation", 60)],
-        50: [("Function test", "Funktionstest", 70)],
+        40: [("Display setup", "Displayinställning", 45)],
+        50: [("System information", "Systeminformation", 60), ("Function test", "Funktionstest", 70)],
     }
     panel = FakePanel(web_api, tree, {60: SYSTEM_ROWS}, start=1)
     found = run(identity.async_read_identity_via_panel(panel))
-    assert found.serial == "720825408489"
+    assert found.is_empty
     assert "Service" not in panel.pressed
+    assert panel.page == 1
 
 
 def test_the_pages_own_heading_is_not_a_control(identity, web_api):
