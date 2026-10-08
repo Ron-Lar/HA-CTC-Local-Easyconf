@@ -192,6 +192,15 @@ STATUS_HEATPUMP: Final = {
     33: "Till varmvatten",
 }
 
+#: The heat pump status codes the derived binary sensors are built on, by what
+#: they mean. The binaries judge the code, never the label: a label is a Swedish
+#: string that may be reworded or translated, the code is what the controller
+#: said. A test pins each code to its label, so a change in either is noticed.
+HP_RUNNING_CODES: Final = frozenset({3, 5, 33})
+HP_DEFROST_CODE: Final = 4
+HP_BLOCKED_CODE: Final = 6
+HP_ALARM_CODE: Final = 7
+
 STATUS_HEATING_SYSTEM: Final = {
     0: "Värme av",
     1: "Semester",
@@ -202,6 +211,8 @@ STATUS_HEATING_SYSTEM: Final = {
 DHW_MODE: Final = {0: "Ekonomi", 1: "Normal", 2: "Komfort", 3: "Manuell"}
 HEATING_MODE: Final = {0: "Auto", 1: "Till", 2: "Från"}
 SG_MODE: Final = {0: "Normal", 1: "Blockering", 2: "Lågpris", 3: "Överkapacitet"}
+#: SmartGrid is doing something whenever the mode is not this one.
+SG_NORMAL_CODE: Final = 0
 PRICE_MODE: Final = {1: "Låg", 2: "Normal", 3: "Hög"}
 ZONE_MODE: Final = {0: "Av", 1: "Värme", 2: "Kyla", 3: "Auto", 4: "På"}
 

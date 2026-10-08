@@ -68,6 +68,11 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         #: restart gives every block a fresh chance.
         self._missing = MissingBlocks()
         self._slow = SlowRounds()
+        #: The code behind every enum reading, by sensor key, kept beside the
+        #: label in ``data``. The derived binary sensors judge these, since a
+        #: label is a string that may be reworded or translated while the code
+        #: is what the controller said. Only trusted for a key that is in data.
+        self.codes: dict[str, int] = {}
         #: The code behind an enum reading the table has no label for, by sensor
         #: key, so the number is still visible in the sensor's attributes.
         self.unknown_codes: dict[str, int] = {}
@@ -129,6 +134,10 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         label for, so the sensor can carry the number as an attribute.
         """
         reading = decode_reading(description, raw)
+        if reading.code is None:
+            self.codes.pop(description.key, None)
+        else:
+            self.codes[description.key] = reading.code
         if description.enum is None or reading.value is None:
             return reading.value
         # A label of the integration's own making ("Okänd (12)") is not one of

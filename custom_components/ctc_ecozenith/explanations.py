@@ -186,7 +186,10 @@ DERIVED: dict[str, str] = {
     "defrosting": "Till medan värmepumpen avfrostar. Gäller luft/vattenpumpar.",
     "alarm": "Till när värmepumpens status är av på grund av larm. Larm i resten av anläggningen syns i pumpens meny.",
     "blocked": "Till när värmepumpens status är av och blockerad.",
-    "immersion_active": "Till när den nedre elpatronen ger effekt.",
+    "immersion_active": (
+        "Till när någon av elpatronerna ger effekt, den övre som i EcoZenith-tankarna sitter i "
+        "varmvattendelen eller den nedre. Båda effekterna står som attribut."
+    ),
     "smartgrid_active": "Till när SmartGrid-läget är något annat än Normal.",
     "cop_day": (
         "Värmefaktor senaste dygnet: avgiven värme delat med tillförd el, ur två avläsningar av "
@@ -355,7 +358,7 @@ def source(key: str, pages: list[Mapping[str, Any]] | None = None, interval: int
     if key in ("compressor_running", "defrosting", "alarm", "blocked"):
         return "Räknas fram ur Värmepump status, Modbus-register 62017"
     if key == "immersion_active":
-        return "Räknas fram ur Elpatron nedre, Modbus-register 62169"
+        return "Räknas fram ur Elpatron övre och Elpatron nedre, Modbus-register 62168 och 62169"
     if key == "smartgrid_active":
         return "Räknas fram ur SmartGrid-läge, Modbus-register 62301"
     if key.startswith("cop_"):

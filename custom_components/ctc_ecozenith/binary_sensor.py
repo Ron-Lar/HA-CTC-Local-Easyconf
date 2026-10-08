@@ -1,9 +1,16 @@
-"""Binary sensors derived from the Modbus status registers."""
+"""Binary sensors derived from the Modbus status registers.
+
+An enum register is judged by its code, never by its label. The label is a
+Swedish string that may be reworded or translated one day, and a binary that
+compared against it would then go quietly off for good; the code is what the
+controller actually said. The coordinator keeps the codes beside the labels for
+exactly this.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -14,78 +21,119 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CtcConfigEntry
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    HP_ALARM_CODE,
+    HP_BLOCKED_CODE,
+    HP_DEFROST_CODE,
+    HP_RUNNING_CODES,
+    SG_NORMAL_CODE,
+)
 
 
 @dataclass(frozen=True)
 class DerivedBinary:
-    """A boolean worked out from one of the decoded Modbus values."""
+    """A boolean worked out from one or more of the Modbus readings.
+
+    With ``by_code`` the test is given the code behind the first source, an
+    integer; otherwise it is given the readings of every source in order, with
+    None for one that is absent.
+    """
 
     key: str
     name: str
-    source: str
-    test: Callable[[object], bool]
+    sources: tuple[str, ...]
+    test: Callable[..., bool]
     device_class: BinarySensorDeviceClass | None = None
     icon: str | None = None
+    by_code: bool = False
+    #: What the entity shows as attributes: attribute name and reading key.
+    attributes: tuple[tuple[str, str], ...] = ()
 
 
-def _running(value: object) -> bool:
-    return isinstance(value, str) and value in (
-        "Till värme",
-        "Till kyla",
-        "Till varmvatten",
-    )
+def _powered(*readings: Any) -> bool:
+    """True when any of the readings is a power above zero."""
+    return any(isinstance(value, (int, float)) and value > 0 for value in readings)
 
 
 DERIVED: tuple[DerivedBinary, ...] = (
     DerivedBinary(
         "compressor_running",
         "Kompressor i drift",
-        "hp1_status",
-        _running,
+        ("hp1_status",),
+        lambda code: code in HP_RUNNING_CODES,
         BinarySensorDeviceClass.RUNNING,
         "mdi:heat-pump",
+        by_code=True,
     ),
     DerivedBinary(
         "defrosting",
         "Avfrostning",
-        "hp1_status",
-        lambda v: v == "Avfrostning",
+        ("hp1_status",),
+        lambda code: code == HP_DEFROST_CODE,
         None,
         "mdi:snowflake-melt",
+        by_code=True,
     ),
     DerivedBinary(
         "alarm",
         "Larm",
-        "hp1_status",
-        lambda v: v == "Av, larm",
+        ("hp1_status",),
+        lambda code: code == HP_ALARM_CODE,
         BinarySensorDeviceClass.PROBLEM,
+        by_code=True,
     ),
     DerivedBinary(
         "blocked",
         "Blockerad",
-        "hp1_status",
-        lambda v: v == "Av, blockerad",
+        ("hp1_status",),
+        lambda code: code == HP_BLOCKED_CODE,
         None,
         "mdi:cancel",
+        by_code=True,
     ),
+    # Both heaters: in the EcoZenith tanks the upper one sits in the hot water
+    # part and does most of the topping up, so a binary that watched only the
+    # lower one said "off" in the most common case.
     DerivedBinary(
         "immersion_active",
         "Elpatron aktiv",
-        "immersion_lower_kw",
-        lambda v: isinstance(v, (int, float)) and v > 0,
+        ("immersion_upper_kw", "immersion_lower_kw"),
+        _powered,
         BinarySensorDeviceClass.RUNNING,
         "mdi:heating-coil",
+        attributes=(
+            ("elpatron övre", "immersion_upper_kw"),
+            ("elpatron nedre", "immersion_lower_kw"),
+        ),
     ),
     DerivedBinary(
         "smartgrid_active",
         "SmartGrid aktiv",
-        "sg_mode",
-        lambda v: isinstance(v, str) and v != "Normal",
+        ("sg_mode",),
+        lambda code: code != SG_NORMAL_CODE,
         None,
         "mdi:transmission-tower",
+        by_code=True,
     ),
 )
+
+
+def derive(item: DerivedBinary, data: dict[str, Any], codes: dict[str, int]) -> bool | None:
+    """The binary's state from the coordinator's readings, or None without them.
+
+    A code is only trusted for a reading that is in ``data``: the codes are a
+    dictionary kept beside the readings, and the readings decide what is there.
+    """
+    if item.by_code:
+        source = item.sources[0]
+        if source not in data or source not in codes:
+            return None
+        return item.test(codes[source])
+    readings = [data.get(key) for key in item.sources]
+    if all(value is None for value in readings):
+        return None
+    return item.test(*readings)
 
 
 async def async_setup_entry(
@@ -116,14 +164,24 @@ class CtcDerivedBinary(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        data = self.coordinator.data or {}
-        if self._item.source not in data:
-            return None
-        return self._item.test(data[self._item.source])
+        return derive(
+            self._item,
+            self.coordinator.data or {},
+            getattr(self.coordinator, "codes", None) or {},
+        )
 
     @property
     def available(self) -> bool:
-        return (
-            self.coordinator.last_update_success
-            and self._item.source in (self.coordinator.data or {})
-        )
+        if not self.coordinator.last_update_success:
+            return False
+        data = self.coordinator.data or {}
+        if self._item.by_code:
+            return self._item.sources[0] in data
+        return any(key in data for key in self._item.sources)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if not self._item.attributes:
+            return None
+        data = self.coordinator.data or {}
+        return {name: data.get(key) for name, key in self._item.attributes}
