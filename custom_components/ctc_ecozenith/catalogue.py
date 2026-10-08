@@ -23,6 +23,16 @@ _LOGGER = logging.getLogger(__name__)
 # Units that appear inside the display's own format strings.
 _UNIT_PATTERN = re.compile(r"(kWh|l/min|ppm|°C|kW|rps|bar|min|%|A|V|h)")
 _CONVERSION = re.compile(r"%[.\-0-9lu]*[dfsu]")
+#: A row the panel prints as hours and minutes, "03:46". One widget with two
+#: variables on an i550 Pro; on an i255 two widgets with a ":" between them.
+_CLOCK_FORMAT = re.compile(r"^\s*%0?\d*d:%0?\d*d\s*$")
+_INTEGER_FORMAT = re.compile(r"^\s*%0?\d*[du]\s*$")
+#: The "h:m" at the end of such a row's name says how it is printed, not what
+#: the reading is, so it goes the way a unit does.
+_CLOCK_SUFFIX = re.compile(r"\s+h:m\s*$")
+#: "/24 h" is a period, starts per day; the h belongs to the 24, not to the
+#: count, and the name keeps the period without it.
+_PERIOD_UNIT = re.compile(r"(/\d+)\s+h\s*$")
 
 _ROW_TOLERANCE = 14
 _FLOW_X = -10000
@@ -44,10 +54,23 @@ def _decimals(fmt: str) -> float:
     return 1.0
 
 
-_LABEL_UNIT = re.compile(r"[( ](kWh|l/min|ppm|°C|kW|rps|bar|min|%|A|V|h)\)?\s*$")
+# A unit at the end of the row name. Not when a "/24" stands right before it:
+# "Antal starter /24 h" is a count per day, and the h is the day's.
+_LABEL_UNIT = re.compile(
+    r"(?<!/\d)(?<!/\d\d)(?<!/\d\d\d)[( ](kWh|l/min|ppm|°C|kW|rps|bar|min|%|A|V|h)\)?\s*$"
+)
 
 
 _POSITION_SUFFIX = re.compile(r"\s+\d+$")
+
+#: Rows that count hours since the day the unit was commissioned: "Total
+#: drifttid" is the time switched on, "Drifttid total" the compressor's, and in
+#: English both are "Total operation time". Neither resets, and the panel does
+#: not always print the h.
+_HOUR_COUNTERS = ("total drifttid", "drifttid total", "total operation time")
+#: Compressor starts since commissioning. The English name follows CTC's manual
+#: and is not confirmed against a panel's own text catalogue.
+_START_COUNTERS = ("antal starter", "number of starts")
 
 
 def _base_label(label: str) -> str:
@@ -55,29 +78,72 @@ def _base_label(label: str) -> str:
     return _POSITION_SUFFIX.sub("", label.strip())
 
 
+def _is_period(label: str) -> bool:
+    """True for a row over a window of time, "/30 dagar" or "/24 h"."""
+    text = _base_label(label).casefold()
+    return any(marker in text for marker in PERIOD_MARKERS)
+
+
+def is_lifetime_counter(label: str | None) -> bool:
+    """True for a row that has counted since the unit was commissioned.
+
+    Operating hours and compressor starts never go down, so their long term
+    statistics are sums, like the energy counters'. The same names over a
+    period, "Antal starter /24 h", rise and fall and are not counters.
+    """
+    text = _base_label(label or "").casefold()
+    return text.startswith(_HOUR_COUNTERS + _START_COUNTERS) and not _is_period(text)
+
+
+def is_clock_format(fmt: str | None) -> bool:
+    """True when a row is printed as hours and minutes, "%02d:%02d"."""
+    return bool(fmt) and _CLOCK_FORMAT.match(fmt) is not None
+
+
+def _implied_unit(label: str) -> str | None:
+    """The unit a row carries by what it is, where the panel prints none.
+
+    "Drifttid total" is hours like the "Total drifttid h" above it; the panel
+    just leaves the h off that row.
+    """
+    text = _base_label(label).casefold()
+    if text.startswith(_HOUR_COUNTERS) and not _is_period(text):
+        return "h"
+    return None
+
+
 def _unit(fmt: str, label: str = "") -> str | None:
     """Extract the unit from the format string, or failing that the label.
 
     CTC writes the unit inside the format string on some rows, for example
     ``%.-1frps``, and inside the row's name on others, for example
-    ``Avgiven värme (kW)``.
+    ``Avgiven värme (kW)``. A row printed as hours and minutes is read as
+    minutes, and a counter of hours that prints no unit is still hours.
     """
+    if is_clock_format(fmt):
+        return "min"
     stripped = _CONVERSION.sub(" ", fmt).replace("%%", " % ")
     match = _UNIT_PATTERN.search(stripped)
     if match:
         return match.group(1)
     match = _LABEL_UNIT.search(_base_label(label))
-    return match.group(1) if match else None
+    if match:
+        return match.group(1)
+    return _implied_unit(label)
 
 
 def _clean_label(label: str) -> str:
     """Drop a trailing unit from a row name so it reads well as an entity name.
 
     The positional suffix is kept, since it is what tells "in" from "out" on a
-    row that carries two readings.
+    row that carries two readings. The "h" of a "/24 h" and the "h:m" of a
+    clock row go too: they say how the panel prints the row, and the reading
+    carries its own unit.
     """
     suffix = _POSITION_SUFFIX.search(label.strip())
     base = _base_label(label)
+    base = _CLOCK_SUFFIX.sub("", base)
+    base = _PERIOD_UNIT.sub(r"\1", base)
     cleaned = _LABEL_UNIT.sub("", base).strip(" ()") or base
     return f"{cleaned}{suffix.group(0)}" if suffix else cleaned
 
@@ -89,27 +155,45 @@ def display_state_class(unit: str | None, label: str | None) -> str | None:
     such as "Avgiven värme/30 dagar", which rises and falls as days leave the
     window. Home Assistant refuses "measurement" for energy: a counter is
     "total_increasing", and a period fits no state class at all, so it gets
-    none. Every other reading with a unit is a measurement.
+    none. Operating hours and compressor starts since commissioning are
+    counters as well, with or without a unit. Every other reading with a unit
+    is a measurement, and one without a unit is left alone: a firmware version
+    is a number too.
     """
+    if unit == "kWh":
+        return None if _is_period(label or "") else "total_increasing"
+    if is_lifetime_counter(label):
+        return "total_increasing"
     if not unit:
         return None
-    if unit == "kWh":
-        text = (label or "").casefold()
-        if any(marker in text for marker in PERIOD_MARKERS):
-            return None
-        return "total_increasing"
     return "measurement"
 
 
-def numeric_value(value: SlowValue, raw: list[Any]) -> float | None:
-    """Turn a raw variable into a number, honouring CTC's missing markers."""
-    if not value.var_indices:
-        return None
-    index = value.var_indices[0]
+def _raw_number(raw: list[Any], index: int) -> int | None:
+    """One raw variable as an integer, or None when absent or a missing marker."""
     if index >= len(raw):
         return None
     item = raw[index]
-    if not isinstance(item, int) or item in SENTINELS:
+    if isinstance(item, bool) or not isinstance(item, int) or item in SENTINELS:
+        return None
+    return item
+
+
+def numeric_value(value: SlowValue, raw: list[Any]) -> float | None:
+    """Turn a raw variable into a number, honouring CTC's missing markers.
+
+    A clock row holds hours and minutes in two variables and is read as one
+    figure in minutes, so "03:46" becomes 226 and can be graphed.
+    """
+    if not value.var_indices:
+        return None
+    if is_clock_format(value.fmt) and len(value.var_indices) == 2:
+        hours, minutes = (_raw_number(raw, index) for index in value.var_indices)
+        if hours is None or minutes is None:
+            return None
+        return float(hours * 60 + minutes)
+    item = _raw_number(raw, value.var_indices[0])
+    if item is None:
         return None
     return round(item * value.scale, 3)
 
@@ -287,6 +371,41 @@ async def async_page_title(client: CtcWebClient, screens: list[int]) -> str:
     return f"Sida {screens[0] if screens else '?'}"
 
 
+#: A reading as the page draws it, before it becomes a value: the row name the
+#: pairing gave it, the format string, the variables and the widget's index.
+_Reading = tuple[str, str, list[int], int]
+
+
+def _join_clock_rows(readings: list[_Reading]) -> list[_Reading]:
+    """Fold a row's hours and minutes into one reading where they are drawn apart.
+
+    An i550 Pro prints "Drift /24 h:m" with one format, ``%02d:%02d``, and two
+    variables. An i255 prints the same row as two integers with a ":" between
+    them, which the pairing names "Drift /24 h:m 1" and "... 2". Two readings
+    of a clock row make one figure, not two unitless sensors, so the second is
+    folded into the first and the pair looks the way the i550 draws it.
+    """
+    joined: list[_Reading] = []
+    for raw_label, fmt, indices, index in readings:
+        if joined and _CLOCK_SUFFIX.search(_base_label(raw_label)):
+            prev_label, prev_fmt, prev_indices, prev_index = joined[-1]
+            if (
+                _base_label(prev_label) == _base_label(raw_label)
+                and _INTEGER_FORMAT.match(prev_fmt)
+                and _INTEGER_FORMAT.match(fmt)
+                and len(prev_indices) + len(indices) == 2
+            ):
+                joined[-1] = (
+                    _base_label(raw_label),
+                    f"{prev_fmt.strip()}:{fmt.strip()}",
+                    prev_indices + indices,
+                    prev_index,
+                )
+                continue
+        joined.append((raw_label, fmt, indices, index))
+    return joined
+
+
 async def async_page_values(
     client: CtcWebClient, page: int, screens: list[int]
 ) -> list[SlowValue]:
@@ -300,15 +419,18 @@ async def async_page_values(
             _LOGGER.debug("Skipping screen %s: %s", screen, err)
             continue
         pairing = _pair_labels(widgets)
+        readings: list[_Reading] = []
         for widget in widgets:
             if widget.value_fmt is None or not widget.value_vars:
                 continue
             if not widget.visible or not has_conversion(widget.value_fmt):
                 continue
             raw_label = (pairing.get(widget.index) or f"Värde {widget.index}").strip().rstrip(":")
-            unit = _unit(widget.value_fmt, raw_label)
+            readings.append((raw_label, widget.value_fmt, list(widget.value_vars), widget.index))
+        for raw_label, fmt, indices, index in _join_clock_rows(readings):
+            unit = _unit(fmt, raw_label)
             label = _clean_label(raw_label)
-            base = _slug(label, f"s{screen}_w{widget.index}")
+            base = _slug(label, f"s{screen}_w{index}")
             key = f"p{page}_{base}"
             suffix = 2
             while key in seen:
@@ -321,10 +443,10 @@ async def async_page_values(
                     label=label,
                     page=page,
                     screen=screen,
-                    fmt=widget.value_fmt,
-                    var_indices=list(widget.value_vars),
+                    fmt=fmt,
+                    var_indices=indices,
                     unit=unit,
-                    scale=_decimals(widget.value_fmt),
+                    scale=_decimals(fmt),
                 )
             )
     return found
