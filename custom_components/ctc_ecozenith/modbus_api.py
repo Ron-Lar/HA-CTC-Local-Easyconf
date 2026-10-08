@@ -10,6 +10,20 @@ client sends a PDU, which looks like the unit being offline. One connection is
 therefore held for the lifetime of the entry and every request is serialised
 behind a lock.
 
+That single slot also means the integration has to own the session outright.
+pymodbus reconnects by itself as a default, so a client that was merely
+abandoned would keep knocking on the controller's one slot and lock the live
+client out; here the library is told never to reconnect, the old client is
+closed before a new one is built, and two never exist at the same time.
+
+Two things can go wrong with a request, and they are told apart because they
+call for opposite responses. Silence is the controller keeping quiet within the
+timeout while the line stays up: that is how it answers a register the model
+does not implement, so the connection is kept and only that request is lost. A
+transport failure is the connection being gone, refused, reset or dropped under
+a request: the client is let go at once, so that the next request starts over
+after the controller has had its settle time.
+
 CTC also sets a pace. The BMS documentation gives an update rate of 1000 ms and
 the controller cannot pipeline, so exactly one request may be outstanding and
 requests are spaced out rather than sent back to back. It also needs a moment
@@ -30,7 +44,11 @@ from .const import SENTINELS, ModbusSensor
 _LOGGER = logging.getLogger(__name__)
 
 MAX_BLOCK = 100
-CONNECT_TIMEOUT = 10
+
+#: One timer for connecting and for waiting on an answer. pymodbus has a single
+#: setting for both, and it is the only timer in play: a second one outside the
+#: library would fire first and cut the transaction short halfway, which newer
+#: pymodbus reports as a cancellation rather than as the silence it was.
 REQUEST_TIMEOUT = 10
 
 # Shortest gap between two transactions. CTC documents an update rate of one
@@ -56,6 +74,11 @@ CLOSE_SETTLE = 10.0
 #: client, since a reload builds a new client for the same pump.
 _CLOSED_AT: dict[tuple[str, int], float] = {}
 
+#: Whether the library's version has been written to the log in this process.
+#: It is said once, since the version decides how a silent register is handled
+#: (see :func:`client_options`) and is the first thing to ask for in a report.
+_SAID_VERSION = False
+
 
 def note_close(host: str, port: int, now: float) -> None:
     """Remember that this unit's socket has just been closed."""
@@ -70,8 +93,67 @@ def settle_wait(host: str, port: int, now: float) -> float:
     return max(0.0, CLOSE_SETTLE - (now - closed))
 
 
+def client_options() -> dict[str, Any]:
+    """How the library client is built.
+
+    ``retries=0``: CTC answers a register the model lacks with silence, and
+    asking three more times costs thirty seconds and tells nothing new.
+    ``reconnect_delay=0``: the library must never reconnect on its own, since an
+    abandoned client knocking on the controller's single slot is exactly what
+    keeps the live one out. Before pymodbus 3.9 the library also closes the
+    connection after a silent request; from 3.9 it keeps it up and only gives
+    up after several silences in a row. Both are handled: a client found
+    closed is let go and replaced, with the settle time in between.
+    """
+    return {"timeout": REQUEST_TIMEOUT, "retries": 0, "reconnect_delay": 0}
+
+
 class CtcModbusError(Exception):
     """Raised when the Modbus side cannot be used."""
+
+    def __init__(self, message: str, address: int | None = None) -> None:
+        super().__init__(message)
+        #: The register the failing request was for, when there was one.
+        self.address = address
+
+
+class CtcModbusSilence(CtcModbusError):
+    """A request went unanswered within the timeout.
+
+    This is how the controller says a register does not exist on this model, so
+    the connection is kept. ``line_up`` is False when the library found the
+    line gone by the time the timeout ran out, which older pymodbus does after
+    any silence and every version does when the peer resets under a request;
+    the client has then already been let go, and the next request starts over.
+    """
+
+    def __init__(self, message: str, address: int | None = None, line_up: bool = True) -> None:
+        super().__init__(message, address)
+        self.line_up = line_up
+
+
+class CtcModbusTransportError(CtcModbusError):
+    """The connection is gone: refused, reset, or dropped under a request.
+
+    Nothing further can be read on it, and the client has been let go so that
+    the next request starts over once the controller has settled.
+    """
+
+
+def is_silence(err: BaseException) -> bool:
+    """Whether a failed request was the controller keeping quiet.
+
+    pymodbus reports a request nobody answered as ModbusIOException; a plain
+    timeout is included for the sake of anything standing in for the library.
+    Everything else means the line itself is in question.
+    """
+    if isinstance(err, (asyncio.TimeoutError, TimeoutError)):
+        return True
+    try:
+        from pymodbus.exceptions import ModbusIOException
+    except ImportError:  # pragma: no cover - dependency is declared
+        return False
+    return isinstance(err, ModbusIOException)
 
 
 def decode_signed(value: int) -> int:
@@ -89,6 +171,24 @@ def is_sentinel(value: int) -> bool:
     return value in SENTINELS
 
 
+def _connected(client: Any) -> bool:
+    return bool(getattr(client, "connected", False))
+
+
+def _library_client() -> Any:
+    """The library's client class, saying which pymodbus this is the first time."""
+    global _SAID_VERSION
+    try:
+        import pymodbus
+        from pymodbus.client import AsyncModbusTcpClient
+    except ImportError as err:  # pragma: no cover - dependency is declared
+        raise CtcModbusTransportError("pymodbus is not available") from err
+    if not _SAID_VERSION:
+        _SAID_VERSION = True
+        _LOGGER.info("Using pymodbus %s", getattr(pymodbus, "__version__", "of unknown version"))
+    return AsyncModbusTcpClient
+
+
 class CtcModbusClient:
     """A single, serialised Modbus TCP connection to the controller."""
 
@@ -101,28 +201,55 @@ class CtcModbusClient:
         self._last_request = 0.0
 
     async def _ensure_client(self) -> Any:
-        if self._client is not None and getattr(self._client, "connected", False):
-            return self._client
-        try:
-            from pymodbus.client import AsyncModbusTcpClient
-        except ImportError as err:  # pragma: no cover - dependency is declared
-            raise CtcModbusError("pymodbus is not available") from err
+        if self._client is not None:
+            if _connected(self._client):
+                return self._client
+            # The library saw the line go while nobody was asking, or gave it up
+            # after a silence. That client is finished with before another is
+            # built, so two never exist at once and the controller gets its
+            # settle time between them.
+            await self._drop_client()
 
         waiting = settle_wait(self._host, self._port, time.monotonic())
         if waiting:
             await asyncio.sleep(waiting)
-        self._client = AsyncModbusTcpClient(
-            self._host, port=self._port, timeout=REQUEST_TIMEOUT
-        )
+        library_client = _library_client()
+        client = library_client(self._host, port=self._port, **client_options())
+        # Held from before connect() so that whatever happens during it, a
+        # cancellation included, there is a client to close rather than one left
+        # behind with a socket of its own.
+        self._client = client
         try:
-            await asyncio.wait_for(self._client.connect(), timeout=CONNECT_TIMEOUT)
-        except (asyncio.TimeoutError, OSError) as err:
-            raise CtcModbusError(f"could not connect to {self._host}:{self._port}") from err
-        if not getattr(self._client, "connected", False):
-            raise CtcModbusError(f"could not connect to {self._host}:{self._port}")
+            connected = await client.connect()
+        except Exception as err:  # noqa: BLE001 - the library raises broadly
+            await self._drop_client()
+            raise CtcModbusTransportError(
+                f"could not connect to {self._host}:{self._port}: {err}"
+            ) from err
+        except BaseException:
+            await self._drop_client()
+            raise
+        if not connected or not _connected(client):
+            await self._drop_client()
+            raise CtcModbusTransportError(f"could not connect to {self._host}:{self._port}")
         await asyncio.sleep(CONNECT_DELAY)
         self._last_request = time.monotonic()
-        return self._client
+        return client
+
+    async def _drop_client(self) -> None:
+        """Let go of the library client, closed, and remember when for the settle."""
+        client, self._client = self._client, None
+        if client is None:
+            return
+        close = getattr(client, "close", None)
+        if close is not None:
+            try:
+                result = close()
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception:  # noqa: BLE001 - closing a dead socket may complain
+                _LOGGER.debug("Closing the Modbus client raised", exc_info=True)
+        note_close(self._host, self._port, time.monotonic())
 
     async def _pace(self) -> None:
         """Hold the documented gap between two transactions."""
@@ -132,14 +259,32 @@ class CtcModbusClient:
 
     async def async_close(self) -> None:
         async with self._lock:
-            if self._client is not None:
-                close = getattr(self._client, "close", None)
-                if close is not None:
-                    result = close()
-                    if asyncio.iscoroutine(result):
-                        await result
-                self._client = None
-                note_close(self._host, self._port, time.monotonic())
+            await self._drop_client()
+
+    async def _failed(self, err: Exception, address: int, what: str) -> CtcModbusError:
+        """Sort a failed request into silence or a lost line, and act on it.
+
+        Silence keeps the client, unless the library already found the line
+        gone, in which case the client is let go now so the settle counts from
+        the moment it happened. Anything else is the line, and the client goes.
+        """
+        line_up = _connected(self._client)
+        if is_silence(err):
+            self._last_request = time.monotonic()
+            if line_up:
+                return CtcModbusSilence(
+                    f"register {address} did not answer within {REQUEST_TIMEOUT} s, "
+                    "which is how the controller says this model lacks it",
+                    address,
+                )
+            await self._drop_client()
+            return CtcModbusSilence(
+                f"register {address} did not answer, and the connection went with it",
+                address,
+                line_up=False,
+            )
+        await self._drop_client()
+        return CtcModbusTransportError(f"{what} of {address} lost the connection: {err}", address)
 
     def _slave_kwargs(self, client: Any, method: str) -> dict[str, int]:
         """pymodbus renamed the unit argument; support both spellings."""
@@ -164,25 +309,15 @@ class CtcModbusClient:
             offset = 0
             while offset < count:
                 chunk = min(MAX_BLOCK, count - offset)
+                at = address + offset
                 await self._pace()
                 try:
-                    result = await asyncio.wait_for(
-                        client.read_holding_registers(
-                            address + offset, count=chunk, **kwargs
-                        ),
-                        timeout=REQUEST_TIMEOUT,
-                    )
-                except asyncio.TimeoutError:
-                    # Registers the model does not implement are answered with
-                    # silence rather than an exception code.
-                    raise CtcModbusError(
-                        f"register {address + offset} timed out, it may not exist on this model"
-                    ) from None
+                    result = await client.read_holding_registers(at, count=chunk, **kwargs)
                 except Exception as err:  # noqa: BLE001 - pymodbus raises broadly
-                    raise CtcModbusError(f"read of {address + offset} failed: {err}") from err
-                if result is None or getattr(result, "isError", lambda: True)():
-                    raise CtcModbusError(f"read of {address + offset} returned an error")
+                    raise await self._failed(err, at, "read") from err
                 self._last_request = time.monotonic()
+                if result is None or getattr(result, "isError", lambda: True)():
+                    raise CtcModbusError(f"read of {at} returned an error", at)
                 out.extend(result.registers)
                 offset += chunk
         return out
@@ -203,17 +338,12 @@ class CtcModbusClient:
             raw = value & 0xFFFF if value >= 0 else (value + 65536) & 0xFFFF
             await self._pace()
             try:
-                result = await asyncio.wait_for(
-                    client.write_registers(address, [raw], **kwargs),
-                    timeout=REQUEST_TIMEOUT,
-                )
-            except asyncio.TimeoutError as err:
-                raise CtcModbusError(f"write to {address} timed out") from err
+                result = await client.write_registers(address, [raw], **kwargs)
             except Exception as err:  # noqa: BLE001
-                raise CtcModbusError(f"write to {address} failed: {err}") from err
+                raise await self._failed(err, address, "write") from err
             self._last_request = time.monotonic()
             if result is None or getattr(result, "isError", lambda: True)():
-                raise CtcModbusError(f"write to {address} returned an error")
+                raise CtcModbusError(f"write to {address} returned an error", address)
 
     async def async_probe(self) -> bool:
         """Confirm the controller answers on the documented outdoor register."""
