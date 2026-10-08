@@ -225,7 +225,12 @@ def test_both_readers_ask_for_the_root_and_the_rescan_stamps_only_a_fresh_menu()
     assert "async_discover_pages(client, require_root=True)" in init
     flow = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
     rescan = flow.split("async def async_step_rescan")[1]
-    assert "async_discover_pages(client, require_root=True)" in rescan
+    # The form reads through catalogue.async_rescan_pages, which takes the
+    # harvester's panel lock and then asks for the root like the re-read does.
+    assert "async_rescan_pages(self._web_client())" in rescan
+    helper = (COMPONENT / "catalogue.py").read_text(encoding="utf-8")
+    helper = helper.split("async def async_rescan_pages")[1].split("\nasync def ")[0]
+    assert "async_discover_pages(client, require_root=True)" in helper
     assert "menu_after_rescan(" in rescan
     assert "if self._fresh:" in rescan, "versionen stämplas bara när menyn kom från panelen"
     # The first set-up keeps offering the page the panel is on: there is no

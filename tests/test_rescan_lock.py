@@ -59,7 +59,7 @@ def test_a_rescan_walks_under_the_panel_lock(catalogue, monkeypatch):
     client = _client()
     seen: list[int] = []
 
-    async def walk(c):
+    async def walk(c, require_root=False):
         # The walk itself must find the lock held, by this walker alone.
         seen.append(c.panel.owners)
         return ["a page"]
@@ -74,7 +74,7 @@ def test_a_rescan_gives_way_to_a_harvest_that_holds_the_panel(catalogue, monkeyp
     client = _client()
     walked = 0
 
-    async def walk(c):
+    async def walk(c, require_root=False):
         nonlocal walked
         walked += 1
         return ["a page"]
@@ -107,7 +107,7 @@ def test_a_rescan_gives_way_to_a_harvest_that_holds_the_panel(catalogue, monkeyp
 def test_a_walk_that_fails_lets_go_of_the_panel(catalogue, web_api, monkeypatch):
     client = _client()
 
-    async def walk(c):
+    async def walk(c, require_root=False):
         raise web_api.CtcWebError("the display went quiet")
 
     monkeypatch.setattr(catalogue, "async_discover_pages", walk)
