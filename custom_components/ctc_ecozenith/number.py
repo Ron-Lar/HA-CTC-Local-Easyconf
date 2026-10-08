@@ -103,12 +103,17 @@ class CtcControlNumber(CoordinatorEntity, NumberEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
-        overriding = self._register.address in self._runtime.control.active
-        return {
+        control = self._runtime.control
+        overriding = self._register.address in control.active
+        attributes = {
             "styrning aktiv": "ja" if overriding else "nej",
             "register": str(self._register.address),
             "not": "flyktigt register, nollställs av pumpen cirka fem minuter efter sista skrivningen",
         }
+        # "Aktiv" is claimed only from a write that reached the controller, and
+        # these two say when that was and how long the unit holds it.
+        attributes.update(control.written_attributes(self._register.address))
+        return attributes
 
     async def async_set_native_value(self, value: float) -> None:
         raw = int(round(value / self._register.scale))

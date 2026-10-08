@@ -356,6 +356,10 @@ CONTROL_ADDRESSES: Final[frozenset[int]] = frozenset(
 # How often the volatile control registers are refreshed. CTC requires at least
 # every five minutes; a minute leaves a wide margin.
 CONTROL_KEEPALIVE_SECONDS: Final = 60
+#: How long the controller holds a control register after the last write that
+#: reached it. Once an address has gone this long without a successful write
+#: the unit has forgotten it, and Home Assistant stops saying it is in force.
+CONTROL_EXPIRY_SECONDS: Final = 300
 
 
 @dataclass

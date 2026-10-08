@@ -165,6 +165,9 @@ def test_the_manager_cannot_be_talked_into_the_stored_settings(manager_and_fake)
     with pytest.raises(Exception):
         run(manager.async_set(61503, 2))
     assert fake.writes == []
+    # And it does not claim to be in control of what it never wrote.
+    assert manager.get(61503) is None
+    assert manager.active == {}
 
 
 def test_release_all_writes_nothing_either(manager_and_fake):

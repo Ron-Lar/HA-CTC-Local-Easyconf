@@ -65,10 +65,13 @@ class CtcControlSelect(SelectEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
-        return {
+        attributes = {
             "register": str(self._register.address),
             "not": "flyktigt register, nollställs av pumpen cirka fem minuter efter sista skrivningen",
         }
+        # When the controller last took the value, and until when it holds it.
+        attributes.update(self._runtime.control.written_attributes(self._register.address))
+        return attributes
 
     async def async_select_option(self, option: str) -> None:
         if option == RELEASE:

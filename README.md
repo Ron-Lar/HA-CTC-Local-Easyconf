@@ -205,6 +205,12 @@ position, so **Släpp all styrning** stops every override at once: Home Assistan
 stops writing, and the controller goes back to its own settings within about
 five minutes.
 
+What Home Assistant shows is what the controller holds. An override counts as
+in force only from a write that actually reached the unit, each control entity
+carries the attributes *senast skriven* and *gäller till*, and when no write has
+reached the unit for five minutes the override is released on this side too,
+with one line in the log, since the controller has forgotten it by then.
+
 The stored settings in the 61500 block are exposed read only and never written.
 CTC states plainly that the number of write cycles there is limited and that
 frequent writing can destroy the controller. That is enforced in code, not left
