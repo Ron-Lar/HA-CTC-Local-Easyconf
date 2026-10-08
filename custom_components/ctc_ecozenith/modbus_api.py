@@ -37,9 +37,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Mapping
 
-from .const import CONTROL_ADDRESSES, SENTINELS, ModbusSensor
+from .const import CONTROL_ADDRESSES, SENTINELS, ModbusSensor, enum_label
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -187,6 +188,56 @@ def _library_client() -> Any:
         _SAID_VERSION = True
         _LOGGER.info("Using pymodbus %s", getattr(pymodbus, "__version__", "of unknown version"))
     return AsyncModbusTcpClient
+
+
+#: What a 32 bit counter reads when it is not there: both words all ones. The
+#: single word sentinels are not applied to a pair, since a counter that has
+#: reached 9 999 or 10 000 kWh is a real reading, not a missing sensor.
+PAIR_SENTINEL = 0xFFFFFFFF
+
+
+@dataclass(frozen=True)
+class Reading:
+    """What one register decoded to.
+
+    ``value`` is None when the register was not read or marks a missing sensor.
+    ``code`` is the number behind an enum reading, whatever label it got, and
+    ``unknown`` repeats it when the table has no label for it.
+    """
+
+    value: Any
+    code: int | None = None
+    unknown: int | None = None
+
+
+def decode_reading(description: ModbusSensor, raw: Mapping[int, int]) -> Reading:
+    """Turn the raw words of one register into its reading.
+
+    The sentinels are judged after the sign is applied, because CTC's negative
+    markers arrive as large unsigned words: 55537 is -9999, which read as raw
+    would pass and become -999.9 degrees on a temperature. A 32 bit counter is
+    judged as a whole against its own marker, so that a missing counter cannot
+    become 4 294 967 295 kWh in a total_increasing statistic, which no reset
+    cleans up by itself.
+    """
+    first = raw.get(description.address)
+    if first is None:
+        return Reading(None)
+    if description.count == 2:
+        second = raw.get(description.address + 1)
+        if second is None:
+            return Reading(None)
+        combined = decode_pair(first, second)
+        if combined == PAIR_SENTINEL:
+            return Reading(None)
+        return Reading(round(combined * description.scale, 3))
+    value = decode_signed(first) if description.signed else first
+    if is_sentinel(value):
+        return Reading(None)
+    if description.enum is not None:
+        label, unknown = enum_label(description.enum, value)
+        return Reading(label, code=value, unknown=unknown)
+    return Reading(round(value * description.scale, 3))
 
 
 class CtcModbusClient:
