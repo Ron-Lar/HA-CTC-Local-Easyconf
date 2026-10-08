@@ -88,10 +88,12 @@ every form of them, on both models tested.
 The serial number and the display's own software version are only written into
 the System information page while that page is shown on the panel. The
 integration walks there once to read them, and puts the panel back. It presses
-nothing but Advanced, Service, Display and System information, matched on the
-English label so it works whatever language the panel is set to, checks where
-the panel went after every press, and gives up at the first surprise. Switch it
-off under Configure if you would rather open that page yourself.
+nothing but Advanced, Display and System information, matched on the English
+label so it works whatever language the panel is set to, checks where the panel
+went after every press, and gives up at the first surprise. The service menu,
+which holds a function test, a compressor quick start and reinstallation, is
+never opened. Switch it off under Configure if you would rather open that page
+yourself.
 
 When something is left for you to do, it is said in Home Assistant's repairs
 view rather than only in the log: the page the coefficient of performance needs

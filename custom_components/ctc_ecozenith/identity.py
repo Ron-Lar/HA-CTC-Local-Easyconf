@@ -10,13 +10,20 @@ system information page has never been visited, :func:`async_read_identity_via_p
 walks the panel there once, under guard, and reads it while it is up.
 
 Whether it gets there depends on the model. Tried against an i550 Pro on
-2026-09-18: the walk reaches the installer menu, looks through Display, Display
-setup and Service, finds no caption leading to system information and steps back
-out, leaving the panel where it found it. That unit keeps the page in a quick
-menu nothing names, and there the owner is asked in the repairs view instead.
+2026-09-18: the walk reaches the installer menu, looks through the display
+menus, finds no caption leading to system information and steps back out,
+leaving the panel where it found it. That unit keeps the page in a quick menu
+nothing names, and there the owner is asked in the repairs view instead.
 Guessing which icon opens that menu is exactly what this will not do: the
 service menu next door holds a function test, a compressor quick start, a
-re-installation and a firmware update.
+re-installation and a firmware update, and since the page has never been found
+under Service on any model, that menu is not entered at all. The one press
+without a caption, the panel's own button on the home screen, sleeps behind an
+option until it has been tried with someone standing at the panel.
+
+Off the home screen a caption is pressed on its own centre. The icon drawn above
+it is what a home tile answers to, but in the i550 Pro's quick menu the icon
+above the system information caption is the alarm reset.
 
 Screen numbering differs between models, so the screens are located by
 fingerprint rather than by number:
@@ -260,16 +267,17 @@ async def async_read_identity(client: CtcWebClient) -> Identity:
 # --------------------------------------------------------- the guarded walk
 
 #: The panel's own control, top right. On a subpage it steps back; on the home
-#: screen it opens the quick menu, which is where an i550 Pro keeps the system
-#: information page, behind a caption and an icon whose own label is nonsense.
-#: This is the single press the walk makes without a caption to go by, and it is
-#: made on the chrome rather than on anything the page itself draws: it
-#: navigates, it does not act. Where it lands is checked at once.
+#: screen it opens the quick menu, which is where an i550 Pro is thought to keep
+#: the system information page, behind a caption and an icon whose own label is
+#: nonsense. This is the single press the walk could make without a caption to
+#: go by, and it is made on the chrome rather than on anything the page itself
+#: draws: it navigates, it does not act. It has never met a real i550 Pro, so
+#: the branch is off unless CONF_TRY_QUICK_MENU says otherwise.
 CHROME_BUTTON = (440, 23)
 
 
 async def _async_controls(
-    client: CtcWebClient, page: int
+    client: CtcWebClient, page: int, on_home: bool
 ) -> list[tuple[str, list[int], tuple[int, int]]]:
     """The controls on ``page`` that the walk is allowed to press.
 
@@ -282,6 +290,12 @@ async def _async_controls(
     the walk straight back out of the menu, believing it had arrived. The page's
     own heading is skipped for the same reason: the installer page is titled
     "Avancerat", "Installer" in English, and pressing a heading does nothing.
+
+    Where to press differs between the home screen and the rest. A home tile is
+    an icon with its caption underneath, and the caption's own centre can fall
+    outside the touch area, so there the icon above it is pressed. Anywhere
+    else the caption is pressed on its own centre: in the i550 Pro's quick menu
+    the icon right above the system information caption is the alarm reset.
     """
     page_map = await client.async_screen_map()
     screens = page_map.get(page, [])
@@ -298,7 +312,8 @@ async def _async_controls(
                 continue
             english = await _async_english(client, screen, widget)
             if english in NAV_ALLOWED_EN:
-                found.append((english, screens, tap_target(widgets, widget)))
+                point = tap_target(widgets, widget) if on_home else widget.centre
+                found.append((english, screens, point))
     order = {label: n for n, label in enumerate(NAV_ALLOWED_EN)}
     # The page we are after is tried before anything is opened.
     found.sort(key=lambda c: (c[0] != SYSTEM_INFO_LABEL_EN, order.get(c[0], 99)))
@@ -306,7 +321,7 @@ async def _async_controls(
 
 
 async def _async_descend(
-    client: CtcWebClient, page: int, depth: int, visited: set[int]
+    client: CtcWebClient, page: int, depth: int, visited: set[int], home: int
 ) -> bool:
     """Look for the system information page from ``page``, one tap at a time.
 
@@ -320,7 +335,7 @@ async def _async_descend(
         return False
     visited.add(page)
     page_map = await client.async_screen_map()
-    for english, screens, (x, y) in await _async_controls(client, page):
+    for english, screens, (x, y) in await _async_controls(client, page, page == home):
         if await client.async_current_page() != page:
             return False  # somebody else is using the panel
         await client.async_click(screens, x, y)
@@ -330,7 +345,7 @@ async def _async_descend(
             return False
         if english == SYSTEM_INFO_LABEL_EN:
             return True
-        if await _async_descend(client, landed, depth - 1, visited):
+        if await _async_descend(client, landed, depth - 1, visited, home):
             return True
         await client.async_click(page_map.get(landed, []), 440, 23)
         if await client.async_current_page() != page:
@@ -348,6 +363,9 @@ async def _async_try_quick_menu(
     page on every model, so the quick menu is opened and then searched by the
     same rules as everywhere else. If it holds nothing of interest the walk
     steps straight back out.
+
+    Dormant until tried at a real panel: only reached when the caller asks for
+    it, see :func:`async_read_identity_via_panel`.
     """
     page_map = await client.async_screen_map()
     if await client.async_current_page() != home:
@@ -356,7 +374,7 @@ async def _async_try_quick_menu(
     landed = await client.async_current_page()
     if landed == home:
         return False
-    if await _async_descend(client, landed, depth, visited):
+    if await _async_descend(client, landed, depth, visited, home):
         return True
     await client.async_click(page_map.get(landed, []), *CHROME_BUTTON)
     return False
@@ -378,6 +396,7 @@ async def async_read_identity_via_panel(
     client: CtcWebClient,
     depth: int = 4,
     restore: "Callable[[int], Awaitable[Any]] | None" = None,
+    quick_menu: bool = False,
 ) -> Identity:
     """Walk the panel to the system information page, read it, and go back.
 
@@ -389,6 +408,10 @@ async def async_read_identity_via_panel(
     branch is out of reach that way and the panel is left at home instead. The
     harvester knows the recorded routes, so it can put the panel back properly:
     pass its restore as ``restore``.
+
+    With ``quick_menu`` the panel's own button on the home screen is tried too,
+    once the captions have led nowhere. That press has no caption to go by and
+    has never been made on a real i550 Pro, so it is off unless asked for.
     """
     identity = Identity()
     try:
@@ -402,7 +425,9 @@ async def async_read_identity_via_panel(
             _LOGGER.debug("Could not find the home screen; the panel is left alone")
             return identity
         visited: set[int] = set()
-        if not await _async_descend(client, home, depth, visited):
+        if not await _async_descend(client, home, depth, visited, home):
+            if not quick_menu:
+                return identity
             if not await _async_try_quick_menu(client, home, depth, visited):
                 return identity
         page = await client.async_current_page()
