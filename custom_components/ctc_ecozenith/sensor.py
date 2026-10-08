@@ -26,7 +26,7 @@ from homeassistant.const import EntityCategory
 from . import CtcConfigEntry
 from .catalogue import display_state_class
 from .cop import current_totals
-from .const import DOMAIN, ModbusSensor, SlowValue
+from .const import DOMAIN, STATUS_UNKNOWN, ModbusSensor, SlowValue
 
 DEVICE_CLASSES = {
     "temperature": SensorDeviceClass.TEMPERATURE,
@@ -125,7 +125,9 @@ class CtcModbusSensor(CoordinatorEntity, SensorEntity):
                 self._attr_state_class = SensorStateClass.MEASUREMENT
         else:
             self._attr_device_class = SensorDeviceClass.ENUM
-            self._attr_options = list(description.enum.values())
+            # The reading for a code with no label is an option like any other,
+            # because Home Assistant rejects a state that is not among them.
+            self._attr_options = [*description.enum.values(), STATUS_UNKNOWN]
 
     @property
     def native_value(self):
@@ -137,6 +139,16 @@ class CtcModbusSensor(CoordinatorEntity, SensorEntity):
             self.coordinator.last_update_success
             and self._description.key in (self.coordinator.data or {})
         )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, int] | None:
+        """The code behind a reading the table has no label for, and nothing else.
+
+        Without it the number the controller actually answered with would be lost
+        to the log, and that number is what a label is eventually written from.
+        """
+        code = getattr(self.coordinator, "unknown_codes", {}).get(self._description.key)
+        return {"kod": code} if code is not None else None
 
 
 class CtcDisplaySensor(CoordinatorEntity, SensorEntity):

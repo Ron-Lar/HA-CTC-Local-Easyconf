@@ -21,6 +21,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .catalogue import numeric_value
 from .const import (
     HARVEST_PATIENCE,
+    enum_label,
     RETRY_INTERVAL,
     CONTROL_KEEPALIVE_SECONDS,
     DOMAIN,
@@ -64,6 +65,10 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self._blocks = plan_blocks(self.descriptions)
         self._missing: set[int] = set()
+        #: The code behind an enum reading the table has no label for, by sensor
+        #: key, so the number is still visible in the sensor's attributes.
+        self.unknown_codes: dict[str, int] = {}
+        self._said_codes: set[tuple[str, int]] = set()
         # Cumulative count of register blocks that did not answer. Only used by
         # the optional daily report, which sends the delta since it last ran.
         self.read_failures = 0
@@ -105,7 +110,25 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return None
         value = decode_signed(first) if description.signed else first
         if description.enum is not None:
-            return description.enum.get(value, f"Okänd ({value})")
+            # A label of the integration's own making ("Okänd (12)") is not one of
+            # the sensor's options, and Home Assistant answers a state that is not
+            # with an exception on every write: the entity then stops updating at
+            # all. VSH's i255 sat in system status 12 behind exactly that.
+            label, unknown = enum_label(description.enum, value)
+            if unknown is None:
+                self.unknown_codes.pop(description.key, None)
+            else:
+                self.unknown_codes[description.key] = unknown
+                if (description.key, unknown) not in self._said_codes:
+                    self._said_codes.add((description.key, unknown))
+                    _LOGGER.info(
+                        "%s answered with code %s, which the table has no label for, so the "
+                        "sensor reads %s and carries the code as an attribute",
+                        description.key,
+                        unknown,
+                        label,
+                    )
+            return label
         return round(value * description.scale, 3)
 
 

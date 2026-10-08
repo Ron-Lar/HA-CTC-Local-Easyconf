@@ -162,6 +162,20 @@ STATUS_SYSTEM: Final = {
     8: "Av",
 }
 
+#: What an enum sensor reads when the controller answers with a code the table
+#: has no label for. It has to be one of the sensor's own options: Home Assistant
+#: refuses a state that is not, and then the sensor stops updating altogether.
+#: The code itself goes in an attribute and once into the log.
+STATUS_UNKNOWN: Final = "Okänd"
+
+def enum_label(table: dict[int, str], value: int) -> tuple[str, int | None]:
+    """The label for a code, plus the code itself when the table has none for it."""
+    label = table.get(value)
+    if label is not None:
+        return label, None
+    return STATUS_UNKNOWN, value
+
+
 STATUS_HEATPUMP: Final = {
     0: "Kompressor av, startfördröjning",
     1: "Redo för start",
