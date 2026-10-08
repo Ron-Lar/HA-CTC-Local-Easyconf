@@ -201,8 +201,11 @@ def build_extra(
 
     # Whether a coefficient of performance is possible at all, and if not, why:
     # the history page is not among the harvested pages, the delivered heat
-    # counter is not recognised on it, or neither the display nor Modbus has
-    # the consumed energy. Yes or no only, never which page or what it says.
+    # counter is not recognised on it, the display has no counter for consumed
+    # energy, or Modbus register 62341 did not answer. Yes or no only, never
+    # which page or what it says. ``consumption_modbus`` is whether the register
+    # answered, not whether it held a number: a register that answers zero is
+    # fitted and can be found to be stuck, one that never answers cannot.
     #
     # The last two say whether each counter actually handed over a number at
     # the most recent read. Recognising the row and getting a reading out of it
