@@ -102,6 +102,15 @@ def _is_period_count(label: str | None) -> bool:
     return text.startswith(_START_COUNTERS) and _is_period(text)
 
 
+def is_period_count(label: str | None) -> bool:
+    """The starts per day row, by its label, for whoever reads it off the harvest.
+
+    "Antal starter /24" (the h went with the period in 0.17.0), the row that
+    transitions.py divides the day's compressor minutes by.
+    """
+    return _is_period_count(label)
+
+
 def is_clock_format(fmt: str | None) -> bool:
     """True when a row is printed as hours and minutes, "%02d:%02d"."""
     return bool(fmt) and _CLOCK_FORMAT.match(fmt) is not None

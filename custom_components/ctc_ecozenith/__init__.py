@@ -24,6 +24,7 @@ from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.loader import async_get_integration
 
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from . import dashboard
 from .catalogue import (
@@ -94,6 +95,7 @@ from .seen import SeenValues
 from .seen_history import async_seed_from_statistics
 from .stats import async_setup_stats, async_stop_stats
 from .stats_extra import ErrorCounter, build_extra
+from .transitions import TransitionWatch, find_starts_per_day, sample_of
 from .web_api import CtcWebClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -592,6 +594,12 @@ class CtcRuntime:
     #: identity is applied in place, anything else takes a reload.
     applied_data: dict[str, Any] = field(default_factory=dict)
     applied_options: dict[str, Any] = field(default_factory=dict)
+    #: The heat pump's starts, stops and other transitions, from the Modbus
+    #: status codes, poll by poll. The sensors and the events read this.
+    transitions: TransitionWatch | None = None
+    #: The display's "Antal starter /24 h" row, where the history page is
+    #: harvested, which the mean run over a day divides the minutes by.
+    starts_per_day: Any | None = None
 
 
 type CtcConfigEntry = ConfigEntry[CtcRuntime]
@@ -692,6 +700,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     # report and the dashboard among them, copes with web being None.
     entry.runtime_data = runtime
 
+    # The watch over the status codes, fed from every successful round. The
+    # first round, the one set-up just did, is the baseline: whatever state
+    # the pump is found in is not a change. Listening before the platforms are
+    # set up means the sensors and the events that listen to the same
+    # coordinator read a watch that has already seen the round. A failed round
+    # is no sample: the codes it leaves behind are the last successful one's.
+    watch = TransitionWatch()
+
+    def _observe() -> None:
+        if modbus.last_update_success:
+            watch.observe(sample_of(modbus, dt_util.now()))
+
+    _observe()
+    entry.async_on_unload(modbus.async_add_listener(_observe))
+    runtime.transitions = watch
+
     pages = pages_from_storage(options.get(CONF_SLOW_PAGES, []))
     if pages:
         # The last harvest before the restart, values and moments alike. The
@@ -726,6 +750,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         runtime.pages = pages
         runtime.energy_out, runtime.energy_in = find_energy_totals(pages)
         runtime.operating_hours = find_operating_hours(pages)
+        runtime.starts_per_day = find_starts_per_day(pages)
         if runtime.energy_out is not None and runtime.energy_in is None:
             # The older display software, as on an i360, counts delivered heat
             # but not consumed energy. Modbus 62341 holds that number, and is

@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from conftest import COMPONENT
+from conftest import COMPONENT, load
 
 NEW_HA = (2026, 9)
 OLD_HA = (2024, 12)
@@ -486,6 +486,11 @@ def test_every_key_on_the_page_is_a_unique_id_the_integration_creates(dashboard_
     # button, and the sensor that accounts for the display harvest.
     for name in ("button.py", "sensor.py"):
         created |= set(re.findall(r'_\{host\}_([a-z_]+)"', _source(name)))
+    # The transitions' sensors are a table in transitions.py (R27, R31), and
+    # the mean run over a day is the one sensor beside it.
+    transitions = load("transitions")
+    created |= {item.key for item in transitions.TRANSITION_SENSORS}
+    created.add(transitions.MEAN_RUN_KEY)
 
     used = set(dashboard_views._KNOWN_KEYS)
     assert used - created == set()

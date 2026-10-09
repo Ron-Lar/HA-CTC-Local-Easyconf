@@ -42,6 +42,14 @@ from .const import (
     device_class_for,
     identity_signal,
 )
+from .transitions import (
+    MEAN_RUN_KEY,
+    MEAN_RUN_NAME,
+    MINUTES_24H_KEY,
+    TRANSITION_SENSORS,
+    TransitionSensor,
+    mean_run_minutes,
+)
 
 #: What the unit says about itself, one sensor each: the entity key, the name,
 #: where on the identity the value is read, and the icon.
@@ -121,6 +129,13 @@ async def async_setup_entry(
     if runtime.cop is not None:
         for span in ("day", "week", "month", "year", "first_year", "lifetime"):
             entities.append(CtcCopSensor(runtime, span))
+
+    # What the status codes said from one poll to the next: starts, the last
+    # run, and where the history page is harvested the mean run over a day.
+    if runtime.transitions is not None:
+        entities.extend(CtcTransitionSensor(runtime, item) for item in TRANSITION_SENSORS)
+        if runtime.web is not None and runtime.starts_per_day is not None:
+            entities.append(CtcMeanRunSensor(runtime))
 
     async_add_entities(entities)
 
@@ -343,6 +358,92 @@ class CtcIdentitySensor(SensorEntity):
         self.async_on_remove(
             async_dispatcher_connect(self.hass, self._signal, self.async_write_ha_state)
         )
+
+
+class CtcTransitionSensor(CoordinatorEntity, SensorEntity):
+    """Something the heat pump's transitions tell: a start, a count, a run.
+
+    Read off the watch in transitions.py after every Modbus round. The watch is
+    fed before the platforms are set up, so what the sensor reads here is the
+    round the coordinator has just finished.
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(self, runtime, item: TransitionSensor) -> None:
+        super().__init__(runtime.modbus)
+        self._watch = runtime.transitions
+        self._item = item
+        host = next(iter(runtime.device["identifiers"]))[1]
+        self._attr_unique_id = f"{DOMAIN}_{host}_{item.key}"
+        self._attr_name = item.name
+        self._attr_device_info = runtime.device
+        self._attr_icon = item.icon
+        if item.kind == "timestamp":
+            self._attr_device_class = SensorDeviceClass.TIMESTAMP
+        elif item.kind == "minutes":
+            self._attr_native_unit_of_measurement = UnitOfTime.MINUTES
+            self._attr_device_class = SensorDeviceClass.DURATION
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+        else:
+            # A count since midnight: a total with a reset, so the long term
+            # statistics sum it over the day rather than average it.
+            self._attr_state_class = SensorStateClass.TOTAL
+
+    @property
+    def native_value(self):
+        return self._item.value(self._watch)
+
+    @property
+    def last_reset(self):
+        if self._item.kind != "count":
+            return None
+        return self._watch.counting_since
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        return self._item.attributes(self._watch)
+
+
+class CtcMeanRunSensor(CoordinatorEntity, SensorEntity):
+    """The day's compressor minutes divided by the display's starts per day.
+
+    Modbus 62234 is fresh every round; the display's "Antal starter /24 h" is
+    harvested on the slow interval, so the figure can lag by up to that. Both
+    numbers stand as attributes. Only where the history page is harvested.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:av-timer"
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, runtime) -> None:
+        super().__init__(runtime.modbus)
+        self._runtime = runtime
+        host = next(iter(runtime.device["identifiers"]))[1]
+        self._attr_unique_id = f"{DOMAIN}_{host}_{MEAN_RUN_KEY}"
+        self._attr_name = MEAN_RUN_NAME
+        self._attr_device_info = runtime.device
+
+    def _parts(self) -> tuple[object, object]:
+        minutes = (self.coordinator.data or {}).get(MINUTES_24H_KEY)
+        web = self._runtime.web
+        starts = (web.data or {}).get(self._runtime.starts_per_day.key) if web else None
+        return minutes, starts
+
+    @property
+    def native_value(self) -> float | None:
+        return mean_run_minutes(*self._parts())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        minutes, starts = self._parts()
+        return {
+            "kompressordrift senaste dygnet": minutes,
+            "antal starter /24 h": starts,
+        }
 
 
 class CtcCopSensor(CoordinatorEntity, SensorEntity):
