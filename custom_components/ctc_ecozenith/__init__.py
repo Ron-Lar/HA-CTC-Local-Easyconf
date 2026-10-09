@@ -275,26 +275,36 @@ async def _async_reread_menu(
 
     Pages nobody has switched off stay on and pages somebody switched off stay
     off; see merge_menu. Only a reading that worked stamps the version, so a
-    failed one is owed rather than forgotten.
+    failed one is owed rather than forgotten. A reading that was interrupted
+    counts as failed here: the sweep lost the root or could not reach a page
+    again, so a page it would otherwise have found is missing from it, and
+    folding it in would make that page and its entities disappear until the
+    next release. The stored menu stands and the reading is tried again.
     """
     options = entry.options
     async with client.panel:
         # Without the operation data root there is no menu to read, only the
         # page the panel happens to show, and that must not replace the menu.
-        discovered = await async_discover_pages(client, require_root=True)
-    if not discovered:
+        reading = await async_discover_pages(client, require_root=True)
+    if not reading.pages or not reading.complete:
         spent = _MENU_TRIES.get(entry.entry_id, 0)
+        what = (
+            "Only part of the display's menu could be read"
+            if reading.pages
+            else "The display's menu could not be read"
+        )
         if spent >= MENU_READ_TRIES:
             _LOGGER.warning(
-                "The display's menu could not be read in %s attempts, so the menu stored by "
-                "an earlier version is kept and anything a newer one would make sense of is "
-                "not harvested. Reload the integration to try again",
+                "%s in %s attempts, so the menu stored by an earlier version is kept and "
+                "anything a newer one would make sense of is not harvested. Reload the "
+                "integration to try again",
+                what,
                 MENU_READ_TRIES,
             )
         else:
             _LOGGER.debug(
-                "The display's menu could not be read (attempt %s of %s); keeping the stored "
-                "one and trying again in %s minutes",
+                "%s (attempt %s of %s); keeping the stored one and trying again in %s minutes",
+                what,
                 spent,
                 MENU_READ_TRIES,
                 int(MENU_READ_RETRY.total_seconds() // 60),
@@ -304,7 +314,7 @@ async def _async_reread_menu(
     menu, selected = merge_menu(
         pages_from_storage(options.get(CONF_MENU)),
         [page.page for page in pages_from_storage(options.get(CONF_SLOW_PAGES))],
-        discovered,
+        reading.pages,
     )
     chosen = set(selected)
     return {

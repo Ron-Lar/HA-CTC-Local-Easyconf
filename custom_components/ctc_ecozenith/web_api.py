@@ -325,6 +325,11 @@ class CtcWebClient:
         self._screen_cache: dict[int, ScreenDef] = {}
         self._text_cache: dict[int, str] = {}
         self._screen_map: dict[int, list[int]] | None = None
+        #: The home screen's page, once it has been recognised. The display's
+        #: page numbers do not change, so a page recognised as home once is
+        #: home for the rest of the run, even in a moment when its tile's
+        #: caption cannot be read; see async_goto_home.
+        self._home: int | None = None
 
     @property
     def base_url(self) -> str:
@@ -661,12 +666,29 @@ class CtcWebClient:
         Home is recognised by carrying the operation data tile rather than by the
         back button ceasing to work, because on the home screen that spot is a
         button which would navigate somewhere else entirely.
+
+        The tile is recognised by its caption, read from the display's text
+        catalogue, and a catalogue that is slow for a moment answers nothing.
+        Before, that moment made the home screen look like any other page and
+        the back button was pressed on it, which on an i550 Pro opens the quick
+        menu. So a page recognised as home once is remembered, and on it
+        nothing is pressed: the panel is home, which is what the caller asked
+        for, and whether the tile can be read right now is the caller's next
+        question.
         """
         page_map = await self.async_screen_map()
         seen: set[int] = set()
         for _ in range(hops):
             here = await self.async_current_page()
             if await self._async_operation_tile(here) is not None:
+                self._home = here
+                return here
+            if here == self._home:
+                _LOGGER.debug(
+                    "On the home screen (page %s), whose operation data tile could not "
+                    "be read just now; pressing nothing",
+                    here,
+                )
                 return here
             if here in seen:
                 return None
@@ -675,7 +697,10 @@ class CtcWebClient:
             if await self.async_current_page() == here:
                 return None
         here = await self.async_current_page()
-        return here if await self._async_operation_tile(here) is not None else None
+        if await self._async_operation_tile(here) is not None:
+            self._home = here
+            return here
+        return here if here == self._home else None
 
     async def async_goto_operation_root(self) -> bool:
         """Navigate to the operation data menu from wherever the panel is."""

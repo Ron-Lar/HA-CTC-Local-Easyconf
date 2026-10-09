@@ -55,6 +55,7 @@ from pytest_homeassistant_custom_component.common import (  # noqa: E402
 
 import custom_components.ctc_ecozenith as integration  # noqa: E402
 from custom_components.ctc_ecozenith import modbus_api  # noqa: E402
+from custom_components.ctc_ecozenith.catalogue import MenuReading  # noqa: E402
 from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_FAST_INTERVAL,
     CONF_IDENTITY,
@@ -226,7 +227,9 @@ def stubs(hass, enable_custom_integrations):
     if isinstance(closed_at, dict):
         closed_at.clear()
 
-    discover = AsyncMock(return_value=[])
+    # A reading that found nothing, as the real walk answers when the display
+    # would not give the menu up.
+    discover = AsyncMock(return_value=MenuReading())
     with (
         patch(f"custom_components.{DOMAIN}.CtcModbusClient", FakeModbus),
         patch(f"custom_components.{DOMAIN}.config_flow.CtcModbusClient", FakeModbus),
