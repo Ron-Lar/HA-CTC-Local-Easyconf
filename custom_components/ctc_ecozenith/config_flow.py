@@ -35,6 +35,7 @@ from .const import (
     CONF_DISPLAY,
     CONF_ENABLE_CONTROL,
     CONF_SEND_STATISTICS,
+    CONF_SETTINGS_STEM,
     CONF_FAST_INTERVAL,
     CONF_LANGUAGE,
     CONF_MODBUS_PORT,
@@ -64,6 +65,7 @@ from .discovery import (
     async_home_assistant_networks,
     async_probe_host,
     async_probe_web,
+    settings_stem,
 )
 from .modbus_api import CtcModbusClient, CtcModbusError
 from .modbus_probe import ANSWERED, BUSY, async_classify
@@ -363,8 +365,13 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     def _entry_data(self) -> dict[str, Any]:
-        """What the entry keeps about the unit: where it is and what it said it was."""
-        return {
+        """What the entry keeps about the unit: where it is and what it said it was.
+
+        The settings file's stem is kept on its own (roadmap R19), so the daily
+        report can say which family turned up without parsing the file name;
+        an entry on Modbus alone has no settings file and no stem.
+        """
+        data: dict[str, Any] = {
             CONF_HOST: self._host,
             CONF_MODBUS_PORT: self._modbus_port,
             CONF_WEB_PORT: self._web_port,
@@ -373,6 +380,9 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             "settings_name": self._settings_name,
             CONF_DISPLAY: self._display,
         }
+        if self._settings_name:
+            data[CONF_SETTINGS_STEM] = settings_stem(self._settings_name)
+        return data
 
     def _create_without_display(self) -> FlowResult:
         """The entry for a heat pump on Modbus alone (roadmap R11).
@@ -753,6 +763,7 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         if display is not None:
             data["model"] = display.model
             data["settings_name"] = display.settings_name
+            data[CONF_SETTINGS_STEM] = display.stem
         return data
 
     def _web_client(self) -> CtcWebClient:

@@ -190,6 +190,9 @@ async def test_modbus_that_does_not_answer_has_a_step_of_its_own(
         result = await hass.config_entries.flow.async_configure(result["flow_id"], ADDRESS)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == f"EcoZenith i255 ({FOUND.host})"
+    # The family part of the settings file, kept for the report (R19).
+    assert result["data"]["settings_stem"] == "ezi2xx"
+    assert result["data"][CONF_DISPLAY] is True
     await hass.async_block_till_done()
 
 
@@ -256,6 +259,7 @@ async def test_a_typed_address_whose_web_is_silent_is_added_on_modbus_alone(hass
         assert result["title"] == f"EcoZenith ({FOUND.host})"
         assert result["data"][CONF_DISPLAY] is False
         assert result["data"]["model"] == "EcoZenith"
+        assert "settings_stem" not in result["data"], "ingen inställningsfil, ingen stam"
         assert result["options"][CONF_SLOW_PAGES] == []
         assert CONF_MENU not in result["options"]
         discover_pages.assert_not_awaited()
@@ -321,6 +325,7 @@ async def test_read_again_that_finds_pages_makes_it_an_entry_with_a_display(hass
         await hass.async_block_till_done()
     assert entry.data[CONF_DISPLAY] is True
     assert entry.data["model"] == "EcoZenith i255"
+    assert entry.data["settings_stem"] == "ezi2xx"
     assert entry.state is ConfigEntryState.LOADED
     # Data and options went in one write: one reload, so two clients in all.
     assert len(FakeModbus.instances) == 2

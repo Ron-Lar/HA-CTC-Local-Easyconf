@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
@@ -36,7 +37,9 @@ MAX_SWEEP = 1024
 
 # The settings file names a family, not an exact model. The name chosen here is
 # the member of each family that has the display with Modbus TCP, since that is
-# the only kind this integration can talk to at all.
+# the only kind this integration can talk to at all. A family joins the list
+# once the fleet has shown its stem (roadmap R19); stats_extra.MODEL_SLUGS must
+# hold every name given here, and tests/test_model_names.py says so.
 MODEL_NAMES = {
     "ezi2xx": "EcoZenith i255",
     "ezi3xx": "EcoZenith i360",
@@ -45,9 +48,34 @@ MODEL_NAMES = {
 }
 
 #: The model of a heat pump whose display has not said which one it is: set up
-#: on Modbus alone (roadmap R11). The device is then called "CTC EcoZenith",
-#: where the bare manufacturer would have made it "CTC CTC".
+#: on Modbus alone (roadmap R11), or named by a settings file nobody has seen
+#: yet, as "EcoZenith (<stem>)" (roadmap R19). The device is then called
+#: "CTC EcoZenith", where the bare manufacturer would have made it "CTC CTC".
 FAMILY = "EcoZenith"
+
+#: What a stem may look like to be written into a name. The name becomes the
+#: device's and the prefix of every entity id, so a display that answered with
+#: something stranger is named after the family alone.
+STEM_PATTERN = re.compile(r"^[A-Za-z0-9_]{1,24}$")
+
+
+def settings_stem(settings_name: str) -> str:
+    """The family part of the display's settings file: "ezi2xx" of settings_ezi2xx.bin."""
+    return settings_name.removeprefix("settings_").removesuffix(".bin")
+
+
+def model_name(stem: str) -> str:
+    """The model a settings file names: a known family, else the family with the stem.
+
+    An unknown stem used to give "CTC (<stem>)", which made the device "CTC
+    CTC (<stem>)". "EcoZenith (<stem>)" is the right sort of name for every
+    CTC controller with this display, and still shows which stem turned up.
+    """
+    if stem in MODEL_NAMES:
+        return MODEL_NAMES[stem]
+    if STEM_PATTERN.match(stem):
+        return f"{FAMILY} ({stem})"
+    return FAMILY
 
 
 @dataclass
@@ -58,9 +86,13 @@ class DiscoveredDisplay:
     settings_name: str
 
     @property
+    def stem(self) -> str:
+        """The family part of the settings file, kept with a new entry."""
+        return settings_stem(self.settings_name)
+
+    @property
     def model(self) -> str:
-        stem = self.settings_name.removeprefix("settings_").removesuffix(".bin")
-        return MODEL_NAMES.get(stem, f"CTC ({stem})")
+        return model_name(self.stem)
 
     @property
     def label(self) -> str:
