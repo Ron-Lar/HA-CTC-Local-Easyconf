@@ -105,6 +105,10 @@ _STATUS_ROWS = (
     "compressor_running", "defrosting", "immersion_active", "alarm",
     "blocked", "smartgrid_active", "hs1_status", "sg_mode",
 )
+#: The event entity (event.py) reads as the moment of the last transition. A
+#: row in the full list, not a chip: the chips are states, and the logbook is
+#: where the events are read.
+_EVENT_ROWS = ("events",)
 
 #: The overview's key figures: how warm it is around the circuit, how hard the
 #: compressor is working and what comes out of it.
@@ -181,7 +185,7 @@ _CONTROL_PREFIX = "Styr "
 #: The full list, group by group, so that every value the integration makes has
 #: a place in it: (id, icon, keys). Display values follow, a group per page.
 _VALUE_GROUPS = (
-    ("status", ICON, _STATUS_TILES + _STATUS_ROWS),
+    ("status", ICON, _STATUS_TILES + _STATUS_ROWS + _EVENT_ROWS),
     ("control", "mdi:tune-variant", tuple(k for _id, _icon, keys in _CONTROL_GROUPS for k in keys)),
     *_READINGS,
     *_TECHNICAL,

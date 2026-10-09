@@ -483,8 +483,8 @@ def test_every_key_on_the_page_is_a_unique_id_the_integration_creates(dashboard_
     spans = re.search(r"for span in \(([^)]*)\)", _source("sensor.py")).group(1)
     created |= {f"cop_{span}" for span in re.findall(r'"([a-z_]+)"', spans)}
     # Entities with a key of their own, spelled out in the unique id: the
-    # button, and the sensor that accounts for the display harvest.
-    for name in ("button.py", "sensor.py"):
+    # button, the sensor that accounts for the display harvest, and the events.
+    for name in ("button.py", "sensor.py", "event.py"):
         created |= set(re.findall(r'_\{host\}_([a-z_]+)"', _source(name)))
     # The transitions' sensors are a table in transitions.py (R27, R31), and
     # the mean run over a day is the one sensor beside it.

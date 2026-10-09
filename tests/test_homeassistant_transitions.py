@@ -1,10 +1,11 @@
-"""The transition sensors under a real Home Assistant core (R27, R31).
+"""The transition sensors and the event entity under a real Home Assistant core (R27, R31, L9).
 
 The watch itself is tested without Home Assistant in test_transitions.py. What
 only a real core can show is the wiring: that the first round of a set-up is
 the baseline and raises nothing, that the sensors read the watch after each
-Modbus round, and that Home Assistant accepts what they offer it: an aware
-timestamp, a total with a reset and a duration in minutes.
+Modbus round, that Home Assistant accepts what they offer it (an aware
+timestamp, a total with a reset, a duration in minutes), and that the event
+entity fires one state change per transition, in order, with the attributes.
 
 Shares the stand-ins and fixtures of test_homeassistant.py and runs the same
 way, from a virtual environment that has Home Assistant and
@@ -29,13 +30,19 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 
+from homeassistant.const import EVENT_STATE_CHANGED  # noqa: E402
+from homeassistant.core import callback  # noqa: E402
 from homeassistant.helpers import entity_registry as er  # noqa: E402
 
 from custom_components.ctc_ecozenith.const import DOMAIN  # noqa: E402
+from custom_components.ctc_ecozenith.transitions import EVENT_TYPES  # noqa: E402
 
-#: The heat pump's status register and the codes the test drives it through.
+#: The heat pump's status register and the codes the test drives it through,
+#: and the two other registers the watch follows.
 HP_STATUS = 62017
-READY, HEATING, DEFROST, BLOCKED = 1, 3, 4, 6
+SYSTEM_STATUS = 62005
+SG_MODE = 62301
+READY, HEATING, DEFROST, ALARM = 1, 3, 4, 7
 
 
 def _controller() -> FakeModbus:
@@ -105,6 +112,60 @@ async def test_the_first_round_is_the_baseline_and_a_start_is_counted(hass, stub
     # A second start the same day.
     await _status(hass, HEATING)
     assert hass.states.get(starts).state == "2"
+
+
+async def test_the_events_follow_the_transitions_and_the_baseline_raises_none(hass, stubs):
+    await _set_up(hass)
+    events = _entity_id(hass, "event", "events")
+    fired: list[str] = []
+
+    @callback
+    def _note(event) -> None:
+        if event.data["entity_id"] == events and event.data["new_state"] is not None:
+            fired.append(event.data["new_state"].attributes.get("event_type"))
+
+    hass.bus.async_listen(EVENT_STATE_CHANGED, _note)
+
+    # The first round was the baseline, and a round with nothing new is nothing.
+    before = hass.states.get(events)
+    assert before.state == "unknown"
+    assert before.attributes["event_types"] == list(EVENT_TYPES)
+    await _advance(hass, 31)
+    assert hass.states.get(events).state == "unknown"
+    assert fired == []
+
+    # A start: the code before and after, their labels and the weather.
+    await _status(hass, HEATING)
+    start = hass.states.get(events)
+    assert start.state not in ("unknown", "unavailable")
+    assert start.attributes["event_type"] == "kompressor_start"
+    assert start.attributes["från kod"] == 0 and start.attributes["till kod"] == 3
+    assert start.attributes["från"] == "Kompressor av, startfördröjning"
+    assert start.attributes["till"] == "Till värme"
+    assert start.attributes["utetemperatur"] == 7.2
+    assert "längd" not in start.attributes
+    assert fired == ["kompressor_start"]
+
+    # Two transitions in one round are two events, in the order they happened.
+    await _status(hass, ALARM)
+    assert fired == ["kompressor_start", "kompressor_stopp", "larm"]
+    assert hass.states.get(events).attributes["event_type"] == "larm"
+    await _status(hass, HEATING)
+    assert fired[-2:] == ["larm_borta", "kompressor_start"]
+
+    # A defrost, with its length when it ends.
+    await _status(hass, DEFROST)
+    await _status(hass, HEATING)
+    assert fired[-2:] == ["avfrostning_start", "avfrostning_slut"]
+    assert hass.states.get(events).attributes["längd"] >= 0
+
+    # The other two codes the watch follows.
+    _controller().registers[SYSTEM_STATUS] = 5
+    _controller().registers[SG_MODE] = 2
+    await _advance(hass, 31)
+    assert fired[-2:] == ["systemstatus_andrad", "smartgrid_andrad"]
+    grid = hass.states.get(events)
+    assert grid.attributes["från"] == "Normal" and grid.attributes["till"] == "Lågpris"
 
 
 async def test_the_mean_run_needs_the_history_page(hass, stubs):

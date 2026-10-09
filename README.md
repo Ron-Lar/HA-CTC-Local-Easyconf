@@ -77,6 +77,15 @@ began, with its length and the outdoor temperature at the time as attributes,
 which is where a healthy unit and an iced up one part ways. The defrost timer in
 register 62137 is shown as the controller gives it; its unit is not confirmed.
 
+**The transitions as events.** The same watch feeds an event entity, Händelser,
+with the event types `kompressor_start`, `kompressor_stopp`, `avfrostning_start`,
+`avfrostning_slut`, `larm`, `larm_borta`, `smartgrid_andrad` and
+`systemstatus_andrad`. Each carries the code before and after, their labels, the
+outdoor temperature and, for a stop or the end of a defrost, the length in
+minutes. The logbook writes them out, and an automation triggers on the entity's
+state instead of comparing states. The first round after a start of Home
+Assistant raises none. None of this goes into the anonymous report.
+
 ## The catch with the display, and what the integration does about it
 
 Only the page the panel is currently showing is kept up to date. Every other

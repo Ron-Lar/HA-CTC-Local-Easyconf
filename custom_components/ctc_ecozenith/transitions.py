@@ -6,7 +6,8 @@ the change: when the compressor last started, how many times it has started
 today, how long the last run lasted, how often and how long an air to water
 unit defrosts, which is the difference between a healthy one and an iced up
 one. This module watches the codes from one poll to the next and keeps that
-bookkeeping, and the transitions it finds are what the sensors read.
+bookkeeping, and the transitions it finds are what the sensors read and what
+the event entity (event.py) writes into the logbook.
 
 Everything is judged on the controller's codes, never on the Swedish labels,
 as the binary sensors do (const.HP_RUNNING_CODES and friends). A run is any
@@ -30,6 +31,7 @@ in as an aware datetime in local time, which is what midnight is judged on.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Callable
@@ -116,6 +118,8 @@ class Transition:
     outdoor: float | None
     #: How long the run or defrost that just ended lasted, where its start was seen.
     minutes: float | None = None
+    #: The watch's running number, so a reader can ask for what came after it.
+    seq: int = 0
 
     def attributes(self) -> dict[str, Any]:
         """The change as entity attributes: both codes, their labels, the weather."""
@@ -175,13 +179,21 @@ def hp_code_known(code: int | None) -> bool:
     return code is not None and code in STATUS_HEATPUMP and code not in HP_SILENT_CODES
 
 
+#: How many transitions the watch keeps for readers that come by a cursor. A
+#: round holds a handful at most, and the event entity reads after every one.
+LOG_LENGTH = 100
+
+
 class TransitionWatch:
     """The heat pump's state from sample to sample, and what changed between them."""
 
-    def __init__(self) -> None:
+    def __init__(self, keep: int = LOG_LENGTH) -> None:
         self._hp: int | None = None
         self._system: int | None = None
         self._sg: int | None = None
+        #: Every transition found, numbered from one, the newest last.
+        self.seq = 0
+        self.log: deque[Transition] = deque(maxlen=keep)
         #: When the run under way began, if its start was seen.
         self.running_since: datetime | None = None
         self.last_start: datetime | None = None
@@ -219,6 +231,35 @@ class TransitionWatch:
         found.extend(self._observe_smartgrid(sample))
         return found
 
+    def since(self, seq: int) -> list[Transition]:
+        """The transitions numbered after ``seq``, oldest first.
+
+        For a reader that remembers how far it got: the event entity fires
+        these and keeps the last number, so a round that holds two transitions
+        gives two events in order, and a reader that starts at the watch's
+        current number is never handed anything from before it existed.
+        """
+        return [transition for transition in self.log if transition.seq > seq]
+
+    def _transition(
+        self,
+        kind: str,
+        at: datetime,
+        before: int,
+        code: int,
+        table: dict[int, str],
+        outdoor: float | None,
+        minutes: float | None = None,
+    ) -> Transition:
+        """Number one transition, write it into the log and hand it back."""
+        self.seq += 1
+        transition = Transition(
+            kind, at, before, code, _label(table, before), _label(table, code),
+            outdoor, minutes, self.seq,
+        )
+        self.log.append(transition)
+        return transition
+
     def _roll_day(self, at: datetime) -> None:
         """Start the day's counts over at the first sample of a new local day."""
         if self.counting_since is None:
@@ -241,11 +282,7 @@ class TransitionWatch:
 
         def add(kind: str, minutes: float | None = None) -> None:
             found.append(
-                Transition(
-                    kind, at, before, code,
-                    _label(STATUS_HEATPUMP, before), _label(STATUS_HEATPUMP, code),
-                    sample.outdoor, minutes,
-                )
+                self._transition(kind, at, before, code, STATUS_HEATPUMP, sample.outdoor, minutes)
             )
 
         was_run, now_run = before in HP_RUN_CODES, code in HP_RUN_CODES
@@ -291,9 +328,8 @@ class TransitionWatch:
         if before is None or before == code:
             return []
         return [
-            Transition(
-                EVENT_SYSTEM_STATUS_CHANGED, sample.at, before, code,
-                _label(STATUS_SYSTEM, before), _label(STATUS_SYSTEM, code), sample.outdoor,
+            self._transition(
+                EVENT_SYSTEM_STATUS_CHANGED, sample.at, before, code, STATUS_SYSTEM, sample.outdoor
             )
         ]
 
@@ -305,9 +341,8 @@ class TransitionWatch:
         if before is None or before == code:
             return []
         return [
-            Transition(
-                EVENT_SMARTGRID_CHANGED, sample.at, before, code,
-                _label(SG_MODE, before), _label(SG_MODE, code), sample.outdoor,
+            self._transition(
+                EVENT_SMARTGRID_CHANGED, sample.at, before, code, SG_MODE, sample.outdoor
             )
         ]
 
