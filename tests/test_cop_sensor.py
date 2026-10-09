@@ -74,6 +74,8 @@ def _runtime(cop, *, hours_row=True, anchor=COMMISSIONED, data=None, success=Tru
         energy_out=SimpleNamespace(key="out"),
         energy_in=SimpleNamespace(key="in"),
         consumption_snapshot=None,
+        transitions=None,
+        starts_per_day=None,
         operating_hours=[SimpleNamespace(key="hours")] if hours_row else None,
         pages=[],
         identity=SimpleNamespace(

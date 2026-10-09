@@ -43,6 +43,7 @@ from homeassistant.loader import async_get_integration  # noqa: E402
 from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
 
 from custom_components.ctc_ecozenith.catalogue import pages_to_storage  # noqa: E402
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
 from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_IDENTITY,
     CONF_MENU,
@@ -130,7 +131,9 @@ async def test_one_page_gives_way_twice_and_then_harvests_anyway(hass, stubs):
         web = entry.runtime_data.web
         sensor = _entity_id(hass, "sensor", f"p{HISTORY}_utetemperatur")
 
-        # The first harvest at set-up: there and back.
+        # The first harvest is planned a moment after set-up (R6), not run
+        # inside it: fire it, then there and back.
+        await _advance(hass, MIN_FIRST_DELAY + 1)
         assert panel.moves == [HISTORY, HOME]
         assert hass.states.get(sensor).state == "7.2"
         assert web.skips_in_a_row == 0

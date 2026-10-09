@@ -219,6 +219,8 @@ def _runtime(cop, samples, data=None, success=True):
         energy_out=SimpleNamespace(key="out"),
         energy_in=SimpleNamespace(key="in"),
         consumption_snapshot=None,
+        transitions=None,
+        starts_per_day=None,
         operating_hours=None,
         pages=[],
         identity=SimpleNamespace(
