@@ -23,9 +23,10 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
-import voluptuous as vol
 
 pytest.importorskip("pytest_homeassistant_custom_component")
+
+import voluptuous as vol  # noqa: E402  (comes with Home Assistant)
 
 from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
     _advance,
