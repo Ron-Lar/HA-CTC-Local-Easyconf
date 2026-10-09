@@ -183,7 +183,8 @@ every form of them, on both models tested.
    **Modbus TCP**. The port row only appears once that is done. Note that this
    is reported to be mutually exclusive with the cloud connection. For the
    display's values, its web interface has to be on as well: Advanced, Define,
-   Communication, **Web** = Yes.
+   Communication, **Web** = Yes. What the two open on your network, and how to
+   fence them in, is under [Network and exposure](#network-and-exposure).
 2. Add the integration. It first asks how to find the unit, and nothing goes on
    the network before you have chosen. **Search the network** asks every
    address on Home Assistant's own networks for `/settings/name` on port 80,
@@ -286,6 +287,46 @@ from before 0.14.0, when part of this was created switched off, has those
 entities switched on at the first start of a newer version, with one line in
 the log, and Home Assistant reloads the entry once about thirty seconds later.
 Whatever you switched off yourself stays off.
+
+## Network and exposure
+
+The integration needs two doors into the heat pump, and neither of them has a
+lock.
+
+**The display's web interface, port 80.** CTC's screen mirror, switched on at
+the panel under Installer (Avancerat), Define (Definiera), Communication
+(Kommunikation) by setting **Web** to **Yes**; the names can differ a little
+between models and display software. It answers anyone who can reach the
+display, with no login: every screen can be read, and every place on the panel
+can be pressed exactly as if somebody stood in front of it. That includes the
+installer menus, where Service holds a function test, a compressor quick start,
+a reinstallation and a firmware update, and Define holds the settings that
+decide how the plant runs. The device's link on the device page opens this same
+page, for anyone whose browser can reach the display, not only for people with
+access to Home Assistant.
+
+**Modbus TCP, port 502.** Switched on with **Ethernet** set to **Modbus TCP**,
+as under Setup. It has no authentication either: anyone who reaches the port can
+read every register and write the control registers, and nothing on the unit
+stops a client from writing the stored settings in the 61500 block, whose
+memory tolerates a limited number of writes. This integration refuses those
+addresses in its own code; another client on the network is under no such
+rule. And since the controller serves one Modbus client at a time, anything
+else that connects disturbs this integration's session as well.
+
+The integration cannot add a login to either: both are the unit's own servers,
+and it only talks to them. What it can do is ask you to keep them out of reach:
+
+- Put the display on a network that only Home Assistant can reach: a VLAN of
+  its own for the heat pump, or a firewall rule that lets Home Assistant's
+  address, and nothing else, reach ports 80 and 502 on the display. Give the
+  display a fixed address, a DHCP reservation in the router, so the rule keeps
+  pointing at it.
+- **Never open port 80 or 502 to the internet.** No port forwarding, no DMZ,
+  and no UPnP opening anything for the display. Anyone who found it there could
+  steer the heat pump and walk its installer menus.
+- To reach the panel from away, go through Home Assistant's own remote access,
+  or through a VPN into your network, never straight to the display.
 
 ## The CTC page
 
