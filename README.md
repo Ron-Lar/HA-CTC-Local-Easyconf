@@ -237,6 +237,23 @@ control of the heat pump, the walk to the System information page described
 below, the anonymous statistics and the daily check for a new release. All four
 are changed under Configure.
 
+Give the display a fixed address, a DHCP reservation in your router, so that
+it keeps the address the integration was set up with. Should it get another
+one all the same, nothing needs doing: the device and its entities are known
+by a key of their own that stays with them, not by the address, and when
+Home Assistant sees the display ask DHCP for its new address it recognises the
+unit by the MAC address on the display's system information page and moves
+the entry there, history, entity ids and settings included. The MAC is read
+together with the serial number, so this works once the serial number shows
+on the device page, and it needs Home Assistant to see the display ask for its
+address: on the same network it does, and on another one a router integration
+in Home Assistant that tracks the network's devices can tell it. Where neither
+is the case, remove the integration and add it again at the new address. The
+ports and the Modbus address are changed the same way, by removing the
+integration and adding it again: on a CTC they are 80 for the web interface,
+502 for Modbus and address 1, and have no reason to change, so there is no
+separate dialog for them.
+
 The serial number and the display's own software version are only written into
 the System information page while that page is shown on the panel. The
 integration walks there once to read them, and puts the panel back. It presses
