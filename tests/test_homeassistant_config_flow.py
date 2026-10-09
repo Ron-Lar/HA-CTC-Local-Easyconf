@@ -389,3 +389,11 @@ async def test_a_closed_port_is_the_step_about_turning_modbus_on(hass, stubs, sw
     with patch(f"{FLOW}.CtcModbusClient", DeadModbus):
         result = await _pick_the_found_unit(hass)
     assert result["step_id"] == "modbus_failed"
+
+
+async def test_a_probe_that_breaks_leaves_the_flow_standing(hass, stubs, sweep, display):
+    stubs.modbus_probe.side_effect = RuntimeError("no socket for you")
+    with patch(f"{FLOW}.CtcModbusClient", DeadModbus):
+        result = await _pick_the_found_unit(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "modbus_failed"

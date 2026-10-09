@@ -68,7 +68,7 @@ from .discovery import (
     settings_stem,
 )
 from .modbus_api import CtcModbusClient, CtcModbusError
-from .modbus_probe import ANSWERED, BUSY, async_classify
+from .modbus_probe import ANSWERED, BUSY, SILENT, async_classify
 from .web_api import CtcWebClient, CtcWebError
 
 _LOGGER = logging.getLogger(__name__)
@@ -328,7 +328,11 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """
         assert self._host is not None
         retried_busy, self._busy_retry = self._busy_retry, False
-        verdict = await async_classify(self._host, self._modbus_port, self._slave)
+        try:
+            verdict = await async_classify(self._host, self._modbus_port, self._slave)
+        except Exception:  # noqa: BLE001 - naming the failure must never break the flow
+            _LOGGER.debug("Could not probe the Modbus port", exc_info=True)
+            verdict = SILENT
         if verdict == BUSY:
             return self._busy_form({"base": "modbus_busy"} if retried_busy else None)
         if verdict == ANSWERED:
