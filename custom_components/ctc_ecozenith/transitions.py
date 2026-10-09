@@ -1,11 +1,12 @@
-"""The heat pump's transitions: starts, run length and what changed when.
+"""The heat pump's transitions: starts, run length, defrosts and what changed when.
 
 Modbus register 62017 says what the heat pump is doing, every half minute, and
 the derived binary sensors show that as a state. What a state cannot show is
 the change: when the compressor last started, how many times it has started
-today, how long the last run lasted. This module watches the codes from one
-poll to the next and keeps that bookkeeping, and the transitions it finds are
-what the sensors read.
+today, how long the last run lasted, how often and how long an air to water
+unit defrosts, which is the difference between a healthy one and an iced up
+one. This module watches the codes from one poll to the next and keeps that
+bookkeeping, and the transitions it finds are what the sensors read.
 
 Everything is judged on the controller's codes, never on the Swedish labels,
 as the binary sensors do (const.HP_RUNNING_CODES and friends). A run is any
@@ -29,7 +30,7 @@ in as an aware datetime in local time, which is what midnight is judged on.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Callable
 
@@ -56,6 +57,8 @@ HP_SILENT_CODES: frozenset[int] = frozenset({8, 30, 31, 32})
 
 EVENT_COMPRESSOR_START = "kompressor_start"
 EVENT_COMPRESSOR_STOP = "kompressor_stopp"
+EVENT_DEFROST_START = "avfrostning_start"
+EVENT_DEFROST_END = "avfrostning_slut"
 EVENT_ALARM = "larm"
 EVENT_ALARM_CLEARED = "larm_borta"
 EVENT_SMARTGRID_CHANGED = "smartgrid_andrad"
@@ -66,6 +69,8 @@ EVENT_SYSTEM_STATUS_CHANGED = "systemstatus_andrad"
 EVENT_TYPES: tuple[str, ...] = (
     EVENT_COMPRESSOR_START,
     EVENT_COMPRESSOR_STOP,
+    EVENT_DEFROST_START,
+    EVENT_DEFROST_END,
     EVENT_ALARM,
     EVENT_ALARM_CLEARED,
     EVENT_SMARTGRID_CHANGED,
@@ -109,7 +114,7 @@ class Transition:
     from_label: str | None
     to_label: str | None
     outdoor: float | None
-    #: How long the run that just ended lasted, where its start was seen.
+    #: How long the run or defrost that just ended lasted, where its start was seen.
     minutes: float | None = None
 
     def attributes(self) -> dict[str, Any]:
@@ -134,6 +139,17 @@ class Run:
     started: datetime | None
     ended: datetime
     minutes: float | None
+
+
+@dataclass(frozen=True)
+class Defrost:
+    """A defrost whose start was seen, and its end once that is seen too."""
+
+    started: datetime
+    #: Modbus 62000 at the start: a defrost at plus five is not one at minus ten.
+    outdoor: float | None
+    ended: datetime | None = None
+    minutes: float | None = None
 
 
 def _label(table: dict[int, str], code: int | None) -> str | None:
@@ -173,6 +189,10 @@ class TransitionWatch:
         self.last_start_outdoor: float | None = None
         self.last_run: Run | None = None
         self.starts_today = 0
+        #: When the defrost under way began, if its start was seen.
+        self.defrosting_since: datetime | None = None
+        self.last_defrost: Defrost | None = None
+        self.defrosts_today = 0
         #: From when the day's counts count: midnight, or the first sample
         #: after a start of Home Assistant.
         self.counting_since: datetime | None = None
@@ -181,6 +201,11 @@ class TransitionWatch:
     def running(self) -> bool | None:
         """Whether the compressor turns, by the last known code; None before one."""
         return None if self._hp is None else self._hp in HP_RUN_CODES
+
+    @property
+    def defrosting(self) -> bool | None:
+        """Whether the heat pump is defrosting, by the last known code; None before one."""
+        return None if self._hp is None else self._hp == HP_DEFROST_CODE
 
     def observe(self, sample: Sample) -> list[Transition]:
         """Take in one poll and return what changed since the last one.
@@ -202,6 +227,7 @@ class TransitionWatch:
         if at.date() != self.counting_since.date():
             self.counting_since = at.replace(hour=0, minute=0, second=0, microsecond=0)
             self.starts_today = 0
+            self.defrosts_today = 0
 
     def _observe_heat_pump(self, sample: Sample) -> list[Transition]:
         code = sample.hp_status
@@ -223,9 +249,17 @@ class TransitionWatch:
             )
 
         was_run, now_run = before in HP_RUN_CODES, code in HP_RUN_CODES
+        was_defrost, now_defrost = before == HP_DEFROST_CODE, code == HP_DEFROST_CODE
         was_alarm, now_alarm = before == HP_ALARM_CODE, code == HP_ALARM_CODE
         # What ended first, then what began, so a stop and a start in the same
-        # sample read in the order they happened.
+        # sample read in the order they happened. A defrost ends before the run
+        # it was part of, and is no stop by itself: the compressor turns on.
+        if was_defrost and not now_defrost:
+            minutes = _minutes(self.defrosting_since, at)
+            if self.last_defrost is not None and self.last_defrost.ended is None:
+                self.last_defrost = replace(self.last_defrost, ended=at, minutes=minutes)
+            self.defrosting_since = None
+            add(EVENT_DEFROST_END, minutes)
         if was_run and not now_run:
             minutes = _minutes(self.running_since, at)
             self.last_run = Run(self.running_since, at, minutes)
@@ -240,6 +274,11 @@ class TransitionWatch:
             self.last_start_outdoor = sample.outdoor
             self.starts_today += 1
             add(EVENT_COMPRESSOR_START)
+        if not was_defrost and now_defrost:
+            self.defrosting_since = at
+            self.last_defrost = Defrost(at, sample.outdoor)
+            self.defrosts_today += 1
+            add(EVENT_DEFROST_START)
         if not was_alarm and now_alarm:
             add(EVENT_ALARM)
         return found
@@ -338,6 +377,17 @@ def _counting_since(watch: TransitionWatch) -> dict[str, Any]:
     return {"räknas sedan": _iso(watch.counting_since)}
 
 
+def _last_defrost_attributes(watch: TransitionWatch) -> dict[str, Any]:
+    defrost = watch.last_defrost
+    return {
+        # Empty while the defrost is still going; the length comes with its end.
+        "längd": defrost.minutes if defrost else None,
+        "utetemperatur vid starten": defrost.outdoor if defrost else None,
+        "avslutad": _iso(defrost.ended) if defrost else None,
+        "pågår": watch.defrosting,
+    }
+
+
 TRANSITION_SENSORS: tuple[TransitionSensor, ...] = (
     TransitionSensor(
         "last_start", "Senaste start", "timestamp", "mdi:play-circle-outline",
@@ -350,6 +400,15 @@ TRANSITION_SENSORS: tuple[TransitionSensor, ...] = (
     TransitionSensor(
         "last_run", "Senaste körning", "minutes", "mdi:timer-outline",
         lambda watch: watch.last_run.minutes if watch.last_run else None, _last_run_attributes,
+    ),
+    TransitionSensor(
+        "defrosts_today", "Avfrostningar i dag", "count", "mdi:snowflake-melt",
+        lambda watch: watch.defrosts_today, _counting_since,
+    ),
+    TransitionSensor(
+        "last_defrost", "Senaste avfrostning", "timestamp", "mdi:snowflake-melt",
+        lambda watch: watch.last_defrost.started if watch.last_defrost else None,
+        _last_defrost_attributes,
     ),
 )
 

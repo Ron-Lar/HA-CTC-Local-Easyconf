@@ -151,7 +151,8 @@ _TECHNICAL = (
     # hardware that is missing, and the timestamps hide themselves until a
     # start has been seen.
     ("cycles", "mdi:counter",
-     ("last_start", "starts_today", "last_run", "mean_run_24h")),
+     ("last_start", "starts_today", "last_run", "mean_run_24h",
+      "defrosts_today", "last_defrost")),
     ("settings", "mdi:cog-outline",
      ("set_heating_mode_1", "set_hp1_blocked", "set_slope_1", "set_adjust_1",
       "set_max_rps_1", "set_max_immersion_lower", "set_max_immersion_upper")),
@@ -210,7 +211,7 @@ TEXT = {
         "release": "Släpp styrningen",
         "control": "Styrning",
         "compressor": "Kompressor och köldkrets",
-        "cycles": "Starter och körningar",
+        "cycles": "Starter, körningar och avfrostningar",
         "settings": "Pumpens inställningar",
         "unit": "Om enheten",
         "other": "Övrigt",
@@ -264,7 +265,7 @@ TEXT = {
         "release": "Release control",
         "control": "Control",
         "compressor": "Compressor and refrigerant circuit",
-        "cycles": "Starts and runs",
+        "cycles": "Starts, runs and defrosts",
         "settings": "Settings in the heat pump",
         "unit": "About the unit",
         "other": "Other",

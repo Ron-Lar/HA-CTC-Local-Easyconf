@@ -1,4 +1,4 @@
-"""The transition sensors under a real Home Assistant core (R27).
+"""The transition sensors under a real Home Assistant core (R27, R31).
 
 The watch itself is tested without Home Assistant in test_transitions.py. What
 only a real core can show is the wiring: that the first round of a set-up is
@@ -74,10 +74,26 @@ async def test_the_first_round_is_the_baseline_and_a_start_is_counted(hass, stub
     assert started.attributes["utetemperatur vid starten"] == 7.2
     assert started.attributes["körning pågår"] is True
 
-    # A defrost is part of the run; the stop after it ends the run.
+    # A defrost is part of the run, and counted and dated on its own (R31).
+    defrosts = _entity_id(hass, "sensor", "defrosts_today")
+    last_defrost = _entity_id(hass, "sensor", "last_defrost")
+    assert hass.states.get(defrosts).state == "0"
+    assert hass.states.get(last_defrost).state == "unknown"
     await _status(hass, DEFROST)
     assert hass.states.get(starts).state == "1"
+    assert hass.states.get(defrosts).state == "1"
+    thawing = hass.states.get(last_defrost)
+    assert thawing.attributes["device_class"] == "timestamp"
+    assert thawing.attributes["pågår"] is True
+    assert thawing.attributes["längd"] is None
+    assert thawing.attributes["utetemperatur vid starten"] == 7.2
     await _status(hass, HEATING)
+    thawed = hass.states.get(last_defrost)
+    assert thawed.state == thawing.state
+    assert thawed.attributes["pågår"] is False
+    assert thawed.attributes["längd"] >= 0
+    assert thawed.attributes["avslutad"]
+    # The stop after it ends the run.
     await _status(hass, READY)
     run = hass.states.get(last_run)
     assert float(run.state) >= 0
@@ -97,6 +113,6 @@ async def test_the_mean_run_needs_the_history_page(hass, stubs):
     await _set_up(hass)
     registry = er.async_get(hass)
     assert registry.async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{HOST}_mean_run_24h") is None
-    # The three the watch alone can give are there.
-    for key in ("last_start", "starts_today", "last_run"):
+    # The five the watch alone can give are there.
+    for key in ("last_start", "starts_today", "last_run", "defrosts_today", "last_defrost"):
         assert registry.async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{HOST}_{key}"), key

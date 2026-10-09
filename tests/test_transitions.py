@@ -1,4 +1,4 @@
-"""The transition watch: starts, run length and what changed when (R27).
+"""The transition watch: starts, run length, defrosts and what changed when (R27, R31).
 
 Driven by hand with samples of status codes, the way the Modbus coordinator
 feeds it, without Home Assistant. The codes are the ones const.py pins to
@@ -94,8 +94,7 @@ def test_a_defrost_in_the_middle_of_a_run_is_neither_a_stop_nor_a_start(transiti
     kinds = feed(
         transitions, watch, (at(9), 1), (at(10), 3), (at(10, 40), 4), (at(10, 48), 3), (at(11), 1)
     )
-    assert "kompressor_stopp" not in kinds[:-1]
-    assert kinds.count("kompressor_start") == 1
+    assert kinds == ["kompressor_start", "avfrostning_start", "avfrostning_slut", "kompressor_stopp"]
     assert watch.starts_today == 1
     assert watch.last_run.minutes == 60.0
 
@@ -177,6 +176,99 @@ def test_the_counts_start_over_at_midnight_local_time(transitions, watch):
     assert watch.last_run.minutes == 50.0
 
 
+# ---------------------------------------------------------------- defrosts
+
+
+def test_a_defrost_is_counted_timed_and_dated_with_the_weather(transitions, watch):
+    feed(transitions, watch, (at(9), 1), (at(10), 3))
+    (start,) = watch.observe(transitions.Sample(at(10, 40), hp_status=4, outdoor=-2.5))
+    assert start.kind == "avfrostning_start"
+    assert start.attributes()["utetemperatur"] == -2.5
+    assert watch.defrosting is True
+    assert watch.defrosts_today == 1
+    assert watch.last_defrost.started == at(10, 40)
+    assert watch.last_defrost.outdoor == -2.5
+    assert watch.last_defrost.ended is None and watch.last_defrost.minutes is None
+    (end,) = watch.observe(transitions.Sample(at(10, 48), hp_status=3, outdoor=-2.0))
+    assert end.kind == "avfrostning_slut"
+    assert end.minutes == 8.0
+    assert end.attributes()["längd"] == 8.0
+    assert watch.defrosting is False
+    assert watch.last_defrost.ended == at(10, 48)
+    assert watch.last_defrost.minutes == 8.0
+    # Still one start, still running: a defrost is no stop.
+    assert watch.starts_today == 1
+    assert watch.running is True
+
+
+def test_a_defrost_that_ends_in_a_stop_ends_before_the_run_does(transitions, watch):
+    feed(transitions, watch, (at(9), 1), (at(10), 3), (at(10, 40), 4))
+    assert feed(transitions, watch, (at(10, 50), 1)) == ["avfrostning_slut", "kompressor_stopp"]
+    assert watch.last_defrost.minutes == 10.0
+    assert watch.last_run.minutes == 50.0
+
+
+def test_a_defrost_straight_out_of_standstill_is_also_a_start(transitions, watch):
+    # Unlikely, but the compressor turns in a defrost, so it is a run.
+    assert feed(transitions, watch, (at(9), 1), (at(10), 4)) == [
+        "kompressor_start", "avfrostning_start",
+    ]
+    assert watch.starts_today == 1 and watch.defrosts_today == 1
+
+
+def test_a_defrost_under_way_at_the_baseline_ends_without_a_record(transitions, watch):
+    assert feed(transitions, watch, (at(9), 4), (at(9, 5), 3)) == ["avfrostning_slut"]
+    assert watch.last_defrost is None
+    assert watch.defrosts_today == 0
+
+
+def test_the_defrosts_start_over_at_midnight_too(transitions, watch):
+    feed(transitions, watch, (at(23), 3), (at(23, 30), 4), (at(23, 40), 3))
+    assert watch.defrosts_today == 1
+    feed(transitions, watch, (at(0, 10, day=10), 3))
+    assert watch.defrosts_today == 0
+    assert watch.last_defrost.started == at(23, 30)
+
+
+def test_the_defrost_sensors_read_the_watch(transitions, watch):
+    defrosts = _sensor(transitions, "defrosts_today")
+    last = _sensor(transitions, "last_defrost")
+    assert defrosts.kind == "count" and last.kind == "timestamp"
+    feed(transitions, watch, (at(9), 3))
+    assert defrosts.value(watch) == 0
+    assert defrosts.attributes(watch) == {"räknas sedan": "2026-10-09T09:00:00+02:00"}
+    assert last.value(watch) is None
+    assert last.attributes(watch) == {
+        "längd": None, "utetemperatur vid starten": None, "avslutad": None, "pågår": False,
+    }
+    feed(transitions, watch, (at(9, 30), 4), outdoor=-4.0)
+    assert defrosts.value(watch) == 1
+    assert last.value(watch) == at(9, 30)
+    assert last.attributes(watch) == {
+        "längd": None, "utetemperatur vid starten": -4.0, "avslutad": None, "pågår": True,
+    }
+    feed(transitions, watch, (at(9, 36), 3))
+    assert last.attributes(watch) == {
+        "längd": 6.0, "utetemperatur vid starten": -4.0,
+        "avslutad": "2026-10-09T09:36:00+02:00", "pågår": False,
+    }
+
+
+def test_the_defrost_words_say_what_is_unconfirmed_and_what_goes_negative(explanations):
+    # The timer's unit is unknown: the register list names none and the panel
+    # prints the number bare. And delivered heat is expected below zero while
+    # the circuit runs backwards to thaw the evaporator.
+    assert "obekräftad" in explanations.explain("hp1_defrost_timer")
+    assert "obekräftad" in explanations.display_explanation("Timer avfrostning", "x")
+    for label in ("Avgiven värme", "Energy output"):
+        text = explanations.display_explanation(label, "x")
+        assert "negativt" in text and "avfrostning" in text, label
+    # The totals and periods keep their own words.
+    assert "negativt" not in explanations.display_explanation("Avgiven värme totalt", "x")
+    assert "negativt" not in explanations.display_explanation("Avgiven värme/30 dagar", "x")
+    assert "stopp" in explanations.explain("last_defrost")
+
+
 # ------------------------------------------------------------------ alarms
 
 
@@ -251,7 +343,7 @@ def _sensor(transitions, key):
 
 def test_the_sensor_table_reads_the_watch_before_and_after_a_start(transitions, watch):
     keys = [item.key for item in transitions.TRANSITION_SENSORS]
-    assert keys[:3] == ["last_start", "starts_today", "last_run"]
+    assert keys == ["last_start", "starts_today", "last_run", "defrosts_today", "last_defrost"]
     kinds = {item.key: item.kind for item in transitions.TRANSITION_SENSORS}
     assert kinds["last_start"] == "timestamp"
     assert kinds["starts_today"] == "count"
