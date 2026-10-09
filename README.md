@@ -177,6 +177,10 @@ every form of them, on both models tested.
    the network before you have chosen. **Search the network** asks every
    address on Home Assistant's own networks for `/settings/name` on port 80,
    which is how a CTC display tells itself apart, and changes nothing anywhere.
+   Only the networks Home Assistant itself is attached to are searched, never
+   the operating system's guess, which inside a container is the docker
+   bridge. A network of more than 1024 addresses, a /16 for instance, is
+   searched as the /24 around Home Assistant's own address on it.
    **Enter an address** skips the search. If yours is on another subnet, or the
    search finds nothing, type the address instead.
 3. Tick the display pages you want harvested. The menu is read from the unit

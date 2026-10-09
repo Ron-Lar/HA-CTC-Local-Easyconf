@@ -3,7 +3,7 @@
 The ordinary suite can only read the flow as source, since config_flow.py
 imports Home Assistant and voluptuous at the top. Here the flow is driven from
 the first screen: nothing goes on the network before somebody has chosen to
-search (R70).
+search (R70), and only Home Assistant's own networks are searched (L8).
 
 Shares the stand-ins and fixtures of test_homeassistant.py and runs the same
 way, from a virtual environment that has Home Assistant and
@@ -99,3 +99,19 @@ async def test_a_search_that_finds_nothing_says_so_on_the_address_form(hass, stu
     )
     assert result["step_id"] == "manual"
     assert result["errors"] == {"base": "nothing_found"}
+
+
+# ------------------------------------------- Home Assistant's networks only (L8)
+
+
+async def test_without_an_adapter_the_flow_goes_to_the_address_form(hass, stubs, sweep):
+    networks, discover = sweep
+    networks.return_value = []
+    result = await _start(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "scan"}
+    )
+    assert result["step_id"] == "manual"
+    assert result["errors"] == {"base": "nothing_found"}
+    networks.assert_awaited_once()
+    discover.assert_not_awaited()

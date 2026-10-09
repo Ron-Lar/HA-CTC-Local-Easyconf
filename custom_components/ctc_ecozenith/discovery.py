@@ -7,7 +7,9 @@ distinctive fingerprint: port 80 answers 400 to almost everything, but
 on an EcoZenith i255 and ``settings_ezi5xx.bin`` on an i550 Pro.
 
 Scanning is therefore a two stage sweep: open the TCP port on every address in
-the candidate networks, then ask the ones that answer for that file name.
+the candidate networks, then ask the ones that answer for that file name. The
+candidate networks are Home Assistant's own adapters and nothing else; see
+async_home_assistant_networks.
 """
 
 from __future__ import annotations
@@ -15,8 +17,8 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
-import socket
 from dataclasses import dataclass
+from typing import Any, Iterable, Mapping
 
 import aiohttp
 
@@ -26,6 +28,11 @@ PORT_CONCURRENCY = 60
 PROBE_CONCURRENCY = 8
 PORT_TIMEOUT = 0.4
 PROBE_TIMEOUT = 4.0
+
+#: The most addresses one adapter's network is swept for. A larger network, a
+#: /16 at home or in an office, is swept as the /24 around Home Assistant's own
+#: address on it rather than passed over (roadmap L8).
+MAX_SWEEP = 1024
 
 # The settings file names a family, not an exact model. The name chosen here is
 # the member of each family that has the display with Modbus TCP, since that is
@@ -53,34 +60,6 @@ class DiscoveredDisplay:
     @property
     def label(self) -> str:
         return f"{self.host} — {self.model}"
-
-
-def local_networks(max_hosts: int = 512) -> list[ipaddress.IPv4Network]:
-    """Return the /24 networks around this machine's own addresses."""
-    networks: list[ipaddress.IPv4Network] = []
-    seen: set[str] = set()
-    for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-        address = info[4][0]
-        if address.startswith("127."):
-            continue
-        try:
-            candidate = ipaddress.ip_network(f"{address}/24", strict=False)
-        except ValueError:
-            continue
-        if str(candidate) in seen or candidate.num_addresses > max_hosts:
-            continue
-        seen.add(str(candidate))
-        networks.append(candidate)  # type: ignore[arg-type]
-    if not networks:
-        try:
-            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            probe.connect(("10.255.255.255", 1))
-            address = probe.getsockname()[0]
-            probe.close()
-            networks.append(ipaddress.ip_network(f"{address}/24", strict=False))  # type: ignore[arg-type]
-        except OSError:
-            _LOGGER.debug("Could not determine a local network to scan")
-    return networks
 
 
 async def _port_open(host: str, port: int, timeout: float = PORT_TIMEOUT) -> bool:
@@ -117,51 +96,73 @@ async def async_probe_host(
     return None
 
 
+def networks_from_adapters(
+    adapters: Iterable[Mapping[str, Any]],
+) -> list[ipaddress.IPv4Network]:
+    """The networks to sweep, out of Home Assistant's own list of adapters.
+
+    Each enabled adapter's IPv4 network is swept whole, with its own prefix, so
+    a /23 is covered as much as a /24. A network larger than MAX_SWEEP used to
+    be passed over, which on a /16 left nothing at all to sweep; it is now swept
+    as the /24 around Home Assistant's own address on it, where a heat pump on
+    a home network is all but certain to be. Loopback and link local addresses
+    are no network a display sits on and are left out.
+    """
+    networks: list[ipaddress.IPv4Network] = []
+    for adapter in adapters:
+        if not adapter.get("enabled", True):
+            continue
+        for address in adapter.get("ipv4") or []:
+            ip = address.get("address")
+            prefix = address.get("network_prefix")
+            if not ip or prefix is None:
+                continue
+            try:
+                own = ipaddress.IPv4Address(ip)
+                candidate = ipaddress.IPv4Network(f"{ip}/{prefix}", strict=False)
+            except ValueError:
+                continue
+            if own.is_loopback or own.is_link_local:
+                continue
+            if candidate.num_addresses > MAX_SWEEP:
+                candidate = ipaddress.IPv4Network(f"{ip}/24", strict=False)
+            if candidate not in networks:
+                networks.append(candidate)
+    return networks
+
+
+async def _async_adapters(hass) -> list[Mapping[str, Any]]:
+    """Home Assistant's adapters, imported here so the module loads without it."""
+    from homeassistant.components import network as ha_network
+
+    return await ha_network.async_get_adapters(hass)
+
+
 async def async_home_assistant_networks(hass) -> list[ipaddress.IPv4Network]:
-    """Return the networks Home Assistant itself is attached to.
+    """Return the networks Home Assistant itself is attached to, and only those.
 
     Home Assistant usually runs in a container, so asking the operating system
     for "my" address returns the container bridge rather than the network the
     heat pump is on. Home Assistant knows the real adapters, including their
-    prefix, which also covers installations on a /23 rather than a /24.
+    prefix. There is no fallback to the operating system any more: it gave the
+    container bridge's /24, a sweep of nothing useful, and it did so with a
+    blocking name lookup on the event loop. Without an adapter the list is
+    empty, and the set-up flow goes straight to the address form (roadmap L8).
     """
-    networks: list[ipaddress.IPv4Network] = []
     try:
-        from homeassistant.components import network as ha_network
-
-        adapters = await ha_network.async_get_adapters(hass)
-    except Exception as err:  # noqa: BLE001 - fall back to the socket method
+        adapters = await _async_adapters(hass)
+    except Exception as err:  # noqa: BLE001 - no adapters is an empty sweep, not a failure
         _LOGGER.debug("Could not read adapters from Home Assistant: %s", err)
-        return local_networks()
-
-    seen: set[str] = set()
-    for adapter in adapters:
-        if not adapter.get("enabled", True):
-            continue
-        for address in adapter.get("ipv4", []):
-            ip = address.get("address")
-            prefix = address.get("network_prefix")
-            if not ip or prefix is None or ip.startswith("127."):
-                continue
-            try:
-                candidate = ipaddress.ip_network(f"{ip}/{prefix}", strict=False)
-            except ValueError:
-                continue
-            if candidate.num_addresses > 1024 or str(candidate) in seen:
-                continue
-            seen.add(str(candidate))
-            networks.append(candidate)  # type: ignore[arg-type]
-    return networks or local_networks()
+        return []
+    return networks_from_adapters(adapters)
 
 
 async def async_discover(
     session: aiohttp.ClientSession,
-    networks: list[ipaddress.IPv4Network] | None = None,
+    networks: list[ipaddress.IPv4Network],
     port: int = 80,
 ) -> list[DiscoveredDisplay]:
-    """Sweep the local networks and return every CTC display found."""
-    if networks is None:
-        networks = local_networks()
+    """Sweep the given networks and return every CTC display found."""
     if not networks:
         return []
 

@@ -141,8 +141,10 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         session = async_get_clientsession(self.hass)
         try:
+            # Home Assistant's own adapters and nothing else: without one,
+            # there is nothing to sweep and the address form follows at once.
             networks = await async_home_assistant_networks(self.hass)
-            self._found = await async_discover(session, networks)
+            self._found = await async_discover(session, networks) if networks else []
         except Exception as err:  # noqa: BLE001 - a failed sweep must not block setup
             _LOGGER.debug("Network sweep failed: %s", err)
             self._found = []
