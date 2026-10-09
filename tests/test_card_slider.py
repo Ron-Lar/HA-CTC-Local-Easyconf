@@ -17,7 +17,10 @@ refused. A field gets the word as its placeholder. The max rps reads "ingen
 gräns" for the pump's own 0 and "0 rps" for a 0 written through the control.
 
 The card is mounted for real (tests/card_page.js over the stub DOM of
-tests/card_dom.js), so what is pinned is the card's own bookkeeping.
+tests/card_dom.js), so what is pinned is the card's own bookkeeping. A drag
+leaves the focus on the slider, as it does in Chrome and in the app's WebView,
+so what the card does while the user holds the control is what is tested;
+blur() is the click somewhere else.
 """
 
 from __future__ import annotations
@@ -90,8 +93,10 @@ def _play(script: str, entity: str, state: str, attributes: dict, **item) -> dic
         card, widget, control, reading, note, calls,
         why: whys[whys.length - 1],
         state: (state, extra) => {{ card.hass = hass(state, extra); }},
-        drag: (value) => {{ control.value = value; control.fire("input"); }},
+        // A mouse drag focuses the range input, and the focus stays after it.
+        drag: (value) => {{ control.focus(); control.value = value; control.fire("input"); }},
         release: () => control.fire("change"),
+        blur: () => control.blur(),
         accept: () => answer("accept"),
         refuse: () => answer("refuse"),
         result: () => ({{
@@ -168,21 +173,56 @@ def test_setting_an_unset_slider_takes_the_mark_away_at_once_and_writes_what_was
 
 
 def test_a_refused_write_puts_the_slider_back_to_unset():
+    # F7.1: the slider still has the focus from the drag. The refusal must
+    # not leave "40 °C" beside a knob the unset style has hidden; the row
+    # goes back to empty and "ej satt" at once, and stays so through the
+    # next state while the focus is still there.
     assert _play("""
       t.drag("40"); t.release();
+      if (t.control.getRootNode().activeElement !== t.control) throw new Error("the drag did not focus");
       await t.refuse();
+      const back = t.result();
+      if (back.unset !== "1" || back.text !== "ej satt" || back.value !== "30") {
+        throw new Error("not back to unset: " + JSON.stringify(back));
+      }
+      t.state("unknown");
     """, "number.dhw", "unknown", DHW) == {
         "unset": "1", "pending": "0", "value": "30", "text": "ej satt", "why": True,
         "placeholder": "", "calls": [40],
     }
 
 
+def test_a_refused_write_on_a_set_slider_goes_back_to_the_pumps_value_while_held():
+    # The same for a slider with a value: Modbus is busy, Home Assistant
+    # refuses the 60, and the row shows the pump's 55 again although the
+    # slider is still focused. The focus itself is left with the user.
+    assert _play("""
+      t.drag("60"); t.release();
+      await t.refuse();
+      if (t.control.getRootNode().activeElement !== t.control) throw new Error("the refusal took the focus");
+    """, "number.dhw", "55", DHW) == {
+        "unset": "0", "pending": "0", "value": "55", "text": "55 °C", "why": False,
+        "placeholder": "", "calls": [60],
+    }
+
+
 def test_a_taken_write_shows_the_value_once_the_pump_reports_it():
-    # The state comes as number.py publishes it, a float written "40.0"; the
-    # range input writes it back as "40", and the row stops looking busy.
+    # The state comes as number.py publishes it, a float written "40.0". The
+    # slider still has the focus, so knob and text are left as the user set
+    # them, but the row stops looking busy: the pump reports what it shows.
     assert _play("""
       t.drag("40"); t.release();
       await t.accept();
+      t.state("40.0", {"styrning aktiv": "ja"});
+    """, "number.dhw", "unknown", DHW) == {
+        "unset": "0", "pending": "0", "value": "40", "text": "40 °C", "why": False,
+        "placeholder": "", "calls": [40],
+    }
+    # Once the focus has gone, the next state writes the pump's own value in.
+    assert _play("""
+      t.drag("40"); t.release();
+      await t.accept();
+      t.blur();
       t.state("40.0", {"styrning aktiv": "ja"});
     """, "number.dhw", "unknown", DHW) == {
         "unset": "0", "pending": "0", "value": "40", "text": "40.0 °C", "why": False,
@@ -193,10 +233,9 @@ def test_a_taken_write_shows_the_value_once_the_pump_reports_it():
 def test_the_pumps_own_value_is_what_ends_the_busy_mark_not_the_timer():
     # F7.2: a taken write leaves the row busy until the pump reports the value,
     # not for the six seconds of the timer. A state that still carries the old
-    # value keeps it busy; the written value, as "40.0", ends it. The slider
-    # keeps the focus after a drag in Chrome and in the app, so it is held.
+    # value keeps it busy; the written value, as "40.0", ends it, with the
+    # focus still on the slider as it is after a drag.
     assert _play("""
-      t.control.focus();
       t.drag("40"); t.release();
       await t.accept();
       t.state("55.0");
