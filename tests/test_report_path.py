@@ -74,7 +74,7 @@ def test_an_installation_with_figures_reports_them(cop, stats_extra):
         page_count=2,
         read_failures=0,
         heatpump_model="EA720M",
-        serial="720825408489",
+        serial="720825400001",
         **cop.cop_for_report(runtime),
     )
     assert payload["models"] == ["i255", "ea720m"]

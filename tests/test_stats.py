@@ -114,8 +114,8 @@ def test_serial_splits_into_product_and_build_week(stats_extra):
     # CTC's own example: 7312-1712-0719 is an EcoAir 510M from 2017 week 12.
     assert stats_extra.serial_product("731217120719") == "7312"
     assert stats_extra.serial_made("731217120719") == "1712"
-    assert stats_extra.serial_product("720825408489") == "7208"
-    assert stats_extra.serial_made("720825408489") == "2540"
+    assert stats_extra.serial_product("720825400001") == "7208"
+    assert stats_extra.serial_made("720825400001") == "2540"
 
 
 def test_serial_needs_all_three_groups(stats_extra):
@@ -125,14 +125,14 @@ def test_serial_needs_all_three_groups(stats_extra):
 
 
 def test_an_impossible_week_is_not_a_build_date(stats_extra):
-    assert stats_extra.serial_made("720825998489") is None
-    assert stats_extra.serial_made("720825008489") is None
+    assert stats_extra.serial_made("720825990001") is None
+    assert stats_extra.serial_made("720825000001") is None
 
 
 def test_the_sequence_number_never_leaves(stats_extra):
-    full = "720825408489"
+    full = "720825400001"
     reported = f"{stats_extra.serial_product(full)}{stats_extra.serial_made(full)}"
-    assert "8489" not in reported
+    assert "0001" not in reported
 
 
 def test_firmware_must_be_a_date(stats_extra):
@@ -179,7 +179,7 @@ def test_payload_carries_hardware_and_performance(stats_extra):
         page_count=1,
         read_failures=0,
         heatpump_model="EA720M",
-        serial="720825408489",
+        serial="720825400001",
         display_firmware="20260610",
         heatpump_firmware="20260522",
         control_firmware=925,
@@ -208,9 +208,9 @@ def test_payload_never_carries_a_full_serial(stats_extra):
         control_enabled=False,
         page_count=1,
         read_failures=0,
-        serial="720825408489",
+        serial="720825400001",
     )
-    assert "720825408489" not in repr(payload)
+    assert "720825400001" not in repr(payload)
     assert payload["metrics"]["product_code"] == 7208
     assert payload["metrics"]["built_year"] == 2025
     assert payload["metrics"]["built_week"] == 40
@@ -266,7 +266,7 @@ def test_every_key_the_report_builds_gets_through_stats_py(stats_extra):
         page_count=3,
         read_failures=1,
         heatpump_model="EA720M",
-        serial="720825408489",
+        serial="720825400001",
         display_firmware="20260610",
         heatpump_firmware="20260522",
         control_firmware=925,

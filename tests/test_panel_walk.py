@@ -104,7 +104,7 @@ class FakePanel:
 
 
 SYSTEM_ROWS = [
-    ("Serienummer", "Serial number", "720825408489"),
+    ("Serienummer", "Serial number", "720825400001"),
     ("MAC-adress", "MAC address", "02:00:00:12:34:56"),
     ("Programversion", "Program version", "20260610"),
     ("Bootloaderversion", "Bootloader version", "1.7"),
@@ -122,7 +122,7 @@ TREE = {
 def test_the_walk_finds_the_page_and_reads_it(identity, web_api):
     panel = FakePanel(web_api, TREE, {60: SYSTEM_ROWS}, start=20)
     found = run(identity.async_read_identity_via_panel(panel))
-    assert found.serial == "720825408489"
+    assert found.serial == "720825400001"
     assert found.display_firmware == "20260610"
     assert found.bootloader == "1.7"
 
@@ -213,7 +213,7 @@ def test_the_page_behind_the_quick_menu_is_found_when_asked_for(identity, web_ap
     # test_walk_allow_list.py.
     panel = QuickPanel(web_api, QUICK, {60: SYSTEM_ROWS}, start=1)
     found = run(identity.async_read_identity_via_panel(panel, quick_menu=True))
-    assert found.serial == "720825408489"
+    assert found.serial == "720825400001"
     assert panel.pressed.count("menu button") == 1
 
 
@@ -237,7 +237,7 @@ def test_an_icon_that_reads_like_the_page_is_never_trusted(identity, web_api):
     panel = FakePanel(web_api, tree, {60: SYSTEM_ROWS}, start=1,
                       icons={61: [("System information", "Systeminformation", 0)]})
     found = run(identity.async_read_identity_via_panel(panel))
-    assert found.serial == "720825408489"
+    assert found.serial == "720825400001"
     assert "Function test" not in panel.pressed
 
 
@@ -284,4 +284,4 @@ def test_the_pages_own_heading_is_not_a_control(identity, web_api):
     }
     panel = Headed(web_api, tree, {60: SYSTEM_ROWS}, start=1)
     found = run(identity.async_read_identity_via_panel(panel))
-    assert found.serial == "720825408489"
+    assert found.serial == "720825400001"

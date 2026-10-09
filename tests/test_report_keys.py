@@ -29,7 +29,7 @@ EVERYTHING = {
     "page_count": 7,
     "read_failures": 1,
     "heatpump_model": "EA720M",
-    "serial": "720825408489",
+    "serial": "720825400001",
     "display_firmware": "20260610",
     "heatpump_firmware": "20260522",
     "control_firmware": 610,

@@ -10,11 +10,11 @@ counts must outlive a reload, or every reload walks the panel again.
 
 Runs against the Home Assistant core that pytest-homeassistant-custom-component
 provides and skips wherever that is not installed, so the ordinary suite and CI
-are untouched. Locally it runs from the Nibe integration's virtual environment,
-which has both:
+are untouched. It runs in a virtual environment of its own, since that plugin
+pins Home Assistant and its dependencies:
 
-    /Users/andrei/projects/HA-Nibe-Easyconf/.venv/bin/python -m pytest \\
-        -o asyncio_mode=auto tests/test_homeassistant.py
+    pip install pytest-homeassistant-custom-component
+    python -m pytest -o asyncio_mode=auto tests/test_homeassistant.py
 
 Both clients are stand-ins: nothing here opens a socket, and the plugin blocks
 sockets anyway. The Modbus stand-in offers the integration's own client surface

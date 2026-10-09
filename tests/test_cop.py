@@ -154,7 +154,7 @@ def test_energy_totals_absent_when_the_page_is_not_harvested(cop, const):
 
 
 def test_manufacturing_date_comes_out_of_the_serial(identity):
-    unit = identity.Identity(serial="720825408489")
+    unit = identity.Identity(serial="720825400001")
     assert unit.manufactured == "2025 vecka 40"
     # CTC's own example from their serial number guide.
     assert identity.Identity(serial="731217120719").manufactured == "2017 vecka 12"
@@ -163,7 +163,7 @@ def test_manufacturing_date_comes_out_of_the_serial(identity):
 def test_a_serial_that_is_not_one_gives_no_date(identity):
     assert identity.Identity(serial="7208").manufactured is None
     assert identity.Identity(serial=None).manufactured is None
-    assert identity.Identity(serial="720825998489").manufactured is None
+    assert identity.Identity(serial="720825990001").manufactured is None
 
 
 # ------------------------------------------------------------- dygnsvärdet
@@ -337,7 +337,7 @@ def test_no_operating_hours_without_the_history_page(cop, const):
 def test_a_later_read_fills_gaps_but_never_wipes(identity):
     # The display writes these values the first time their screen is shown,
     # so a read before that finds nothing and must not erase what is known.
-    known = identity.Identity(serial="720825408489", display_firmware="20260610")
+    known = identity.Identity(serial="720825400001", display_firmware="20260610")
     empty = identity.Identity()
     assert known.merged_with(empty).display_firmware == "20260610"
 
@@ -346,11 +346,11 @@ def test_a_later_read_fills_gaps_but_never_wipes(identity):
     merged = known.merged_with(later)
     assert merged.heatpump_model == "EA720M"
     assert merged.display_firmware == "20270101", "en uppdaterad firmware ska synas"
-    assert merged.serial == "720825408489", "det som inte lästes om ska ligga kvar"
+    assert merged.serial == "720825400001", "det som inte lästes om ska ligga kvar"
 
 
 def test_complete_only_when_every_field_is_known(identity):
-    partial = identity.Identity(serial="720825408489")
+    partial = identity.Identity(serial="720825400001")
     assert not partial.is_complete
     full = identity.Identity(serial="1", mac="2", display_firmware="3",
                              bootloader="4", heatpump_model="5", heatpump_firmware="6")

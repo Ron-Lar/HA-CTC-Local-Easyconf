@@ -150,7 +150,7 @@ def test_off_the_home_screen_the_caption_is_pressed_not_the_icon_above_it(identi
                       icon_above={40: {"System information": "Återställ larm"}})
     found = run(identity.async_read_identity_via_panel(panel))
     assert "Återställ larm" not in panel.pressed
-    assert found.serial == "720825408489"
+    assert found.serial == "720825400001"
 
 
 def test_on_the_home_screen_the_icon_above_the_caption_is_still_the_tile(identity, web_api):
@@ -166,4 +166,4 @@ def test_on_the_home_screen_the_icon_above_the_caption_is_still_the_tile(identit
                       icon_above={1: {"Advanced": "opens"}})
     found = run(identity.async_read_identity_via_panel(panel))
     assert "opens" in panel.pressed
-    assert found.serial == "720825408489"
+    assert found.serial == "720825400001"
