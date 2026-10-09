@@ -145,8 +145,16 @@ _ON = "on"
 #: compressor is working and what comes out of it.
 _KEY_READINGS = (
     "outdoor_temp", "room_temp_1", "dhw_temp", "hs1_flow", "return_temp",
-    "hp1_rps", HEAT_POWER, SUPPLIED_POWER, "cop_day", "degree_minutes",
+    "hp1_rps", HEAT_POWER, SUPPLIED_POWER, "cop_day", "cop_week", "cop_month",
+    "degree_minutes",
 )
+#: Keys the page has a place for before the integration makes the entity: the
+#: week's and the month's coefficient of performance (R25, built in another
+#: track). The builder leaves out what has no entity, so nothing shows until the
+#: sensor exists; the catalogue test (tests/test_dashboard.py) allows exactly
+#: these to be known here and not made, and asks for the set to be emptied the
+#: day the integration has caught up.
+AHEAD_OF_THE_INTEGRATION = frozenset({"cop_week", "cop_month"})
 #: The controls the overview carries, in the order they matter to someone
 #: standing in the house. The rest are one tab away.
 _QUICK_CONTROLS = ("ctl_room_setpoint_1", "ctl_dhw_mode", "ctl_extra_dhw", "ctl_price_mode")
@@ -210,16 +218,21 @@ _GRAPHS = (
     # binaries derived from hp1_status, which would be four bands of one register.
     # The SmartGrid mode is a band only where the installation has used it.
     ("graph_pump", "history", ("hp1_status", "system_status", "immersion_active", "sg_mode")),
+    # How well the heating curve is followed: the flow against its setpoint,
+    # with the outdoor temperature the setpoint is worked out from.
+    ("graph_flow", "history", ("hs1_flow", "hs1_flow_setpoint", "outdoor_temp")),
     ("graph_compressor", "history", ("hp1_rps", "degree_minutes")),
     ("graph_energy", "change", (ENERGY_OUT, "compressor_kwh", "immersion_kwh")),
     # 62214 only grows, so its change per day is the hours the compressor ran.
     ("graph_runtime", "change", ("compressor_hours",)),
-    ("graph_cop", "mean", ("cop_day",)),
+    # The day's figure, and beside it the month's as it stood that day.
+    ("graph_cop", "mean", ("cop_day", "cop_month")),
 )
 #: Which graphs each tab shows, in order: the overview a day of the circuit and
-#: a day of what the pump did; performance the rest.
+#: a day of what the pump did; performance what the overview does not already
+#: show, so the tab adds something rather than opening with the same picture.
 _OVERVIEW_GRAPHS = ("graph_temps", "graph_pump")
-_PERFORMANCE_GRAPHS = ("graph_temps", "graph_compressor", "graph_energy", "graph_runtime", "graph_cop")
+_PERFORMANCE_GRAPHS = ("graph_flow", "graph_compressor", "graph_energy", "graph_runtime", "graph_cop")
 _GRAPH_ICONS = {"graph_pump": "mdi:chart-timeline", "history": "mdi:chart-line"}
 
 
@@ -275,6 +288,7 @@ TEXT = {
         "other": "Övrigt",
         "graph_temps": "Temperaturer det senaste dygnet",
         "graph_pump": "Pumpen det senaste dygnet",
+        "graph_flow": "Framledning och börvärde det senaste dygnet",
         "graph_compressor": "Kompressorn det senaste dygnet",
         "graph_energy": "Energi per dygn",
         "graph_runtime": "Kompressorns gångtid per dygn",
@@ -331,6 +345,7 @@ TEXT = {
         "other": "Other",
         "graph_temps": "Temperatures over the last day",
         "graph_pump": "The pump over the last day",
+        "graph_flow": "Flow and setpoint over the last day",
         "graph_compressor": "The compressor over the last day",
         "graph_energy": "Energy per day",
         "graph_runtime": "Compressor running time per day",
@@ -626,10 +641,12 @@ class _Builder:
                          "entities": entities})
         else:
             # Long term statistics: a day at a time, which is what a counter or
-            # a coefficient of performance is worth looking at over a month.
+            # a coefficient of performance is worth looking at over a month. A
+            # bar per day, whatever the statistic: each day is one number, and
+            # a line drew values between the days that were never there.
             card.update({
                 "type": "statistics-graph",
-                "chart_type": "bar" if kind == "change" else "line",
+                "chart_type": "bar",
                 "period": "day",
                 "days_to_show": GRAPH_DAYS,
                 "stat_types": [kind],
