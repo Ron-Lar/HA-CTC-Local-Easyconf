@@ -501,13 +501,23 @@
       // asks for the same thing again is a tab through the field, or a blur
       // after Enter, and must not become a second write to the pump.
       let shown = NaN;
+      // The pump's own value back into the field, and counted as shown, so the
+      // next blur has nothing new to send. With no state, or one the number
+      // input will not hold (unavailable), the field ends up "", and shown has
+      // to be NaN rather than Number("") = 0, or a 0 typed on purpose afterwards
+      // would pass for already sent.
+      const restore = () => {
+        const stateObj = this._state(entityId);
+        field.value = stateObj ? stateObj.state : "";
+        const back = parseFieldValue(field.value);
+        shown = back === null ? NaN : back;
+      };
       const commit = () => {
         const value = parseFieldValue(field.value);
         if (value === null) {
           // Emptied, or holding something that is not a number: that asks for
           // nothing, so the pump's own value goes back in.
-          const stateObj = this._state(entityId);
-          field.value = stateObj ? stateObj.state : "";
+          restore();
           return;
         }
         if (value === shown) return;
