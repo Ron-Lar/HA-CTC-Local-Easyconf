@@ -99,12 +99,15 @@ class AlarmWatch:
         ]
         if not screens:
             return None
+        read = getattr(client, "async_alarm_candidates", None)
+        if read is None:
+            # A client that cannot read texts, a stand-in among them: no
+            # information, not "no alarm".
+            return None
         candidates: list[str] = []
         for screen in screens:
             try:
-                candidates.extend(
-                    await client.async_alarm_candidates(screen, values_by_screen[screen])
-                )
+                candidates.extend(await read(screen, values_by_screen[screen]))
             except CtcWebError as err:
                 _LOGGER.debug("Alarm texts of screen %s not read: %s", screen, err)
                 return None

@@ -28,6 +28,7 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     IDENTITY,
     MODEL,
     FakePanel,
+    _advance,
     _entity_id,
     _needs_auto_asyncio_mode,
     _set_up,
@@ -35,6 +36,7 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
 )
 
 from homeassistant.config_entries import ConfigEntryState  # noqa: E402
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
 from homeassistant.const import CONF_HOST  # noqa: E402
 from homeassistant.helpers import entity_registry as er  # noqa: E402
 from homeassistant.loader import async_get_integration  # noqa: E402
@@ -164,6 +166,7 @@ async def test_a_row_that_reads_the_marker_gets_its_entity_when_it_first_leaves_
     ServingPanel.vars = [72, 215, 9999, 9999]
     ServingPanel.header = []
     entry = await _set_up_with_the_page(hass)
+    await _advance(hass, MIN_FIRST_DELAY + 1)  # the first harvest is planned, not run in set-up (R6)
 
     assert hass.states.get(_row_entity(hass, "utetemperatur")).state == "7.2"
     assert hass.states.get(_row_entity(hass, "vp_in_ut_1")).state == "21.5"
@@ -263,6 +266,7 @@ async def test_the_alarm_the_panel_prints_becomes_a_sensor_and_an_episode(hass, 
     ServingPanel.vars = [72, 215, 9999, 9999]
     ServingPanel.header = [E017]
     entry = await _set_up_with_the_page(hass)
+    await _advance(hass, MIN_FIRST_DELAY + 1)  # the first harvest is planned, not run in set-up (R6)
 
     last = hass.states.get(_entity_id(hass, "sensor", "last_alarm"))
     assert last.state == E017

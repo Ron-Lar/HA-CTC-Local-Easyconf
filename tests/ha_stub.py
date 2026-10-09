@@ -124,6 +124,19 @@ def install() -> bool:
 
     # The identity sensors listen for a dispatcher signal; under the stand-in
     # nothing sends one, so connecting is a no-op that hands back an unsubscribe.
+    # The sensor platform tidies the entity registry of rows that vanished;
+    # under the stand-in the registry is empty and removing is a no-op.
+    registry = _module("homeassistant.helpers.entity_registry")
+
+    class _Registry:
+        entities: dict = {}
+
+        def async_remove(self, entity_id):
+            return None
+
+    registry.async_get = lambda hass: _Registry()
+    registry.async_entries_for_config_entry = lambda reg, entry_id: []
+
     dispatcher = _module("homeassistant.helpers.dispatcher")
     dispatcher.async_dispatcher_connect = lambda hass, signal, target: (lambda: None)
     dispatcher.async_dispatcher_send = lambda hass, signal, *args: None
