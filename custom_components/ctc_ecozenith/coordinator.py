@@ -573,12 +573,15 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         A recorded route is the surest, stepping back works inside a submenu,
         and the home screen is the last resort so the panel is at least left
-        somewhere sensible rather than deep in a menu.
+        somewhere sensible rather than deep in a menu. Stepping back is tried
+        once: without a route async_goto_page has already stepped back
+        towards the target, and asking again would press the same buttons on
+        the same pages, the home screen's among them where it is not known.
         """
         route = next((p.route for p in self.pages if p.page == target and p.route), None)
         if await self.client.async_goto_page(target, route):
             return True
-        if await self.client.async_step_back_to(target):
+        if route and await self.client.async_step_back_to(target):
             return True
         if self.home_page is not None and target != self.home_page:
             home_route = next(
