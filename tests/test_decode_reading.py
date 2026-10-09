@@ -129,7 +129,7 @@ def test_a_marker_on_an_enum_register_is_no_reading_at_all(modbus_api, const):
 
 @pytest.fixture()
 def modbus_coordinator(modbus_api):
-    ha_stub.install()
+    ha_stub.skip_unless_stubbed()
     coordinator = load("coordinator")
     client = modbus_api.CtcModbusClient("192.0.2.55")
     return coordinator.CtcModbusCoordinator(hass=object(), client=client, interval=30)

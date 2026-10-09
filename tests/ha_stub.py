@@ -4,11 +4,16 @@ The coordinator and the entity platforms import Home Assistant at module level,
 and the suite runs without it. What they touch at import time is small: a
 coordinator base class, its failure exception, the entity base classes and the
 device class enum. These stand-ins cover exactly that, and only when Home
-Assistant itself is not installed, so a run inside a real HA environment uses
-the real thing.
+Assistant itself is not installed; where it is, the modules load against the
+real thing and the tests that build on the stand-ins adapt rather than fail.
 
 The interval timer is recorded instead of started, which is what lets a test
-drive the control manager's keepalive by hand.
+drive the control manager's keepalive by hand. The recorder is a module level
+function so that ``record_timers`` can patch it in under a real Home Assistant
+too, where the real timer would ask a stand-in ``hass`` for its event loop. The
+one thing a real core cannot give a test without a running instance is the
+coordinator base class: its constructor asks the frame helper, so the fixtures
+that build a coordinator call ``skip_unless_stubbed`` and sit the run out.
 """
 
 from __future__ import annotations
@@ -18,10 +23,21 @@ import sys
 import types
 from typing import Generic, TypeVar
 
+import pytest
+
 T = TypeVar("T")
 
 #: Every (callback, interval) the control manager asked to have run.
 tracked: list[tuple] = []
+
+#: Why a fixture that needs the stand-ins sits out a run under a real core.
+SKIP_REASON = (
+    "needs the stubbed Home Assistant: a real core's coordinator asks the frame "
+    "helper, which only a running instance sets up"
+)
+
+#: True once the stand-ins have been put in place in this process.
+stubbed = False
 
 
 def _module(name: str, package: bool = False) -> types.ModuleType:
@@ -32,17 +48,49 @@ def _module(name: str, package: bool = False) -> types.ModuleType:
     return module
 
 
-def install() -> None:
-    """Put the stand-ins in place, unless Home Assistant is really there."""
+def async_track_time_interval(hass, action, interval):
+    """Record the timer instead of starting it; the undo takes the record away."""
+    entry = (action, interval)
+    tracked.append(entry)
+
+    def _unsub() -> None:
+        if entry in tracked:
+            tracked.remove(entry)
+
+    return _unsub
+
+
+def _name_the_config_entry_type() -> None:
+    # The platforms do ``from . import CtcConfigEntry``, which would pull the
+    # package's own __init__ and all of Home Assistant with it. The package is
+    # a stub here (see conftest), so the name is simply given to it, under a
+    # real core as well: the modules still load into the stub package there.
+    package = sys.modules.get("ctc_ecozenith")
+    if package is not None and not hasattr(package, "CtcConfigEntry"):
+        package.CtcConfigEntry = object
+
+
+def install() -> bool:
+    """Put the stand-ins in place, unless Home Assistant is really there.
+
+    Returns True when the stand-ins are what ``homeassistant`` resolves to, now
+    or from an earlier call, and False when the real package is importable, so
+    a fixture can tell which world it is in.
+    """
+    global stubbed
+    _name_the_config_entry_type()
+    if stubbed:
+        return True
     if "homeassistant" in sys.modules:
-        return
+        return False
     try:
         import homeassistant  # noqa: F401
 
-        return
+        return False
     except ImportError:
         pass
 
+    stubbed = True
     _module("homeassistant", package=True)
     core = _module("homeassistant.core")
     core.HomeAssistant = object
@@ -72,17 +120,6 @@ def install() -> None:
     coordinator.CoordinatorEntity = CoordinatorEntity
 
     event = _module("homeassistant.helpers.event")
-
-    def async_track_time_interval(hass, action, interval):
-        entry = (action, interval)
-        tracked.append(entry)
-
-        def _unsub() -> None:
-            if entry in tracked:
-                tracked.remove(entry)
-
-        return _unsub
-
     event.async_track_time_interval = async_track_time_interval
 
     platform = _module("homeassistant.helpers.entity_platform")
@@ -139,10 +176,25 @@ def install() -> None:
     const.UnitOfPower = UnitOfPower
     const.UnitOfTemperature = UnitOfTemperature
     const.UnitOfTime = UnitOfTime
+    return True
 
-    # The platforms do ``from . import CtcConfigEntry``, which would pull the
-    # package's own __init__ and all of Home Assistant with it. The package is
-    # a stub here (see conftest), so the name is simply given to it.
-    package = sys.modules.get("ctc_ecozenith")
-    if package is not None and not hasattr(package, "CtcConfigEntry"):
-        package.CtcConfigEntry = object
+
+def skip_unless_stubbed() -> None:
+    """Install the stand-ins, or skip the test when a real core is in the way."""
+    if not install():
+        pytest.skip(SKIP_REASON)
+
+
+def record_timers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Have the control manager's timer recorded in ``tracked`` for this test.
+
+    The manager imports ``async_track_time_interval`` from the event helper at
+    each call, so patching the module attribute is enough whichever module it
+    is: the stand-in, where this is already the function, or the real one,
+    whose timer would want ``hass.loop``. The record starts empty.
+    """
+    install()
+    import homeassistant.helpers.event as event
+
+    monkeypatch.setattr(event, "async_track_time_interval", async_track_time_interval)
+    tracked.clear()

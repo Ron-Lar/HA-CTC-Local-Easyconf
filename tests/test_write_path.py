@@ -130,19 +130,18 @@ def test_an_error_reply_is_an_error_to_the_caller(modbus_api):
 
 
 @pytest.fixture()
-def manager_and_fake(modbus_api):
+def manager_and_fake(modbus_api, monkeypatch):
     """A CtcControlManager over a real client over the fake connection.
 
     This is the path a future service, SmartGrid feature or EMS would take, so
     the guard has to hold when the manager is called directly as well.
     """
-    ha_stub.install()
+    # The keepalive timer is not under test here; ha_stub records rather than
+    # starts it, under a real Home Assistant too, and starts the record empty.
+    ha_stub.record_timers(monkeypatch)
     coordinator = load("coordinator")
     client, fake = _client(modbus_api)
     manager = coordinator.CtcControlManager(hass=object(), client=client)
-    # The keepalive timer is not under test here; ha_stub records rather than
-    # starts it, and a leftover entry from another test must not confuse this one.
-    ha_stub.tracked.clear()
     return manager, fake
 
 

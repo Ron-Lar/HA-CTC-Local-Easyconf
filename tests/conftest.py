@@ -29,8 +29,32 @@ def load(name: str):
     spec = importlib.util.spec_from_file_location(full, COMPONENT / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
     sys.modules[full] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        # A module that failed halfway must not be found whole by the next
+        # test: that showed as "module has no attribute" far from the cause.
+        sys.modules.pop(full, None)
+        raise
     return module
+
+
+def pytest_configure(config):
+    """Run pytest-asyncio in auto mode wherever it is loaded.
+
+    The suite itself is synchronous throughout and never notices the mode. But
+    pytest-homeassistant-custom-component, which test_homeassistant.py needs,
+    brings autouse fixtures that are async, and in strict mode every test in the
+    session errors at set-up over them. Switching the mode here, rather than in
+    pytest.ini, keeps an environment without pytest-asyncio free of a warning
+    about an unknown option. A mode given on the command line, or anything but
+    the plugin's default in the ini or through -o, is left as it is.
+    """
+    if not hasattr(config.option, "asyncio_mode"):
+        return  # pytest-asyncio is not loaded; nothing registered the option
+    if config.option.asyncio_mode is not None or config.getini("asyncio_mode") != "strict":
+        return
+    config.option.asyncio_mode = "auto"
 
 
 @pytest.fixture(scope="session")
