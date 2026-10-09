@@ -7,9 +7,11 @@ Assistant keeps sending states and the pump is moved at the panel. The card is
 mounted for real (tests/card_dom.js stands in for the browser), so the field's
 own `shown` bookkeeping is under test, not a copy of it.
 
-The rule from R45 is the point. An emptied field asks for nothing, and what
+Two rules from R45 are the point. An emptied field asks for nothing, and what
 goes back into it counts as shown, so the next blur never writes the pump's
-own value into the control register (F7.1).
+own value into the control register (F7.1). A refused write leaves the field
+showing the pump's value, with the refused number no longer counted as shown,
+so Enter on it tries again and a blur sends nothing (F7.2).
 """
 
 from __future__ import annotations
@@ -103,3 +105,50 @@ def test_a_zero_typed_after_an_empty_state_is_sent():
         widget="field",
     ) == {"calls": [0], "field": "0", "open": 0, "pending": "1"}
 
+
+# -------------------------------------------------------------------- F7.2
+
+def test_enter_on_a_refused_value_tries_again_and_the_field_shows_the_pumps_value():
+    # A write refused for a passing reason (the Modbus way busy, a timeout):
+    # the field goes back to the pump's value at once, the row stops looking
+    # busy, and Enter on the same number is a new attempt rather than dead.
+    assert _play("""
+      t.focus(); t.type("22"); t.enter(); await t.refuse();
+      const after = t.result();
+      t.type("22"); t.enter(); await t.accept();
+      if (after.field !== "21.5" || after.pending !== "0") throw new Error(JSON.stringify(after));
+    """) == {"calls": [22, 22], "field": "22", "open": 0, "pending": "1"}
+
+
+def test_a_refusal_does_not_turn_the_next_blur_into_a_write():
+    # 5 is refused (under min 10). Neither leaving the field straight away nor
+    # emptying it, pressing Enter and leaving sends the pump's own 21.5.
+    assert _play("""
+      t.focus(); t.type("5"); t.enter(); await t.refuse(); t.tab();
+      t.focus(); t.type("5"); t.enter(); await t.refuse();
+      t.type(""); t.enter(); t.tab();
+    """) == {"calls": [5, 5], "field": "21.5", "open": 0, "pending": "0"}
+
+
+def test_a_refusal_leaves_a_number_typed_since_alone():
+    # The user has already typed 23 when the refusal of 22 comes back: 23 is
+    # not overwritten, and Enter sends it.
+    assert _play("""
+      t.focus(); t.type("22"); t.enter();
+      t.type("23");
+      await t.refuse();
+      const kept = t.field.value;
+      t.enter(); await t.accept();
+      if (kept !== "23") throw new Error("the refusal overwrote " + kept);
+    """) == {"calls": [22, 23], "field": "23", "open": 0, "pending": "1"}
+
+
+def test_a_refusal_arriving_after_the_field_was_left_clears_the_refused_number():
+    # Enter, then Tab, then the refusal: the field is not held, but no state
+    # has come in to correct it, so the refused 22 would stay on the screen as
+    # if taken. It goes back to 21.5, and a tab through afterwards sends nothing.
+    assert _play("""
+      t.focus(); t.type("22"); t.enter(); t.tab();
+      await t.refuse();
+      t.focus(); t.tab();
+    """) == {"calls": [22], "field": "21.5", "open": 0, "pending": "0"}
