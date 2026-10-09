@@ -161,6 +161,19 @@ def test_a_longer_absence_harvests_as_soon_as_the_platforms_are_up(harvest):
     assert harvest.first_harvest_delay(stored, INTERVAL, NOW) == harvest.MIN_FIRST_DELAY
 
 
+def test_a_moment_from_the_future_puts_the_first_harvest_off_by_one_interval_at_most(harvest):
+    # The host's clock was a day ahead when the harvest was written and has
+    # been set right since: an interval from now, not an interval and a day.
+    stored = _stored(harvest, timedelta(days=-1))
+    assert harvest.first_harvest_delay(stored, INTERVAL, NOW) == INTERVAL
+    # Seconds ahead, as a virtual machine's clock drifts: the same.
+    stored = _stored(harvest, timedelta(seconds=-90))
+    assert harvest.first_harvest_delay(stored, INTERVAL, NOW) == INTERVAL
+    # And the floor still holds under the cap.
+    stored = _stored(harvest, timedelta(days=-1))
+    assert harvest.first_harvest_delay(stored, 2, NOW) == harvest.MIN_FIRST_DELAY
+
+
 def test_the_latest_moment_counts_whichever_it_is(harvest):
     older = NOW - timedelta(hours=2)
     stored = harvest.StoredHarvest(
