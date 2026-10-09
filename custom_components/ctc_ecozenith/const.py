@@ -351,9 +351,11 @@ MODBUS_SENSORS: Final[tuple[ModbusSensor, ...]] = (
     ModbusSensor("control_sw", 62244, "Programversion styrenhet", 1, None, None, None, icon="mdi:chip", diagnostic=True),
     ModbusSensor("control_sw_year", 62245, "Programversion styrenhet, år", 1, None, None, None, icon="mdi:chip", diagnostic=True),
     # 62331 is documented as supplied power per heat pump. On an i550 Pro it
-    # reads 65.5 with the compressor stopped, which cannot be kilowatts, so it
-    # is off by default until it can be confirmed on a running unit.
-    ModbusSensor("hp1_power", 62331, "Tillförd effekt värmepump (62331)", 0.1, "kW", _P),
+    # reads 65.5 with the compressor stopped, which cannot be kilowatts, so the
+    # explanation says the value is unconfirmed. The register number is the
+    # source row's to show, as for every other Modbus row, not the name's: the
+    # unique_id is built from the key, so the name is free to change.
+    ModbusSensor("hp1_power", 62331, "Tillförd effekt värmepump", 0.1, "kW", _P),
     ModbusSensor("compressor_kwh", 62341, "Kompressorenergi", 1, "kWh", _E, "total_increasing", count=2),
 )
 

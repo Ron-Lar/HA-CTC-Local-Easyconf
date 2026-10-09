@@ -120,8 +120,9 @@ MODBUS: dict[str, str] = {
     "control_sw": "Styrenhetens programversion så som CTC rapporterar den. Numret går bara att jämföra mellan enheter av samma modell.",
     "control_sw_year": "Året för styrenhetens programversion.",
     "hp1_power": (
-        "Dokumenterad som tillförd effekt per värmepump, men visar 65,5 på en i550 Pro med "
-        "stillastående kompressor. Avstängd som standard tills värdet har bekräftats på en pump i drift."
+        "Dokumenterad som tillförd effekt per värmepump, men visar 65,5 kW på en i550 Pro med "
+        "stillastående kompressor, så talet är inte bekräftat på en pump i drift. Displayens "
+        "rad Tillförd effekt visar samma storhet ur pumpens egen beräkning."
     ),
     "compressor_kwh": (
         "El som kompressorn har förbrukat sedan start. Samma räknare som Tillförd energi totalt i "
