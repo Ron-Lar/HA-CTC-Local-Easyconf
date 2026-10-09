@@ -68,7 +68,7 @@ def test_only_the_identity_differing_is_told_apart_from_a_real_change(identity):
 def test_the_background_adopts_the_identity_instead_of_writing_it_for_a_reload():
     source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
     catch_up = source.split("async def _async_catch_up")[1].split("\ndef ")[0]
-    assert "_async_adopt_identity(hass, entry, runtime, found)" in catch_up
+    assert "_async_adopt_identity(hass, entry, runtime, identity)" in catch_up
     assert "changed[CONF_IDENTITY]" not in catch_up, "identiteten går inte via omladdningen längre"
     adopt = source.split("def _async_adopt_identity")[1].split("\nasync def ")[0]
     # Everything that reads the identity is told, and the options come last.
