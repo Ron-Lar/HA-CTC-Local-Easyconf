@@ -196,16 +196,39 @@ _TECHNICAL = (
       "control_sw", "control_sw_year", "display_harvest")),
 )
 
-#: The graphs, in the order performance shows them: (id, kind, keys). A graph
-#: whose entities this installation does not have is left out, which is how a
-#: unit without a history page ends up without a coefficient of performance.
+#: The graphs: (id, kind, keys). "history" is a day of readings as Home
+#: Assistant's history graph draws them, lines for numbers and timeline bands
+#: for states; "change" and "mean" are a month of long term statistics, a bar
+#: per day. A graph whose entities this installation does not have is left out,
+#: which is how a unit without a history page ends up without a coefficient of
+#: performance, and a reading only ever zero is left out of it (seen.py), which
+#: is how an i550 Pro whose compressor hours stand at zero gets no running time.
 _GRAPHS = (
     ("graph_temps", "history",
      ("outdoor_temp", "hs1_flow", "return_temp", "dhw_temp", "room_temp_1")),
+    # What the pump did when: the two statuses and the heater as bands, not the
+    # binaries derived from hp1_status, which would be four bands of one register.
+    # The SmartGrid mode is a band only where the installation has used it.
+    ("graph_pump", "history", ("hp1_status", "system_status", "immersion_active", "sg_mode")),
     ("graph_compressor", "history", ("hp1_rps", "degree_minutes")),
     ("graph_energy", "change", (ENERGY_OUT, "compressor_kwh", "immersion_kwh")),
+    # 62214 only grows, so its change per day is the hours the compressor ran.
+    ("graph_runtime", "change", ("compressor_hours",)),
     ("graph_cop", "mean", ("cop_day",)),
 )
+#: Which graphs each tab shows, in order: the overview a day of the circuit and
+#: a day of what the pump did; performance the rest.
+_OVERVIEW_GRAPHS = ("graph_temps", "graph_pump")
+_PERFORMANCE_GRAPHS = ("graph_temps", "graph_compressor", "graph_energy", "graph_runtime", "graph_cop")
+_GRAPH_ICONS = {"graph_pump": "mdi:chart-timeline", "history": "mdi:chart-line"}
+
+
+def _graph(graph_id: str) -> tuple[str, str, tuple[str, ...]]:
+    return next(graph for graph in _GRAPHS if graph[0] == graph_id)
+
+
+def _graph_icon(graph_id: str, kind: str) -> str:
+    return _GRAPH_ICONS.get(graph_id) or _GRAPH_ICONS.get(kind) or "mdi:chart-bar"
 
 #: The sections of readings, where a value only ever zero is left out.
 _LEARNT_SECTIONS = frozenset({"temperatures", "hot_water", "energy", "compressor"})
@@ -251,8 +274,10 @@ TEXT = {
         "unit": "Om enheten",
         "other": "Övrigt",
         "graph_temps": "Temperaturer det senaste dygnet",
+        "graph_pump": "Pumpen det senaste dygnet",
         "graph_compressor": "Kompressorn det senaste dygnet",
         "graph_energy": "Energi per dygn",
+        "graph_runtime": "Kompressorns gångtid per dygn",
         "graph_cop": "Värmefaktor per dygn",
         "filter": "Sök bland värdena",
         "empty": "Inget värde matchar sökningen.",
@@ -305,8 +330,10 @@ TEXT = {
         "unit": "About the unit",
         "other": "Other",
         "graph_temps": "Temperatures over the last day",
+        "graph_pump": "The pump over the last day",
         "graph_compressor": "The compressor over the last day",
         "graph_energy": "Energy per day",
+        "graph_runtime": "Compressor running time per day",
         "graph_cop": "COP per day",
         "filter": "Search the values",
         "empty": "No value matches the search.",
@@ -648,20 +675,28 @@ def overview_sections(
 ) -> list[dict[str, Any]]:
     """What the pump is doing right now: status, the near controls, a day, key figures."""
     build = _Builder(pump, text, ha_version)
-    temps = next(graph for graph in _GRAPHS if graph[0] == "graph_temps")
     sections = [
         # The whole width: a line of chips reads as one line.
         _section(_heading(str(pump.get("name") or TITLE), ICON),
                  [build.chips(_STATUS_TILES + _STATUS_ROWS)], column_span=4),
         _section(_heading(text["quick"], "mdi:tune-variant"),
                  [build.controls(_QUICK_CONTROLS)]),
-        # Twice the width of a column: a day of five lines needs the room.
-        _section(_heading(text[temps[0]], "mdi:chart-line"),
-                 [build.graph(*temps)], column_span=2),
+        # Twice the width of a column: a day of five lines, or of four bands
+        # of what the pump did when, needs the room.
+        *(_graph_section(build, text, graph_id) for graph_id in _OVERVIEW_GRAPHS),
         _section(_heading(text["readings"], "mdi:gauge"),
                  [build.readings(_KEY_READINGS)], column_span=4),
     ]
     return [section for section in sections if section]
+
+
+def _graph_section(
+    build: _Builder, text: Mapping[str, str], graph_id: str
+) -> dict[str, Any] | None:
+    """One graph under its heading, two columns wide, or None without entities."""
+    _id, kind, keys = _graph(graph_id)
+    return _section(_heading(text[graph_id], _graph_icon(graph_id, kind)),
+                    [build.graph(graph_id, kind, keys)], column_span=2)
 
 
 def controls_sections(
@@ -689,9 +724,7 @@ def performance_sections(
     """How the pump has run: the graphs, then every reading in its own section."""
     build = _Builder(pump, text, ha_version)
     sections: list[dict[str, Any] | None] = [
-        _section(_heading(text[graph_id], "mdi:chart-bar" if kind == "change" else "mdi:chart-line"),
-                 [build.graph(graph_id, kind, keys)], column_span=2)
-        for graph_id, kind, keys in _GRAPHS
+        _graph_section(build, text, graph_id) for graph_id in _PERFORMANCE_GRAPHS
     ]
     for section_id, icon, keys in _READINGS + _TECHNICAL:
         learnt = section_id in _LEARNT_SECTIONS
