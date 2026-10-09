@@ -220,8 +220,12 @@ _GRAPHS = (
      ("outdoor_temp", "hs1_flow", "return_temp", "dhw_temp", "room_temp_1")),
     # What the pump did when: the two statuses and the heater as bands, not the
     # binaries derived from hp1_status, which would be four bands of one register.
-    # The SmartGrid mode is a band only where the installation has used it.
-    ("graph_pump", "history", ("hp1_status", "system_status", "immersion_active", "sg_mode")),
+    # The SmartGrid mode is not among them: its state is a label, "Normal" on a
+    # pump that never uses it, and a label is never zero, so the rule that
+    # leaves out a reading only ever zero (seen.py) cannot tell such a pump
+    # from one that does, and the band would lie flat on both. The mode stays
+    # a chip, as itself and as SmartGrid active while it is anything else.
+    ("graph_pump", "history", ("hp1_status", "system_status", "immersion_active")),
     # How well the heating curve is followed: the flow against its setpoint,
     # with the outdoor temperature the setpoint is worked out from.
     ("graph_flow", "history", ("hs1_flow", "hs1_flow_setpoint", "outdoor_temp")),
@@ -758,7 +762,7 @@ def overview_sections(
                  [build.chips(_STATUS_TILES + _STATUS_ROWS)], column_span=4),
         _section(_heading(text["quick"], "mdi:tune-variant"),
                  [build.controls(_QUICK_CONTROLS)]),
-        # Twice the width of a column: a day of five lines, or of four bands
+        # Twice the width of a column: a day of five lines, or of three bands
         # of what the pump did when, needs the room.
         *(_graph_section(build, text, graph_id) for graph_id in _OVERVIEW_GRAPHS),
         _section(_heading(text["readings"], "mdi:gauge"),
