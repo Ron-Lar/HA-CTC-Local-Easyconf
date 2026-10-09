@@ -21,9 +21,15 @@ not be counted as starts.
 The first sample sets the baseline and raises nothing, so a restart of Home
 Assistant never reports the state it finds as a change. A poll that failed is
 no sample; after an outage the next sample is compared with the last one
-before it, so a stop that happened in between is dated at the recovery.
-Nothing is stored: the counts since midnight start over with Home Assistant,
-and the entities say from when they count.
+before it, so a stop that happened in between is dated at the recovery. Its
+length is another matter: a run was only seen running up to the last known
+sample, and when the stop turns up more than GAP_UNKNOWN after that sample,
+the end lies somewhere in the gap and the length is not known. It is left
+empty then, as it is for a run already under way at the baseline, rather than
+measured to the recovery, which would book an afternoon of silence as an
+afternoon of running in the long term statistics. Nothing is stored: the
+counts since midnight start over with Home Assistant, and the entities say
+from when they count.
 
 Free of Home Assistant, like keepalive.py and patience.py: the clock is handed
 in as an aware datetime in local time, which is what midnight is judged on.
@@ -33,7 +39,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Callable
 
 from .catalogue import is_period_count
@@ -88,6 +94,14 @@ OUTDOOR_KEY = "outdoor_temp"
 #: Modbus 62234, the compressor's minutes over the last day, for the mean run.
 MINUTES_24H_KEY = "compressor_hours_24h"
 
+#: How long the codes may have said nothing before an end seen after the
+#: silence has no known length. Twenty polls at the default half minute: a
+#: communication error that comes and goes, or a couple of rounds that timed
+#: out, still measure the run; an outdoor unit switched off for the afternoon
+#: with the status register at 32, or a Modbus line down for hours, does not
+#: turn the silence into running time.
+GAP_UNKNOWN = timedelta(minutes=10)
+
 
 @dataclass(frozen=True)
 class Sample:
@@ -141,7 +155,11 @@ class Run:
 
     #: None when the run was already under way at the first sample.
     started: datetime | None
+    #: When the stop was seen, which after a silence is the recovery.
     ended: datetime
+    #: None without a start, and None when the stop was first seen more than
+    #: GAP_UNKNOWN after the last sample that said anything: the run ended
+    #: somewhere in the silence, and how long it ran is not known.
     minutes: float | None
 
 
@@ -153,6 +171,8 @@ class Defrost:
     #: Modbus 62000 at the start: a defrost at plus five is not one at minus ten.
     outdoor: float | None
     ended: datetime | None = None
+    #: None while it goes on, and None when its end was first seen after a
+    #: silence longer than GAP_UNKNOWN, as for a run.
     minutes: float | None = None
 
 
@@ -187,10 +207,16 @@ LOG_LENGTH = 100
 class TransitionWatch:
     """The heat pump's state from sample to sample, and what changed between them."""
 
-    def __init__(self, keep: int = LOG_LENGTH) -> None:
+    def __init__(self, keep: int = LOG_LENGTH, gap: timedelta = GAP_UNKNOWN) -> None:
         self._hp: int | None = None
         self._system: int | None = None
         self._sg: int | None = None
+        #: The longest silence across which an end is still measured.
+        self._gap = gap
+        #: When the heat pump's code last said anything about the compressor.
+        #: An end seen longer than ``gap`` after it lies somewhere in between
+        #: and gets no length.
+        self._known_at: datetime | None = None
         #: Every transition found, numbered from one, the newest last.
         self.seq = 0
         self.log: deque[Transition] = deque(maxlen=keep)
@@ -274,16 +300,26 @@ class TransitionWatch:
         code = sample.hp_status
         if not hp_code_known(code):
             return []
+        at = sample.at
+        known_before, self._known_at = self._known_at, at
         before, self._hp = self._hp, code
         if before is None or before == code:
             return []
-        at = sample.at
         found: list[Transition] = []
 
         def add(kind: str, minutes: float | None = None) -> None:
             found.append(
                 self._transition(kind, at, before, code, STATUS_HEATPUMP, sample.outdoor, minutes)
             )
+
+        def ended(since: datetime | None) -> float | None:
+            # The length of what just ended, where its start was seen and the
+            # codes did not fall silent for longer than the gap before the end
+            # was seen: an end that turns up after a long silence happened
+            # somewhere in it, and a length measured to now would be made up.
+            if known_before is None or at - known_before > self._gap:
+                return None
+            return _minutes(since, at)
 
         was_run, now_run = before in HP_RUN_CODES, code in HP_RUN_CODES
         was_defrost, now_defrost = before == HP_DEFROST_CODE, code == HP_DEFROST_CODE
@@ -292,13 +328,13 @@ class TransitionWatch:
         # sample read in the order they happened. A defrost ends before the run
         # it was part of, and is no stop by itself: the compressor turns on.
         if was_defrost and not now_defrost:
-            minutes = _minutes(self.defrosting_since, at)
+            minutes = ended(self.defrosting_since)
             if self.last_defrost is not None and self.last_defrost.ended is None:
                 self.last_defrost = replace(self.last_defrost, ended=at, minutes=minutes)
             self.defrosting_since = None
             add(EVENT_DEFROST_END, minutes)
         if was_run and not now_run:
-            minutes = _minutes(self.running_since, at)
+            minutes = ended(self.running_since)
             self.last_run = Run(self.running_since, at, minutes)
             self.running_since = None
             add(EVENT_COMPRESSOR_STOP, minutes)
