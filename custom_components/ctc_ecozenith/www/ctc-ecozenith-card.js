@@ -96,10 +96,20 @@
     }
     if (CONTROL_DOMAINS.has(domain) && state === "unknown") return states.unset;
     if (unknownMeans && state === "unknown") return states[unknownMeans];
-    if (zeroMeans && parseFieldValue(state) === 0 && attributes["styrning aktiv"] !== "ja") {
+    if (zeroMeans && parseFieldValue(state) === 0 && !controlActive(attributes)) {
       return states[zeroMeans];
     }
     return undefined;
+  }
+
+  /** Whether an override written from Home Assistant is in force on a control.
+   *  The integration says it under the English `control_active`, a boolean,
+   *  and under the Swedish `styrning aktiv`, "ja" or "nej", which goes in a
+   *  later major version; an older integration sends only the Swedish one. */
+  function controlActive(attributes) {
+    const english = attributes.control_active;
+    if (english !== undefined && english !== null) return english === true;
+    return attributes["styrning aktiv"] === "ja";
   }
 
   if (typeof customElements === "undefined") {

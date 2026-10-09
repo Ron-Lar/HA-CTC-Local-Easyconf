@@ -26,6 +26,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CtcConfigEntry
+from .attribute_names import with_english
 from .const import CONTROL_NUMBERS, ControlRegister
 from .keys import unique_id
 from .entity import async_switch_on_new_defaults
@@ -108,13 +109,15 @@ class CtcControlNumber(CoordinatorEntity, NumberEntity):
         overriding = self._register.address in control.active
         attributes = {
             "styrning aktiv": "ja" if overriding else "nej",
+            # The English twin is a boolean rather than a Swedish word.
+            "control_active": overriding,
             "register": str(self._register.address),
             "not": "flyktigt register, nollställs av pumpen cirka fem minuter efter sista skrivningen",
         }
         # "Aktiv" is claimed only from a write that reached the controller, and
         # these two say when that was and how long the unit holds it.
         attributes.update(control.written_attributes(self._register.address))
-        return attributes
+        return with_english(attributes)
 
     async def async_set_native_value(self, value: float) -> None:
         raw = int(round(value / self._register.scale))
