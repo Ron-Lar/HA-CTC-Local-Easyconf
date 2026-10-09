@@ -54,6 +54,30 @@ def test_pump_speeds_carry_one_decimal(modbus_api, const):
     assert _reading(modbus_api, const, "hp1_charge_pump", 662).value == pytest.approx(66.2)
 
 
+# ------------------------------------------------- one unsigned counter
+
+
+@pytest.mark.parametrize(
+    "word, expected", [(32768, 32768), (32769, 32769), (40000, 40000), (65535, 65535), (32767, None)]
+)
+def test_a_one_word_counter_is_read_without_a_sign(modbus_api, const, word, expected):
+    """62191 counts kWh in one word. Read with a sign, 32 769 came out as -32 767,
+    which Home Assistant refuses for a total that only grows, so the statistics
+    stood still for the rest of the word. 32767 stays the one word marker: one
+    reading's gap, which a total tolerates."""
+    assert _reading(modbus_api, const, "immersion_kwh", word).value == expected
+
+
+def test_a_counter_in_one_word_is_unsigned_and_what_can_go_below_zero_is_not(const):
+    for description in const.MODBUS_SENSORS + const.MODBUS_SETTINGS:
+        if description.count == 1 and description.state_class == "total_increasing":
+            assert not description.signed, description.key
+    # Degree minutes run negative when the house is behind, and a temperature
+    # does in winter: the sign stays, and with it the negative markers.
+    assert _description(const, "degree_minutes").signed
+    assert _description(const, "outdoor_temp").signed
+
+
 # --------------------------------------------------------- 32 bit counters
 
 

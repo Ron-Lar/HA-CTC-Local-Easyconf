@@ -288,7 +288,11 @@ MODBUS_SENSORS: Final[tuple[ModbusSensor, ...]] = (
     ModbusSensor("current_l1", 62171, "Ström L1", 0.1, "A", "current"),
     ModbusSensor("current_l2", 62172, "Ström L2", 0.1, "A", "current"),
     ModbusSensor("current_l3", 62173, "Ström L3", 0.1, "A", "current"),
-    ModbusSensor("immersion_kwh", 62191, "Elpatron energi", 1, "kWh", _E, "total_increasing"),
+    # A lifetime counter in one word, so it is read without a sign: with one,
+    # 32 769 kWh would come out as -32 767, which Home Assistant refuses for a
+    # total that only grows. The temperatures around it need the sign; this is
+    # the only one word register that can pass 32 767 at all.
+    ModbusSensor("immersion_kwh", 62191, "Elpatron energi", 1, "kWh", _E, "total_increasing", signed=False),
     ModbusSensor("hp1_rps", 62193, "Kompressorvarvtal", 0.1, "rps", None, icon="mdi:speedometer"),
     ModbusSensor("room_temp_1", 62203, "Rumstemperatur", 0.1, "°C", _T),
     ModbusSensor("room_temp_2", 62204, "Rumstemperatur 2", 0.1, "°C", _T),
