@@ -133,6 +133,22 @@ _MENU_LAST: dict[str, float] = {}
 MENU_READ_TRIES = 3
 MENU_READ_RETRY = timedelta(minutes=5)
 
+
+def menu_read_from_the_options(entry_id: str, now: float) -> None:
+    """Book a reading of the menu that the options form made just now.
+
+    The tries are for the reading owed after an update, and they stop after
+    MENU_READ_TRIES misses so a panel that never answers is not walked over and
+    over. Somebody ticking "read the menu again" is asking for a reading now,
+    after those misses as much as before them: the count starts over, so the
+    background reading that follows a form whose own reading missed is owed
+    its tries again rather than left a version behind until a restart. The
+    form's reading counts as the last attempt, so that background reading
+    waits its pause before walking the panel again.
+    """
+    _MENU_TRIES.pop(entry_id, None)
+    _MENU_LAST[entry_id] = now
+
 ISSUE_PAGES = "pages_missing"
 ISSUE_HISTORY_PAGE = "history_page_missing"
 ISSUE_IDENTITY = "identity_incomplete"

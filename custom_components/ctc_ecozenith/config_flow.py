@@ -402,44 +402,48 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         self._fresh = False
         #: The operation data root the reading found, if it found one.
         self._root: int | None = None
+        #: What the first form said, kept until the form after "read the
+        #: menu again" is saved: a tick in that box used to throw the rest of
+        #: the form away, intervals and tick boxes alike.
+        self._pending: dict[str, Any] = {}
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         if user_input is not None:
-            if user_input.get("rescan"):
-                return await self.async_step_rescan()
-            was_on = self._entry.options.get(CONF_SEND_STATISTICS, True)
-            now_on = bool(user_input.get(CONF_SEND_STATISTICS, True))
-            if was_on and not now_on:
-                # Switching it off erases what has already been sent, rather
-                # than merely going quiet. Imported here rather than at the top:
-                # stats.py pulls in Home Assistant, and this module is imported
-                # by tests that run without it.
-                from .stats import async_forget_install
-
-                await async_forget_install(self.hass, self._entry, DOMAIN)
-            menu = pages_from_storage(self._entry.options.get(CONF_MENU))
+            options = self._entry.options
+            menu = pages_from_storage(options.get(CONF_MENU))
             chosen = {int(page) for page in user_input.get(CONF_SLOW_PAGES, [])}
             pages = (
                 {CONF_SLOW_PAGES: pages_to_storage([p for p in menu if p.page in chosen])}
                 if menu
                 else {}
             )
-            return self.async_create_entry(
-                title="",
-                data={
-                    **self._entry.options,
-                    **pages,
-                    CONF_VISIT_SYSTEM_INFO: bool(user_input.get(CONF_VISIT_SYSTEM_INFO, True)),
-                    CONF_CHECK_UPDATES: bool(user_input.get(CONF_CHECK_UPDATES, True)),
-                    CONF_FAST_INTERVAL: int(user_input[CONF_FAST_INTERVAL]),
-                    CONF_SLOW_INTERVAL: int(user_input[CONF_SLOW_INTERVAL]),
-                    CONF_RESTORE_PAGE: user_input[CONF_RESTORE_PAGE],
-                    CONF_ENABLE_CONTROL: user_input[CONF_ENABLE_CONTROL],
-                    CONF_SEND_STATISTICS: now_on,
-                },
-            )
+            self._pending = {
+                **pages,
+                CONF_VISIT_SYSTEM_INFO: bool(user_input.get(CONF_VISIT_SYSTEM_INFO, True)),
+                CONF_CHECK_UPDATES: bool(user_input.get(CONF_CHECK_UPDATES, True)),
+                CONF_FAST_INTERVAL: int(
+                    user_input.get(CONF_FAST_INTERVAL, options.get(CONF_FAST_INTERVAL, DEFAULT_FAST_INTERVAL))
+                ),
+                CONF_SLOW_INTERVAL: int(
+                    user_input.get(CONF_SLOW_INTERVAL, options.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL))
+                ),
+                CONF_RESTORE_PAGE: bool(
+                    user_input.get(CONF_RESTORE_PAGE, options.get(CONF_RESTORE_PAGE, True))
+                ),
+                CONF_ENABLE_CONTROL: bool(
+                    user_input.get(CONF_ENABLE_CONTROL, options.get(CONF_ENABLE_CONTROL, True))
+                ),
+                CONF_SEND_STATISTICS: bool(user_input.get(CONF_SEND_STATISTICS, True)),
+            }
+            if user_input.get("rescan"):
+                # The rest of the form rides along to the next step and is
+                # saved with it. Nothing is written yet: a write reloads the
+                # entry, and the walk below must not meet the reload's own
+                # first harvest on the panel.
+                return await self.async_step_rescan()
+            return await self._async_save(self._pending)
 
         options = self._entry.options
         menu = pages_from_storage(options.get(CONF_MENU))
@@ -512,6 +516,22 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             description_placeholders=STATS_PLACEHOLDERS,
         )
 
+    async def _async_save(self, changes: dict[str, Any]) -> FlowResult:
+        """Write the options, which reloads the entry.
+
+        Switching the statistics off erases what has already been sent, rather
+        than merely going quiet, and that happens here, at the save, so that a
+        form abandoned on the way, at a busy panel for one, changes nothing.
+        Imported here rather than at the top: stats.py pulls in Home
+        Assistant, and this module is read by tests that run without it.
+        """
+        was_on = self._entry.options.get(CONF_SEND_STATISTICS, True)
+        if was_on and not changes.get(CONF_SEND_STATISTICS, True):
+            from .stats import async_forget_install
+
+            await async_forget_install(self.hass, self._entry, DOMAIN)
+        return self.async_create_entry(title="", data={**self._entry.options, **changes})
+
     def _web_client(self) -> CtcWebClient:
         """The display's client for a walk started from the options.
 
@@ -538,26 +558,34 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         """Walk the display's menu again and re-offer the tick boxes.
 
         A reading that gave nothing leaves the stored menu as it is: the tick
-        boxes are offered from storage and the version stamp is not touched, so
-        the reading is still owed. See catalogue.menu_after_rescan.
+        boxes are offered from storage, and neither the menu nor the version
+        stamp is written, so the reading is still owed. See
+        catalogue.menu_after_rescan. The reading starts the count of
+        background tries over, so a menu the background had given up on is
+        read again after the save; see menu_read_from_the_options. What the
+        first form said is saved together with this one.
         """
         if user_input is not None:
             chosen = {int(page) for page in user_input.get(CONF_SLOW_PAGES, [])}
             keep = [page for page in self._pages if page.page in chosen]
-            data = {
-                **self._entry.options,
+            changes = {
+                **self._pending,
                 CONF_SLOW_PAGES: pages_to_storage(keep),
-                CONF_MENU: pages_to_storage(self._pages),
                 CONF_SLOW_INTERVAL: int(
                     user_input.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)
                 ),
                 CONF_RESTORE_PAGE: user_input.get(CONF_RESTORE_PAGE, True),
             }
             if self._fresh:
-                data[CONF_MENU_VERSION] = await _async_version(self.hass)
-            if self._root is not None:
-                data[CONF_MENU_ROOT] = self._root
-            return self.async_create_entry(title="", data=data)
+                # Only a menu that came whole off the panel replaces the
+                # stored one and is stamped, with the root it was swept from.
+                # A missed or interrupted reading writes neither: the stored
+                # menu stands as it was, and the reading stays owed.
+                changes[CONF_MENU] = pages_to_storage(self._pages)
+                changes[CONF_MENU_VERSION] = await _async_version(self.hass)
+                if self._root is not None:
+                    changes[CONF_MENU_ROOT] = self._root
+            return await self._async_save(changes)
 
         try:
             reading = await async_rescan_pages(self._web_client())
@@ -569,6 +597,11 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         except CtcWebError as err:
             _LOGGER.warning("Could not read the display's menu: %s", err)
             reading = MenuReading()
+        # Imported here: the package pulls in Home Assistant, and this module
+        # is read by tests that run without it.
+        from . import menu_read_from_the_options
+
+        menu_read_from_the_options(self._entry.entry_id, self.hass.loop.time())
         # An interrupted sweep is offered for what it found, beside the stored
         # pages it did not reach, and is not fresh: nothing disappears and the
         # version is not stamped. See catalogue.menu_after_rescan.
@@ -580,16 +613,17 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         )
         self._root = reading.root
 
-        already = [
-            page.page for page in pages_from_storage(self._entry.options.get(CONF_SLOW_PAGES, []))
-        ]
+        # Offered as the first form left them, so a tick box or an interval
+        # changed there is what this form shows.
+        settings = {**self._entry.options, **self._pending}
+        already = [page.page for page in pages_from_storage(settings.get(CONF_SLOW_PAGES, []))]
         return self.async_show_form(
             step_id="rescan",
             data_schema=_slow_schema(
                 self._pages,
                 already,
-                int(self._entry.options.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)),
-                bool(self._entry.options.get(CONF_RESTORE_PAGE, True)),
+                int(settings.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)),
+                bool(settings.get(CONF_RESTORE_PAGE, True)),
             ),
             description_placeholders={"count": str(len(self._pages))},
         )

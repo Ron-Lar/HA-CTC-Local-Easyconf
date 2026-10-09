@@ -96,7 +96,10 @@ So the display is treated as a supplement, not the base:
 - Reading the menu again from Configure takes the same turn at the panel as
   the harvest and the walk to the system information page, so two of them can
   never walk it at once. Is the panel busy when you ask, the dialog says so and
-  nothing is changed; ask again in a moment.
+  nothing is changed; ask again in a moment. The rest of the form is kept and
+  saved with the pages you tick, and the three background tries start over, so
+  a menu the background had given up on is read again after the save. A
+  reading that misses writes neither the menu nor the version.
 
 There is no second session to escape this with. The `/click2/` and `/scroll2/`
 endpoints exist in the display's own JavaScript but the firmware answers 400 to
