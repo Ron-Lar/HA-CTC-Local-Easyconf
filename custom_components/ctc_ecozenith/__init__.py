@@ -467,8 +467,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     except Exception:
         # The controller allows a single Modbus client. A failed attempt that
         # leaves its socket open holds that slot, so every retry then fails as
-        # well and the entry can never recover on its own.
-        await modbus_client.async_close()
+        # well and the entry can never recover on its own. Shut down rather
+        # than closed: nothing of this attempt may connect again.
+        await modbus_client.async_shutdown()
         raise
 
     web_client = CtcWebClient(
@@ -600,7 +601,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except Exception:
-        await modbus_client.async_close()
+        await modbus_client.async_shutdown()
         raise
     entry.async_on_unload(entry.add_update_listener(_async_reload))
 
@@ -651,8 +652,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool
         # Only here, never from an on-unload callback: those also run when a
         # set-up attempt fails, and the report has to survive that.
         await async_stop_stats(hass, entry, DOMAIN)
+        # The keepalive first, so that no write of this entry's is queued
+        # behind the shutdown; then the client, for good. A reload builds the
+        # next client at once, and a connection the old entry opened after
+        # this point would hold the controller's single slot against it.
         await runtime.control.async_stop()
-        await runtime.modbus.client.async_close()
+        await runtime.modbus.client.async_shutdown()
         dashboard.async_announce_change(hass)
     return unloaded
 
