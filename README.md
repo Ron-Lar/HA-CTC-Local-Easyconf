@@ -278,7 +278,10 @@ write to 61500, 61503 or 62000 never reaches the wire.
 ## Anonymous statistics
 
 The integration sends one report per day to <https://stats.rnet.se>. The
-client shared by the beolink integrations, `stats.py`, puts in it: which
+client shared by the beolink integrations, `stats.py`, puts in it: a random id
+created when the integration was installed, so that the daily reports can be
+kept apart and erased on request (the server keeps it only as a hash, and it
+says nothing about who you are), which
 version of the integration you run, your Home Assistant version, installation
 type and Python version, the language and the country you have set in Home
 Assistant itself, an approximate position rounded to about 11 km, how many
@@ -293,9 +296,10 @@ loaded or waiting to be set up again, never the reason.
 This integration's own part, `stats_extra.py`, adds which transports are in
 use, whether control is enabled, how many display pages are harvested and how
 many register reads failed. It also says whether a coefficient of performance
-is possible and, if not, why: whether the history page is harvested, whether
-the delivered heat counter was recognised on it, whether the energy consumed
-comes from the display or from Modbus (for Modbus, whether register 62341 has
+is possible and, if not, why: whether the row with the unit's operating hours
+was recognised on the history page, whether the delivered heat counter was
+recognised there too, whether the energy consumed comes from the display or
+from Modbus (for Modbus, whether register 62341 has
 answered at all since Home Assistant started, judged on the raw words so that
 CTC's marker for a counter that is not fitted still counts as an answer),
 whether each of those two counters actually handed over a number at the last
