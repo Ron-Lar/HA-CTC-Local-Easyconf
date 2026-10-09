@@ -218,7 +218,12 @@ What Home Assistant shows is what the controller holds. An override counts as
 in force only from a write that actually reached the unit, each control entity
 carries the attributes *senast skriven* and *gäller till*, and when no write has
 reached the unit for five minutes the override is released on this side too,
-with one line in the log, since the controller has forgotten it by then.
+with one line in the log, since the controller has forgotten it by then. A
+released override is not taken up again by itself when the unit answers again:
+the entity then shows the unit's own setting with *styrning aktiv: nej*, and
+whoever set the override, a person or an energy manager, sets it anew. An
+energy manager that reads the entity should treat that combination as a lost
+command rather than as somebody's manual change.
 
 The stored settings in the 61500 block are exposed read only and never written.
 CTC states plainly that the number of write cycles there is limited and that
