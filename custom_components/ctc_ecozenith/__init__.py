@@ -15,11 +15,12 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.loader import async_get_integration
 
 from homeassistant.helpers.storage import Store
@@ -75,6 +76,7 @@ from .const import (
     LANG_SWEDISH,
     PLATFORMS,
     SlowPage,
+    identity_signal,
     web_interface_url,
 )
 from .coordinator import CtcControlManager, CtcModbusCoordinator, CtcWebCoordinator
@@ -84,9 +86,10 @@ from .identity import (
     IdentityScreens,
     async_read_identity,
     async_read_identity_via_panel,
+    only_identity_differs,
 )
 from .modbus_api import CtcModbusClient, hold_library_quiet
-from .updates import async_latest_release, newer
+from .updates import async_latest_release, check_is_due, newer
 from .seen import SeenValues
 from .seen_history import async_seed_from_statistics
 from .stats import async_setup_stats, async_stop_stats
@@ -138,6 +141,12 @@ ISSUE_UPDATE_AVAILABLE = "update_available"
 #: How often GitHub is asked. Rarely: a release is not news that cannot wait.
 UPDATE_CHECK_INTERVAL = timedelta(hours=24)
 
+#: When each entry last had an answer from GitHub, on the event loop's clock.
+#: Kept outside the entry like the menu tries, because a reload used to ask
+#: again at once, and saving the options a few times in a row was a few
+#: questions in a row for an answer that cannot have changed.
+_RELEASE_CHECKED: dict[str, float] = {}
+
 
 async def _async_check_release(
     hass: HomeAssistant, entry: "CtcConfigEntry", version: str
@@ -147,13 +156,30 @@ async def _async_check_release(
     Home Assistant only knows about updates for what HACS installed, so a copy
     put in place by hand is never offered one. Switched off in the options for
     anyone who would rather not have the integration ask GitHub anything.
+
+    The issue is touched only on an answer. No answer, a network hiccup or a
+    rate limit, used to fall through to deleting it, so a notice that had stood
+    for days vanished at the first reload that happened to meet a quiet GitHub;
+    now it stands as it was until GitHub says otherwise. An answer within the
+    day, by this run, is not asked for again, so a reload costs no question.
     """
     issue_id = f"{entry.entry_id}_{ISSUE_UPDATE_AVAILABLE}"
     if not entry.options.get(CONF_CHECK_UPDATES, True):
         ir.async_delete_issue(hass, DOMAIN, issue_id)
+        # Switched back on, it is asked at once rather than within the day.
+        _RELEASE_CHECKED.pop(entry.entry_id, None)
+        return
+    now = hass.loop.time()
+    if not check_is_due(
+        _RELEASE_CHECKED.get(entry.entry_id), now, UPDATE_CHECK_INTERVAL.total_seconds()
+    ):
         return
     latest = await async_latest_release(async_get_clientsession(hass), RELEASES_API)
-    if latest and newer(version, latest):
+    if latest is None:
+        _LOGGER.debug("The release check got no answer, so the notice stands as it was")
+        return
+    _RELEASE_CHECKED[entry.entry_id] = now
+    if newer(version, latest):
         ir.async_create_issue(
             hass,
             DOMAIN,
@@ -198,6 +224,54 @@ def _async_review_issues(
     review(ISSUE_PAGES, runtime.web is None)
     review(ISSUE_HISTORY_PAGE, runtime.web is not None and runtime.energy_out is None)
     review(ISSUE_IDENTITY, not runtime.identity.serial)
+
+
+@callback
+def _async_adopt_identity(
+    hass: HomeAssistant, entry: "CtcConfigEntry", runtime: "CtcRuntime", found: Identity
+) -> bool:
+    """Take what a later reading of the identity found, without a reload.
+
+    The identity used to be written to the options alone, and the reload that
+    every write of the options brings was what carried it into the device, the
+    sensors and the repairs view. A reload closes Modbus for the controller's
+    settle time, puts the daily report's delay back to the start, asks GitHub
+    again and shows the CTC page as "no heat pump is running", all for six
+    strings that change nothing about what is polled. So everything that reads
+    the identity is told directly instead: the runtime, which the report and
+    the repairs view read live; the device in the registry, whose page shows
+    the serial number and the versions; and the identity sensors, through a
+    dispatcher signal. The options are still written, so the next start has
+    the identity without asking the display, and the reload listener leaves a
+    write that changes nothing but the identity alone. Returns whether
+    anything new was found.
+    """
+    merged = runtime.identity.merged_with(found)
+    if merged.as_dict() == runtime.identity.as_dict():
+        return False
+    runtime.identity = merged
+    model = entry.data.get("model", "CTC")
+    details = {
+        "model": f"{model} + {merged.heatpump_model}" if merged.heatpump_model else model,
+        "serial_number": merged.serial,
+        "sw_version": merged.display_firmware,
+        "hw_version": merged.bootloader,
+    }
+    known = {key: value for key, value in details.items() if value is not None}
+    # The runtime's own DeviceInfo as well, so an entity added from now on,
+    # an identity sensor among them, carries the same device details.
+    runtime.device.update(known)
+    registry = dr.async_get(hass)
+    identifier = next(iter(runtime.device["identifiers"]))
+    for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
+        if identifier in device.identifiers:
+            registry.async_update_device(device.id, **known)
+    async_dispatcher_send(hass, identity_signal(entry.entry_id))
+    _async_review_issues(hass, entry, runtime)
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_IDENTITY: merged.as_dict()}
+    )
+    return True
 
 
 async def _async_catch_up(
@@ -282,8 +356,11 @@ async def _async_catch_up(
                         screens=screens,
                     )
                 identity = identity.merged_with(found)
+            # Into the device, the sensors and the options without a reload:
+            # nothing about the identity needs one. The screens it was found
+            # on are kept the same way, so a later start reads them alone.
             if identity.as_dict() != runtime.identity.as_dict():
-                changed[CONF_IDENTITY] = identity.as_dict()
+                _async_adopt_identity(hass, entry, runtime, identity)
             if screens.as_dict() != known_screens:
                 changed[CONF_IDENTITY_SCREENS] = screens.as_dict()
         except Exception as err:  # noqa: BLE001 - catching up must never break the entry
@@ -494,6 +571,11 @@ class CtcRuntime:
     operating_hours: Any | None = None
     #: What this installation has ever given a value other than zero.
     seen: SeenValues | None = None
+    #: The entry's data and options this set-up was built from. The reload
+    #: listener compares against them: a write that changes nothing but the
+    #: identity is applied in place, anything else takes a reload.
+    applied_data: dict[str, Any] = field(default_factory=dict)
+    applied_options: dict[str, Any] = field(default_factory=dict)
 
 
 type CtcConfigEntry = ConfigEntry[CtcRuntime]
@@ -577,6 +659,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         web_client=web_client,
         control_enabled=bool(options.get(CONF_ENABLE_CONTROL, True)),
         identity=identity,
+        # From the entry, not from the local copy above: the identity read a
+        # moment ago may already have been written to the options.
+        applied_data=dict(entry.data),
+        applied_options=dict(entry.options),
     )
 
     # On the entry before the panel is first touched, not after. Home Assistant
@@ -743,6 +829,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
 
 
 async def _async_reload(hass: HomeAssistant, entry: CtcConfigEntry) -> None:
+    """Reload on a change of the entry, unless only the identity filled itself in.
+
+    Home Assistant calls this for every write of the entry. A write that
+    changes nothing but CONF_IDENTITY comes from _async_adopt_identity, which
+    has already told everything that reads the identity, and a reload would
+    only cost what is listed there. A change of the host or of any other
+    option is somebody's choice and takes a reload to come into force.
+    """
+    runtime = getattr(entry, "runtime_data", None)
+    if (
+        runtime is not None
+        and dict(entry.data) == runtime.applied_data
+        and only_identity_differs(runtime.applied_options, entry.options)
+    ):
+        _LOGGER.debug("The identity was written to the entry; nothing to reload for")
+        return
     await hass.config_entries.async_reload(entry.entry_id)
 
 

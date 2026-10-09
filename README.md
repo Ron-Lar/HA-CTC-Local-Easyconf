@@ -124,7 +124,8 @@ label so it works whatever language the panel is set to, checks where the panel
 went after every press, and gives up at the first surprise. The service menu,
 which holds a function test, a compressor quick start and reinstallation, is
 never opened. Switch it off under Configure if you would rather open that page
-yourself.
+yourself. What the walk finds goes straight into the device and its sensors;
+nothing is reloaded for it.
 
 When something is left for you to do, it is said in Home Assistant's repairs
 view rather than only in the log: the page the coefficient of performance needs

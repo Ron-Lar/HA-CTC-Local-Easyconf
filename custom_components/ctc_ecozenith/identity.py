@@ -41,10 +41,17 @@ an i255 and an i550 Pro even though the text ids behind them are not.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any, Awaitable, Callable
 
-from .const import NAV_ALLOWED_EN, PAGE_HEADER_HEIGHT, SYSTEM_INFO_LABEL_EN
+from .const import (
+    CONF_IDENTITY,
+    CONF_IDENTITY_SCREENS,
+    NAV_ALLOWED_EN,
+    PAGE_HEADER_HEIGHT,
+    SYSTEM_INFO_LABEL_EN,
+)
 from .web_api import CtcWebClient, CtcWebError, Widget, tap_target
 
 _LOGGER = logging.getLogger(__name__)
@@ -179,6 +186,27 @@ class IdentityScreens:
             if isinstance(value, int) and not isinstance(value, bool):
                 setattr(screens, name, value)
         return screens
+
+
+#: The options that are written from the inside and never take a reload.
+_INSIDE_KEYS = frozenset({CONF_IDENTITY, CONF_IDENTITY_SCREENS})
+
+
+def only_identity_differs(before: Mapping[str, Any], after: Mapping[str, Any]) -> bool:
+    """Whether two option mappings differ in nothing but the stored identity.
+
+    The screens the identity was found on count as part of it: they are
+    written from the inside too, and change nothing about what is polled.
+
+    The identity is the one option that is written from the inside, when a
+    later reading fills in a serial number or a version, and it changes
+    nothing about what is polled, so a write of it alone is no reason to
+    reload the entry. Everything else in the options is somebody's choice and
+    takes a reload to come into force.
+    """
+    return {k: v for k, v in before.items() if k not in _INSIDE_KEYS} == {
+        k: v for k, v in after.items() if k not in _INSIDE_KEYS
+    }
 
 
 def _same_row(one: Widget, other: Widget) -> bool:

@@ -131,6 +131,16 @@ PLATFORMS: Final = ["sensor", "binary_sensor", "number", "select", "button"]
 CONF_READ_TOTALS: Final = "read_totals"
 CONF_IDENTITY: Final = "identity"
 
+
+def identity_signal(entry_id: str) -> str:
+    """The dispatcher signal sent when an entry's identity has been filled in.
+
+    The serial number and the versions turn up late where the system
+    information page had never been shown, and the entities that show them
+    follow this signal rather than wait for a reload.
+    """
+    return f"{DOMAIN}_{entry_id}_identity"
+
 #: English labels of the two lifetime counters that make a coefficient of
 #: performance possible at all. Modbus carries the consumption side but not the
 #: delivered side, so both have to come from the display.
