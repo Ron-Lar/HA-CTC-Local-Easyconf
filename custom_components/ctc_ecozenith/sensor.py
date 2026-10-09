@@ -27,6 +27,7 @@ from homeassistant.const import EntityCategory
 from . import CtcConfigEntry
 from .catalogue import display_state_class
 from .cop import (
+    WINDOWS,
     current_totals,
     display_silence,
     modbus_consumption_answered,
@@ -118,7 +119,7 @@ async def async_setup_entry(
     entities.extend(identity_sensors())
 
     if runtime.cop is not None:
-        for span in ("day", "year", "first_year", "lifetime"):
+        for span in ("day", "week", "month", "year", "first_year", "lifetime"):
             entities.append(CtcCopSensor(runtime, span))
 
     async_add_entities(entities)
@@ -361,6 +362,8 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
 
     NAMES = {
         "day": "Dygnsvärmefaktor",
+        "week": "Veckovärmefaktor",
+        "month": "Månadsvärmefaktor",
         "year": "Årsvärmefaktor",
         "first_year": "Värmefaktor, första året",
         "lifetime": "Värmefaktor, hela livslängden",
@@ -385,6 +388,8 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
             return tracker.result_first_year()
         if self._span == "lifetime":
             return tracker.result_lifetime(out, consumed)
+        if self._span in WINDOWS:
+            return tracker.result_window(out, consumed, self._span)
         return tracker.result_year(out, consumed)
 
     def _silence(self) -> str | None:

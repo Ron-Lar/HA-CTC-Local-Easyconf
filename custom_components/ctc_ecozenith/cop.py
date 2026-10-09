@@ -73,15 +73,25 @@ RECENT_DAYS = 4
 #: must not quietly turn "the last year" into "the last fourteen months".
 YEAR_MAX_DAYS = 380
 
+#: The shorter windows, by the span the sensors report them under: how many
+#: days back the base sample lies, and how many more days back it may lie
+#: before the figure stops meaning what its name says. Read against the daily
+#: samples the tracker already keeps for the year, so they cost nothing new.
+#: A week may stretch to nine days and a month to thirty-five: a day or two of
+#: missing samples, which a Home Assistant that was down over a weekend leaves
+#: behind, should not cost the figure, but the yearly band's fifteen days would
+#: turn a week into a fortnight.
+WINDOWS: dict[str, tuple[int, int]] = {"week": (7, 2), "month": (30, 5)}
+
 
 @dataclass
 class CopResult:
     """A coefficient of performance and how it was arrived at."""
 
     value: float | None
-    #: The span the figure stands on: "day", "year", "first_year" or
-    #: "lifetime". Every method of the tracker answers under the span it was
-    #: asked for, so a figure never wears another span's name.
+    #: The span the figure stands on: "day", "week", "month", "year",
+    #: "first_year" or "lifetime". Every method of the tracker answers under
+    #: the span it was asked for, so a figure never wears another span's name.
     basis: str
     days: int
     energy_out: float | None = None
@@ -95,6 +105,8 @@ class CopResult:
         basis = {
             "year": "rullande år",
             "day": "senaste dygnet",
+            "week": "senaste 7 dygnen",
+            "month": "senaste 30 dygnen",
             "first_year": "första året",
             "lifetime": "hela livslängden",
         }.get(self.basis, self.basis)
@@ -172,6 +184,8 @@ def cop_reason(
     energy_in: float | None,
     hours: float | None = None,
     modbus_answered: bool = True,
+    *,
+    days: int = 1,
 ) -> str | None:
     """Why a figure is missing, in words the owner can act on or dismiss.
 
@@ -180,7 +194,8 @@ def cop_reason(
     counter standing still, or two counters that do not add up. Where the
     consumed side comes from Modbus, ``modbus_answered`` says whether register
     62341 has answered at all, so a model that lacks it is told so instead of
-    waiting forever for a reading.
+    waiting forever for a reading. For a week or a month ``days`` is the span
+    the deltas cover, which sets their floor the way it sets the figure's.
     """
     if value is not None:
         return None
@@ -194,15 +209,21 @@ def cop_reason(
         if basis == "day":
             return "väntar på ett prov som är 20 till 30 timmar gammalt"
         return "räknarna har inte lästs"
-    floor = MIN_CONSUMPTION_KWH_DAY if basis == "day" else MIN_CONSUMPTION_KWH
-    too_little = f"för lite energi ännu, {energy_in:.1f} av {floor:.0f} kWh"
     if basis == "day":
+        floor = MIN_CONSUMPTION_KWH_DAY
+    elif basis in WINDOWS:
+        floor = MIN_CONSUMPTION_KWH_DAY * max(1, days)
+    else:
+        floor = MIN_CONSUMPTION_KWH
+    too_little = f"för lite energi ännu, {energy_in:.1f} av {floor:.0f} kWh"
+    if basis == "day" or basis in WINDOWS:
         # A day's deltas are not the lifetime totals, so the lifetime rules do
         # not apply to them. Deltas of nothing are a day the compressor did not
         # run, not a counter the controller never writes, and below the floor
         # the pair is rounding noise, since the display counts whole kilowatt
         # hours and rounds the two counters independently: nothing is judged on
         # it. Above the floor a pair no heat pump could produce is still said so.
+        # A week or a month of deltas is the same kind of number, only larger.
         if energy_in < floor:
             return too_little
         fault = counter_fault(energy_out, energy_in, None, floor)
@@ -275,7 +296,8 @@ def reason_for(
             return "första året är inte fullt ännu"
         return "räknarna har inte lästs"
     return cop_reason(
-        None, result.basis, result.energy_out, result.energy_in, hours, modbus_answered
+        None, result.basis, result.energy_out, result.energy_in, hours, modbus_answered,
+        days=result.days,
     )
 
 
@@ -450,6 +472,7 @@ class CopTracker:
         tolerance: int,
         floor: float,
         now: date,
+        per_day: bool = False,
     ) -> CopResult:
         """The figure across a window, from the newest sample at least ``days`` old.
 
@@ -459,6 +482,11 @@ class CopTracker:
         that band the result says how far the samples have come, or that a gap
         in them covers the band, which is the tracker's own knowledge. What
         the counters themselves have to say is left to :func:`cop_reason`.
+
+        With ``per_day`` the floor is the daily one times the days the figure
+        actually spans: a week's deltas are a week of whole kilowatt hours, and
+        the rounding they carry is the same as a day's, so what holds for three
+        over a day holds for twenty-one over seven.
         """
         window_start = (now - timedelta(days=days)).isoformat()
         earliest = (now - timedelta(days=days + tolerance)).isoformat()
@@ -475,6 +503,8 @@ class CopTracker:
                     None, basis, span,
                     reason=f"räknarna har gått bakåt sedan {older[-1]}, enheten är bytt eller nollställd",
                 )
+            if per_day:
+                floor = floor * max(1, span)
             return CopResult(
                 _ratio(delta_out, delta_in, floor), basis, span,
                 round(delta_out, 1), round(delta_in, 1),
@@ -514,6 +544,31 @@ class CopTracker:
         return self._window(
             energy_out, energy_in, "year",
             COP_WINDOW_DAYS, YEAR_MAX_DAYS - COP_WINDOW_DAYS, MIN_CONSUMPTION_KWH, now,
+        )
+
+    def result_window(
+        self,
+        energy_out: float | None,
+        energy_in: float | None,
+        basis: str,
+        today: date | None = None,
+    ) -> CopResult:
+        """The figure over one of the shorter windows in :data:`WINDOWS`.
+
+        Between the day and the year there was nothing: a lifetime figure says
+        nothing about this autumn, and the display's own "/30 dagar" rows
+        stand at zero on both units they have been read from. The daily
+        samples the tracker keeps for the year carry a week and a month from
+        the day they are old enough, which on a fresh installation is a week
+        and a month after it was set up.
+        """
+        days, tolerance = WINDOWS[basis]
+        if energy_out is None or energy_in is None:
+            return CopResult(None, basis, 0)
+        now = today or date.today()
+        return self._window(
+            energy_out, energy_in, basis, days, tolerance, MIN_CONSUMPTION_KWH_DAY, now,
+            per_day=True,
         )
 
     def result_lifetime(

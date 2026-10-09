@@ -198,6 +198,16 @@ DERIVED: dict[str, str] = {
         "Värmefaktor senaste dygnet: avgiven värme delat med tillförd el, ur två avläsningar av "
         "energiräknarna 20 till 30 timmar isär. Visas när minst 3 kWh har förbrukats."
     ),
+    "cop_week": (
+        "Värmefaktor senaste 7 dygnen, ur energiräknarna mot integrationens egen avläsning 7 till 9 "
+        "dygn gammal. Visas när minst 3 kWh per dygn i underlaget har förbrukats, alltså 21 kWh på "
+        "en vecka, och tidigast en vecka efter att integrationen sattes upp."
+    ),
+    "cop_month": (
+        "Värmefaktor senaste 30 dygnen, ur energiräknarna mot integrationens egen avläsning 30 till "
+        "35 dygn gammal. Visas när minst 3 kWh per dygn i underlaget har förbrukats, alltså 90 kWh "
+        "på en månad, och tidigast en månad efter att integrationen sattes upp."
+    ),
     "cop_year": (
         "Värmefaktor för ett rullande år, ur energiräknarna mot en egen avläsning 365 till 380 "
         "dagar gammal. Visas först när integrationen har ett års egna avläsningar."
