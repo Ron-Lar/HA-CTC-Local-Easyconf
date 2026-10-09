@@ -354,8 +354,11 @@
 
   /* --------------------------------------------------------------- readings */
 
+  /* The grids ask for a track no wider than the card: a bare minmax(140px, 1fr)
+     still lays out a 140 px track inside a narrower card and sticks out of it,
+     which on a 360 px phone is what the list did. min(140px, 100%) gives in. */
   const READINGS_STYLE = `
-    .tiles { display: grid; gap: 14px 24px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    .tiles { display: grid; gap: 14px 24px; grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr)); }
     .tile .label { display: block; color: var(--secondary-text-color); font-size: .8em; overflow-wrap: anywhere; }
     .tile .big { font-size: 1.6rem; font-weight: 500; color: var(--primary-text-color); }
     /* R35: what the figure rests on, or why there is none, in small text under it. */
@@ -635,14 +638,18 @@
   /* ------------------------------------------------------------------- rows */
 
   const ROWS_STYLE = `
-    .toolbar { display: flex; gap: 12px; align-items: center; padding-bottom: 10px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding-bottom: 10px; }
     .toolbar input {
-      flex: 1; max-width: 420px; padding: 8px 12px; font: inherit;
+      flex: 1; min-width: 0; max-width: 420px; padding: 8px 12px; font: inherit;
       border: 1px solid var(--divider-color, #ccc); border-radius: 8px;
       background: var(--card-background-color, #fff); color: var(--primary-text-color);
     }
+    /* On a phone the field takes the whole line and the count goes under it. */
+    @media (max-width: 480px) {
+      .toolbar input { flex-basis: 100%; max-width: none; }
+    }
     .count { color: var(--secondary-text-color); font-size: .9em; }
-    .grid { display: grid; gap: 0 24px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+    .grid { display: grid; gap: 0 24px; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
     .heading {
       grid-column: 1 / -1; font-size: .8rem; font-weight: 500; margin: 14px 0 4px;
       color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .04em;
