@@ -54,7 +54,7 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_WEB_PORT,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.discovery import DiscoveredDisplay  # noqa: E402
+from custom_components.ctc_ecozenith.discovery import DiscoveredDisplay, WebProbe  # noqa: E402
 from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
 
 #: Where the unit turns up after a new lease, a documentation address too.
@@ -213,11 +213,17 @@ async def test_a_new_entry_writes_its_key_and_a_moved_address_is_already_configu
         patch(f"{FLOW}.async_home_assistant_networks", AsyncMock(return_value=[])),
         patch(f"{FLOW}.async_discover", AsyncMock(return_value=[])),
         patch(f"{FLOW}.async_probe_host", AsyncMock(return_value=display)),
+        # A typed address asks the web port first (R11): it answers.
+        patch(f"{FLOW}.async_probe_web", AsyncMock(return_value=WebProbe(display, answered=True))),
         patch(f"{FLOW}.async_discover_pages", AsyncMock(return_value=MenuReading())),
         patch(f"{FLOW}.CtcWebClient", FakePanel),
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        # The set-up starts with a choice (R70): enter an address.
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "manual"}
         )
         assert result["step_id"] == "manual"
         result = await hass.config_entries.flow.async_configure(
@@ -237,6 +243,9 @@ async def test_a_new_entry_writes_its_key_and_a_moved_address_is_already_configu
         await hass.async_block_till_done()
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "manual"}
         )
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
