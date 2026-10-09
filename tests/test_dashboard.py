@@ -350,7 +350,7 @@ def test_performance_opens_with_the_graphs_and_then_every_reading(dashboard_view
     pump = pumps["vsh"]
     sections = _tab(dashboard_views, pump, "performance")
     assert _headings(sections) == [
-        "Temperaturer det senaste dygnet",
+        "Framledning och börvärde det senaste dygnet",
         "Kompressorn det senaste dygnet",
         "Energi per dygn",
         "Kompressorns gångtid per dygn",
@@ -371,8 +371,10 @@ def test_performance_opens_with_the_graphs_and_then_every_reading(dashboard_view
         pump["entities"][key]
         for key in ("p30_avgiven_varme_totalt", "compressor_kwh", "immersion_kwh")
     ]
+    # A bar per day: each day is one number, and a line drew values between
+    # the days that were never there (V4).
     cop = _section(sections, "Värmefaktor per dygn")["cards"][1]
-    assert cop["chart_type"] == "line" and cop["stat_types"] == ["mean"]
+    assert cop["chart_type"] == "bar" and cop["stat_types"] == ["mean"]
     assert cop["entities"] == [pump["entities"]["cop_day"]]
 
 
@@ -395,6 +397,59 @@ def test_the_compressors_running_time_per_day_is_a_bar_per_day_and_goes_where_it
     assert "Kompressorns gångtid per dygn" not in _headings(
         _tab(dashboard_views, pump, "performance")
     )
+
+
+def test_performance_opens_with_the_flow_against_its_setpoint_not_the_overviews_graph(
+    dashboard_views, pumps
+):
+    """V4: a graph that adds something, instead of the one the overview just showed."""
+    pump = pumps["vsh"]
+    sections = _tab(dashboard_views, pump, "performance")
+    assert "Temperaturer det senaste dygnet" not in _headings(sections)
+    (card,) = _section(sections, "Framledning och börvärde det senaste dygnet")["cards"][1:]
+    assert card["type"] == "history-graph" and card["hours_to_show"] == 24
+    by_entity = {entity_id: key for key, entity_id in pump["entities"].items()}
+    assert [by_entity[e["entity"]] for e in card["entities"]] == [
+        "hs1_flow", "hs1_flow_setpoint", "outdoor_temp",
+    ]
+    assert card["entities"][1]["name"] == "Framledning börvärde VS1"
+    # The overview keeps the circuit's five lines.
+    assert "Temperaturer det senaste dygnet" in _headings(_tab(dashboard_views, pump, "overview"))
+
+
+def test_the_weeks_and_months_coefficient_take_their_place_when_the_pump_has_them(
+    dashboard_views, pumps
+):
+    """V4 and R25: the page has the place before the sensors exist, and shows nothing until they do."""
+    pump = pumps["vsh"]
+    assert not {"cop_week", "cop_month"} & pump["entities"].keys()
+    overview = _tab(dashboard_views, pump, "overview")
+    assert "cop_week" not in _keys(pump, _section(overview, "Nyckeltal"))
+    cop = _section(_tab(dashboard_views, pump, "performance"), "Värmefaktor per dygn")["cards"][1]
+    assert cop["entities"] == [pump["entities"]["cop_day"]]
+
+    pump["entities"]["cop_week"] = "sensor.ctc_ecozenith_i255_veckovarmefaktor"
+    pump["entities"]["cop_month"] = "sensor.ctc_ecozenith_i255_manadsvarmefaktor"
+    pump["names"]["cop_week"] = "Veckovärmefaktor"
+    pump["names"]["cop_month"] = "Månadsvärmefaktor"
+    readings = _section(_tab(dashboard_views, pump, "overview"), "Nyckeltal")
+    keys = _keys(pump, readings)
+    assert keys[keys.index("cop_day"):][:3] == ["cop_day", "cop_week", "cop_month"]
+    performance = _tab(dashboard_views, pump, "performance")
+    energy = _keys(pump, _section(performance, "Energi och värmefaktor"))
+    assert energy[:4] == ["cop_day", "cop_week", "cop_month", "cop_year"]
+    # The month's figure as the second series of the daily bars.
+    cop = _section(performance, "Värmefaktor per dygn")["cards"][1]
+    assert cop["entities"] == [pump["entities"]["cop_day"], pump["entities"]["cop_month"]]
+    # Both are explained, say what they rest on, and are listed with the rest.
+    items = {key: item for key, (_k, item, _e) in zip(keys, _items(readings))}
+    for key in ("cop_week", "cop_month"):
+        assert items[key]["explanation"].startswith("Värmefaktor för de senaste")
+        assert items[key]["sub"] == ["underlag", "basis"] and items[key]["show_reason"] is True
+    config = dashboard_views.build_dashboard([pump], "sv", NEW_HA)
+    listed = {row["entity"] for row in _values_card(config)["rows"] if "entity" in row}
+    assert {pump["entities"]["cop_week"], pump["entities"]["cop_month"]} <= listed
+    assert "Övrigt" not in _headings(_view(config, "performance")["sections"])
 
 
 def test_readings_hide_while_they_have_nothing_to_show(dashboard_views, pumps):
@@ -612,7 +667,13 @@ def test_every_key_on_the_page_is_a_unique_id_the_integration_creates(dashboard_
     created.add(transitions.MEAN_RUN_KEY)
 
     used = set(dashboard_views._KNOWN_KEYS)
-    assert used - created == set()
+    # The page may know a key before the integration makes it, but only the
+    # ones it says so about (the week's and month's coefficient, R25), and the
+    # day the integration has caught up that set is to be emptied, so this
+    # check is as strict as it was.
+    ahead = dashboard_views.AHEAD_OF_THE_INTEGRATION
+    assert used - created <= ahead
+    assert not ahead & created, "the integration makes these now: empty AHEAD_OF_THE_INTEGRATION"
     # And the other way: nothing the integration makes is left to "Other".
     assert created - used == set()
 
@@ -636,7 +697,7 @@ def test_the_coefficient_of_performance_is_kept_as_a_statistic(dashboard_views):
     source = _source("sensor.py")
     cop = source[source.index("class CtcCopSensor"):source.index("class CtcCopSensor") + 900]
     assert "_attr_state_class = SensorStateClass.MEASUREMENT" in cop
-    assert ("graph_cop", "mean", ("cop_day",)) in dashboard_views._GRAPHS
+    assert ("graph_cop", "mean", ("cop_day", "cop_month")) in dashboard_views._GRAPHS
 
 
 def test_no_reading_without_a_device_class_is_left_with_the_default_icon(const):
