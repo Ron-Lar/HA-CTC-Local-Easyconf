@@ -86,6 +86,22 @@ minutes. The logbook writes them out, and an automation triggers on the entity's
 state instead of comparing states. The first round after a start of Home
 Assistant raises none. None of this goes into the anonymous report.
 
+**The alarm the panel shows, with its E-code.** Modbus says only that the heat
+pump is off because of an alarm. The display prints the alarm itself out of its
+own catalogue, `[E017] Givare solpaneler ut`, in the header icon at the top left
+of a page and in the status field of a heat pump page, and the integration reads
+those two places off the values it has already harvested: nothing is navigated
+for it, nothing is polled faster, and the catalogue is never enumerated. The
+sensor *Senaste larm* holds the latest alarm as the panel printed it, with the
+code, the text, when it began, when it went away and the outdoor temperature at
+the start as attributes, and the binary *Larm* carries the last ten episodes
+under *episoder*. A sensor alarm such as E017 leaves the heat pump running, so
+the binary, which reads the Modbus status, can be off while the sensor shows an
+alarm. Where the panel prints the alarm has been seen on one page of one model
+so far, the history page of an i550 Pro, and is to be confirmed the next time a
+unit alarms; the status field is read only on a row captioned *Status*, so a page
+of past alarms cannot pass one of them off as current.
+
 ## The catch with the display, and what the integration does about it
 
 Only the page the panel is currently showing is kept up to date. Every other

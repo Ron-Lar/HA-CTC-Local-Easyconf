@@ -41,9 +41,18 @@ from typing import Any, Callable
 
 import aiohttp
 
-from .const import WEB_MAX_CONCURRENCY
+from .const import (
+    HEADER_ICON_MAX_X,
+    PAGE_HEADER_HEIGHT,
+    STATUS_CAPTIONS,
+    WEB_MAX_CONCURRENCY,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+#: How far apart a caption and a text may sit and still be the same row. The
+#: catalogue's own tolerance; kept here since the catalogue imports this module.
+ROW_TOLERANCE = 14
 
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
 #: A second chance for a reading that was merely slow. The display is a small
@@ -262,6 +271,32 @@ def _picked_entry(
     if not isinstance(group_index, int) or group_index >= len(definition.t1):
         return None
     return _select_from_group(definition.t1[group_index], selector)
+
+
+def _text_slot(entry: list, kind: int) -> int | None:
+    """Where a widget keeps its text array index: images at 10, texts at 12."""
+    if kind in (0, 1):
+        slot_pos = 10
+    elif kind in (2, 3):
+        slot_pos = 12
+    else:
+        return None
+    if slot_pos >= len(entry) or not isinstance(entry[slot_pos], int):
+        return None
+    return entry[slot_pos]
+
+
+def _selector_kind(definition: ScreenDef, entry: list, kind: int) -> int | None:
+    """What picks a widget's text: 0 a global variable, 1 one of the screen's
+    own, 2 a literal. A text picked by a variable changes with the plant, as the
+    status field and the header icon do; a literal is a caption."""
+    slot = _text_slot(entry, kind)
+    if slot is None:
+        return None
+    base = slot * 3
+    if base >= len(definition.t0):
+        return None
+    return definition.t0[base]
 
 
 def _primary_variant(spec: Any) -> tuple[str | None, list[int]]:
@@ -541,6 +576,68 @@ class CtcWebClient:
                     widget.value_vars = indices
             widgets.append(widget)
         return widgets
+
+    async def async_alarm_candidates(self, screen: int, values: list[Any]) -> list[str]:
+        """The texts on a screen that would carry an alarm, read from fresh values.
+
+        Two places, in this order. The header icon at the top left, whose
+        caption the panel picks from a variable: on the history page of an
+        i550 Pro it resolved to "[E017] Givare solpaneler ut". And the status
+        field, the text the panel fills from a variable on the row captioned
+        Status. Nothing else on the screen is resolved, so a page that lists
+        past alarms cannot pass one of them off as the current one.
+
+        This moves nothing and reads nothing off the panel: the screen
+        definition is fetched once a run and cached, the captions come through
+        the text cache, and the values are the ones the harvest has just read.
+        The globals are not fetched for this, so a text picked by a global
+        variable reads as none; no screen captured so far picks anything that
+        way. What it costs is therefore one definition per screen and one
+        catalogue entry per new text, once, and nothing at all afterwards.
+        """
+        definition = await self.async_screen_def(screen)
+        var_value = _var_resolver(values, [])
+
+        def ref(index: int) -> int:
+            if index * 2 >= len(definition.v0):
+                return -1
+            return var_value(definition.v0[index * 2], definition.v0[index * 2 + 1])
+
+        header: list[tuple[int, int]] = []
+        dynamic: list[tuple[int, int, int]] = []
+        captions: list[tuple[int, int, int]] = []
+        for entry in definition.c1:
+            if not isinstance(entry, list) or len(entry) < 9:
+                continue
+            kind = entry[0]
+            if kind not in (0, 1, 2, 3) or ref(entry[8]) == 0:
+                continue
+            picked = _picked_entry(definition, entry, kind, var_value)
+            if picked is None or picked[0] != "text":
+                continue
+            x, y, width = ref(entry[2]), ref(entry[3]), ref(entry[4])
+            if kind in (0, 1):
+                if 0 <= y < PAGE_HEADER_HEIGHT and 0 <= x < HEADER_ICON_MAX_X:
+                    header.append((x, picked[1]))
+                continue
+            if y < PAGE_HEADER_HEIGHT or width <= 0:
+                continue
+            if _selector_kind(definition, entry, kind) in (0, 1):
+                dynamic.append((x, y, picked[1]))
+            else:
+                captions.append((x, y, picked[1]))
+
+        candidates: list[str] = []
+        for _x, text_id in sorted(header):
+            candidates.append(await self.async_text(text_id))
+        for x, y, text_id in sorted(dynamic, key=lambda item: (item[1], item[0])):
+            for caption_x, caption_y, caption_id in captions:
+                if caption_x >= x or abs(caption_y - y) > ROW_TOLERANCE:
+                    continue
+                if (await self.async_text(caption_id)).strip().casefold() in STATUS_CAPTIONS:
+                    candidates.append(await self.async_text(text_id))
+                    break
+        return [text for text in candidates if text]
 
     async def async_english_label(
         self,

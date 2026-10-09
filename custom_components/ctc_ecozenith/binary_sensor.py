@@ -49,6 +49,10 @@ class DerivedBinary:
     by_code: bool = False
     #: What the entity shows as attributes: attribute name and reading key.
     attributes: tuple[tuple[str, str], ...] = ()
+    #: Whether the entity carries the alarm log's episodes as an attribute:
+    #: the last ten alarms the display showed, with code, start, end and the
+    #: outdoor temperature, where the display is harvested at all.
+    episodes: bool = False
 
 
 def _powered(*readings: Any) -> bool:
@@ -82,6 +86,7 @@ DERIVED: tuple[DerivedBinary, ...] = (
         lambda code: code == HP_ALARM_CODE,
         BinarySensorDeviceClass.PROBLEM,
         by_code=True,
+        episodes=True,
     ),
     DerivedBinary(
         "blocked",
@@ -153,6 +158,7 @@ class CtcDerivedBinary(CoordinatorEntity, BinarySensorEntity):
     def __init__(self, runtime, item: DerivedBinary) -> None:
         super().__init__(runtime.modbus)
         self._item = item
+        self._runtime = runtime
         host = next(iter(runtime.device["identifiers"]))[1]
         self._attr_unique_id = f"{DOMAIN}_{host}_{item.key}"
         self._attr_name = item.name
@@ -161,6 +167,18 @@ class CtcDerivedBinary(CoordinatorEntity, BinarySensorEntity):
             self._attr_device_class = item.device_class
         if item.icon:
             self._attr_icon = item.icon
+
+    async def async_added_to_hass(self) -> None:
+        """Follow the display's harvest as well where the episodes come from it.
+
+        The state is Modbus's and arrives every poll; the episodes are
+        concluded once per harvest, and without this they would wait up to a
+        poll to show, which is where a closed episode looked open.
+        """
+        await super().async_added_to_hass()
+        web = getattr(self._runtime, "web", None)
+        if self._item.episodes and web is not None:
+            self.async_on_remove(web.async_add_listener(self._handle_coordinator_update))
 
     @property
     def is_on(self) -> bool | None:
@@ -181,7 +199,19 @@ class CtcDerivedBinary(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        if not self._item.attributes:
-            return None
-        data = self.coordinator.data or {}
-        return {name: data.get(key) for name, key in self._item.attributes}
+        """The readings the binary was worked out from, and for the alarm the log.
+
+        The episodes come from the display's harvest, not from the register
+        this binary reads: a sensor alarm such as E017 leaves the heat pump
+        running, so the binary can be off while the log holds an open episode.
+        The list is there whenever the display is harvested, empty until the
+        panel has shown an alarm.
+        """
+        attributes: dict[str, Any] = {}
+        if self._item.attributes:
+            data = self.coordinator.data or {}
+            attributes.update({name: data.get(key) for name, key in self._item.attributes})
+        log = getattr(self._runtime, "alarms", None)
+        if self._item.episodes and log is not None:
+            attributes["episoder"] = log.attributes()
+        return attributes or None

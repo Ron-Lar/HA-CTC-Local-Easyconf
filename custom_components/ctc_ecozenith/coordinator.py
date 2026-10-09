@@ -20,6 +20,7 @@ from typing import Any, Callable
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .alarms import AlarmWatch
 from .catalogue import numeric_value
 from .harvest import StoredHarvest, first_harvest_delay, is_fresh, stale_after, utcnow
 from .const import (
@@ -256,6 +257,9 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.next_attempt: datetime | None = None
         #: A display that is merely slow should not take every reading with it.
         self.patience = Patience(interval, RETRY_INTERVAL, HARVEST_PATIENCE)
+        #: What each page said about an alarm, read off the same values as
+        #: the rows; the alarm log on the runtime asks it after every round.
+        self.alarms = AlarmWatch()
         # What the last harvest before the restart left, as old as it is: the
         # sensors come up with it, judged by its age like any other reading,
         # and the first harvest is owed one interval after it rather than now.
@@ -516,6 +520,8 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if number is not None:
                 data[value.key] = number
                 self.read_at[value.key] = read_at
+        # The alarm the page prints, off the same values: no extra request.
+        await self.alarms.async_note(self.client, page, values_by_screen, read_at)
         return True
 
     async def _async_leave(self, restore_to: int | None) -> None:
