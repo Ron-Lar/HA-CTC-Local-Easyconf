@@ -203,66 +203,66 @@ def test_a_clock_value_survives_storage(catalogue, const):
 #: operating hours are sums, the day's compressor minutes and starts are
 #: measurements, and the energy periods carry no state class.
 I255_HISTORY = [
-    ("p30_total_drifttid", "h", "total_increasing"),
-    ("p30_hogsta_framledning", "°C", "measurement"),
-    ("p30_energi_el_total", "kWh", "total_increasing"),
-    ("p30_emxxx", "kWh", "total_increasing"),
-    ("p30_avgiven_varme_totalt", "kWh", "total_increasing"),
-    ("p30_drift_24_h_m", "min", "measurement"),
-    ("p30_antal_starter_24", None, "measurement"),
-    ("p30_drifttid_total", "h", "total_increasing"),
-    ("p30_antal_starter", None, "total_increasing"),
-    ("p30_kritiska_larm_raknare_1", None, None),
-    ("p30_kritiska_larm_raknare_2", None, None),
-    ("p30_kritiska_larm_raknare_3", None, None),
-    ("p30_kritiska_larm_raknare_4", None, None),
-    ("p30_energi_el_30_dagar", "kWh", None),
-    ("p30_avgiven_kyla_totalt", "kWh", "total_increasing"),
-    ("p30_tillford_energi_totalt", "kWh", "total_increasing"),
-    ("p30_avgiven_varme_30_dagar", "kWh", None),
-    ("p30_avgiven_kyla_30_dagar", "kWh", None),
-    ("p30_tillford_energi_30_dagar", "kWh", None),
-    ("p30_medeltemperatur_ute_30_dagar", "°C", "measurement"),
+    ("p30_s128_v20", "h", "total_increasing"),
+    ("p30_s128_v24", "°C", "measurement"),
+    ("p30_s128_v25", "kWh", "total_increasing"),
+    ("p30_s128_v28", "kWh", "total_increasing"),
+    ("p30_s128_v22", "kWh", "total_increasing"),
+    ("p30_s128_v27", "min", "measurement"),
+    ("p30_s128_v23", None, "measurement"),
+    ("p30_s128_v21", "h", "total_increasing"),
+    ("p30_s128_v32", None, "total_increasing"),
+    ("p30_s128_v41", None, None),
+    ("p30_s128_v42", None, None),
+    ("p30_s128_v43", None, None),
+    ("p30_s128_v44", None, None),
+    ("p30_s128_v47", "kWh", None),
+    ("p30_s128_v50", "kWh", "total_increasing"),
+    ("p30_s128_v53", "kWh", "total_increasing"),
+    ("p30_s128_v56", "kWh", None),
+    ("p30_s128_v59", "kWh", None),
+    ("p30_s128_v62", "kWh", None),
+    ("p30_s128_v65", "°C", "measurement"),
 ]
 
 #: The i550 Pro's history page. "Värde 8" is the row whose caption the display
 #: would not give up, left as it is on purpose: its hours are zero there anyway.
 I550_HISTORY = [
-    ("p30_varde_8", None, None),
-    ("p30_hogsta_framledning", "°C", "measurement"),
-    ("p30_energi_el_total", "kWh", "total_increasing"),
-    ("p30_avgiven_varme_totalt", "kWh", "total_increasing"),
-    ("p30_drift_24_h_m", "min", "measurement"),
-    ("p30_varde_13", None, None),
-    ("p30_emxxx", "kWh", "total_increasing"),
-    ("p30_antal_starter_24", None, "measurement"),
-    ("p30_antal_starter", None, "total_increasing"),
-    ("p30_energi_el_30_dagar", "kWh", None),
-    ("p30_medeltemperatur_ute_30_dagar", "°C", "measurement"),
-    ("p30_avgiven_kyla_totalt", "kWh", "total_increasing"),
-    ("p30_tillford_energi_totalt", "kWh", "total_increasing"),
-    ("p30_avgiven_varme_30_dagar", "kWh", None),
-    ("p30_avgiven_kyla_30_dagar", "kWh", None),
-    ("p30_tillford_energi_30_dagar", "kWh", None),
+    ("p30_s136_v2", None, None),
+    ("p30_s136_v5", "°C", "measurement"),
+    ("p30_s136_v4", "kWh", "total_increasing"),
+    ("p30_s136_v6", "kWh", "total_increasing"),
+    ("p30_s136_v7", "min", "measurement"),
+    ("p30_s136_v3", None, None),
+    ("p30_s136_v9", "kWh", "total_increasing"),
+    ("p30_s136_v26", None, "measurement"),
+    ("p30_s136_v29", None, "total_increasing"),
+    ("p30_s136_v50", "kWh", None),
+    ("p30_s136_v32", "°C", "measurement"),
+    ("p30_s136_v35", "kWh", "total_increasing"),
+    ("p30_s136_v38", "kWh", "total_increasing"),
+    ("p30_s136_v41", "kWh", None),
+    ("p30_s136_v44", "kWh", None),
+    ("p30_s136_v47", "kWh", None),
 ]
 
 
 def test_the_i255_history_page_end_to_end(catalogue, page):
     values = _page_values(catalogue, page("i255_128"))
     assert _table(catalogue, values) == I255_HISTORY
-    clock = next(v for v in values if v.key == "p30_drift_24_h_m")
+    clock = next(v for v in values if v.key == "p30_s128_v27")
     assert clock.label == "Drift /24"
     assert clock.fmt == "%02d:%02d" and clock.var_indices == [27, 26]
-    # The two integers' keys, _1 and _2, are gone with the fold; the one row
-    # carries the key the i550 has always had, so the name can improve freely.
-    assert not any(v.key.startswith("p30_drift_24_h_m_") for v in values)
-    assert "p30_drift_24" not in {v.key for v in values}
+    # The two integers are one row with the fold, keyed by where it stands
+    # (its first variable, roadmap L2), so the name can improve freely.
+    assert [v.label for v in values].count("Drift /24") == 1
+    assert "p30_s128_v26" not in {v.key for v in values}
 
 
 def test_the_i550_history_page_end_to_end(catalogue, page):
     values = _page_values(catalogue, page("i550_136"))
     assert _table(catalogue, values) == I550_HISTORY
-    clock = next(v for v in values if v.key == "p30_drift_24_h_m")
+    clock = next(v for v in values if v.key == "p30_s136_v7")
     assert clock.label == "Drift /24"
     assert clock.var_indices == [7, 8]
 
@@ -285,7 +285,8 @@ def test_the_powered_on_hours_are_still_the_only_anchor(catalogue, cop, page):
     # for the commissioning date: it is the compressor's time, always fewer.
     i255 = page("i255_128")
     found = cop.find_operating_hours([_fake_page(catalogue, i255)])
-    assert [v.key for v in found] == ["p30_total_drifttid"]
+    assert [v.label for v in found] == ["Total drifttid"]
+    assert [v.key for v in found] == ["p30_s128_v20"]
     # The i550's row lost its caption and stays "Värde 8", by design.
     assert cop.find_operating_hours([_fake_page(catalogue, page("i550_136"))]) is None
 

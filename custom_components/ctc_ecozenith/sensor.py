@@ -47,7 +47,7 @@ from .const import (
     device_class_for,
     identity_signal,
 )
-from .keys import prefix_of, unique_id
+from .keys import prefix_of, previous_keys, unique_id
 from .transitions import (
     MEAN_RUN_KEY,
     MEAN_RUN_NAME,
@@ -206,7 +206,9 @@ def _async_remove_vanished_rows(hass: HomeAssistant, entry: CtcConfigEntry, runt
         for item in er.async_entries_for_config_entry(registry, entry.entry_id)
         if item.domain == "sensor" and item.unique_id and item.unique_id.startswith(prefix)
     }
-    for key in sorted(vanished_display_keys(menu, entries)):
+    # A row that has moved to the key of its place (L2) was carried over by
+    # set-up before this ran; one that could not be is left, not removed.
+    for key in sorted(vanished_display_keys(menu, entries, moved=previous_keys(menu))):
         item = entries[key]
         _LOGGER.info(
             "The display row %s is no longer on its page in the display's menu, so its "

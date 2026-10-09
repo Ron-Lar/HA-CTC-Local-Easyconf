@@ -39,7 +39,8 @@ from typing import Any, Collection, Iterable, Mapping
 
 from .const import SlowPage, SlowValue
 
-#: A display row's key: the page it is harvested from, then the row's slug.
+#: A display row's key: the page it is harvested from, then the row's place on
+#: it ("p30_s128_v22", roadmap L2), or its slug as releases before that built it.
 _DISPLAY_KEY = re.compile(r"^p(\d+)_")
 
 
@@ -74,7 +75,9 @@ def due_rows(pending: Mapping[str, Any], data: Mapping[str, Any] | None) -> list
     return [key for key in pending if key in present]
 
 
-def vanished_display_keys(menu: Iterable[SlowPage], keys: Iterable[str]) -> set[str]:
+def vanished_display_keys(
+    menu: Iterable[SlowPage], keys: Iterable[str], moved: Collection[str] = ()
+) -> set[str]:
     """Of these registry keys, the display rows that left a page the menu still has.
 
     A key names its page, so a page the menu does not know, one the sweep did
@@ -83,12 +86,21 @@ def vanished_display_keys(menu: Iterable[SlowPage], keys: Iterable[str]) -> set[
     rows is a row the parser no longer builds, and its entry is an orphan. A
     page's rows are the union of what every copy of the page in ``menu`` says,
     so a selected page and its menu copy cannot disagree about a row.
+
+    A key in ``moved`` is a row that is still there under the key that
+    follows its place (roadmap L2): set-up moves its entry over before this
+    runs, and where it could not, because an entry already stood at the new
+    key, both are left for the owner rather than one of them guessed away.
+    Both kinds of key, the name the row was known by and its place, begin
+    with the page, so the rule reads them alike.
     """
     rows_by_page: dict[int, set[str]] = {}
     for page in menu:
         rows_by_page.setdefault(page.page, set()).update(value.key for value in page.values)
     gone: set[str] = set()
     for key in keys:
+        if key in moved:
+            continue
         match = _DISPLAY_KEY.match(key)
         if match is None:
             continue

@@ -93,7 +93,14 @@ from .identity import (
     async_read_identity_via_panel,
     only_identity_differs,
 )
-from .keys import device_key, mac_address, unique_prefix
+from .keys import (
+    device_key,
+    mac_address,
+    previous_keys,
+    union_by_page,
+    unique_prefix,
+    with_previous_keys,
+)
 from .modbus_api import CtcModbusClient, hold_library_quiet
 from .modbus_probe import BUSY, CLOSED, async_classify_cached
 from .updates import async_latest_release, check_is_due, newer
@@ -569,11 +576,16 @@ async def _async_reread_menu(
             )
         return {}
 
+    stored_menu = pages_from_storage(options.get(CONF_MENU))
+    stored_selection = pages_from_storage(options.get(CONF_SLOW_PAGES))
     menu, selected = merge_menu(
-        pages_from_storage(options.get(CONF_MENU)),
-        [page.page for page in pages_from_storage(options.get(CONF_SLOW_PAGES))],
+        stored_menu,
+        [page.page for page in stored_selection],
         reading.pages,
     )
+    # Every row carries the key it had where that was another, so the set-up
+    # the write brings moves its entity and its stored values over (L2).
+    menu = with_previous_keys(union_by_page(stored_menu, stored_selection), menu)
     chosen = set(selected)
     changed = {
         CONF_MENU: pages_to_storage(menu),
@@ -715,6 +727,55 @@ async def _async_arm_statistics(hass: HomeAssistant, entry: CtcConfigEntry) -> N
         )
     except Exception:  # noqa: BLE001 - statistics must never break a set-up
         _LOGGER.debug("Could not arm the statistics reporter", exc_info=True)
+
+
+@callback
+def _async_move_row_keys(
+    hass: HomeAssistant, entry: "CtcConfigEntry", prefix: str, moves: dict[str, str]
+) -> None:
+    """Carry each moved display row's entity over to the key of its place (roadmap L2).
+
+    Only the unique_id changes. The entity id, and with it the history, the
+    dashboards that point at it and whatever somebody set on the entity, stay
+    as they are. An entry that already stands at the new key is left beside
+    the old one rather than either being removed: that is a state no release
+    leaves behind, and the owner is the one to say which goes. One line in
+    the log either way, warning only for that.
+    """
+    if not moves:
+        return
+    from homeassistant.helpers import entity_registry as er
+
+    registry = er.async_get(hass)
+    moved: list[str] = []
+    stuck: list[str] = []
+    for item in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if item.domain != "sensor" or not item.unique_id.startswith(prefix):
+            continue
+        new = moves.get(item.unique_id[len(prefix):])
+        if new is None:
+            continue
+        taken = registry.async_get_entity_id("sensor", DOMAIN, f"{prefix}{new}")
+        if taken is not None:
+            stuck.append(f"{item.entity_id} ({taken})")
+            continue
+        registry.async_update_entity(item.entity_id, new_unique_id=f"{prefix}{new}")
+        moved.append(item.entity_id)
+    if moved:
+        _LOGGER.info(
+            "%d display rows are known by their place on the page from now on rather than "
+            "by their name; their entities keep their ids: %s",
+            len(moved),
+            ", ".join(sorted(moved)),
+        )
+    if stuck:
+        _LOGGER.warning(
+            "%d display rows could not be carried over to the key of their place on the page, "
+            "because an entity already stands there; both are left as they are, so delete the "
+            "one you do not want: %s",
+            len(stuck),
+            ", ".join(sorted(stuck)),
+        )
 
 
 def commissioning_date(runtime: "CtcRuntime"):
@@ -909,6 +970,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     entry.async_on_unload(modbus.async_add_listener(_observe))
     runtime.transitions = watch
 
+    # The display rows that have moved to the key of their place on the page
+    # (L2): their entities are carried over here, before the platforms make
+    # them, and their stored values below as each store is loaded. A row says
+    # where it came from for as long as it stays in the menu, so this is done
+    # at every set-up and is a no-op once done.
+    moves = previous_keys(
+        pages_from_storage(options.get(CONF_MENU)) + pages_from_storage(options.get(CONF_SLOW_PAGES))
+    )
+    _async_move_row_keys(hass, entry, unique_prefix(key), moves)
+
     pages = pages_from_storage(options.get(CONF_SLOW_PAGES, []))
     if pages:
         # The last harvest before the restart, values and moments alike. The
@@ -921,6 +992,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
             Store(hass, HARVEST_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_display")
         )
         stored = await memory.async_load()
+        if stored is not None and moves:
+            renamed = stored.renamed(moves)
+            if renamed.as_dict() != stored.as_dict():
+                stored = renamed
+                await memory.async_save(stored)
         runtime.harvest_memory = memory
         # The operation data root, which every route starts from: between two
         # pages the harvester steps back to it rather than going home for
@@ -1016,6 +1092,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         on_new=lambda: dashboard.async_announce_change(hass),
     )
     await seen.async_load()
+    if moves and seen.rename(moves):
+        # Written now, so the record and the registry agree from this start on.
+        await seen.async_save()
     for coordinator in (modbus, runtime.web):
         if coordinator is None:
             continue

@@ -483,6 +483,10 @@ class SlowValue:
     var_indices: list[int] = field(default_factory=list)
     unit: str | None = None
     scale: float = 1.0
+    #: The key the row had in the menu this one replaced, where that was
+    #: another: what set-up carries the row's entity and stored values over
+    #: from (keys.previous_keys, roadmap L2).
+    previous_key: str | None = None
 
 
 @dataclass

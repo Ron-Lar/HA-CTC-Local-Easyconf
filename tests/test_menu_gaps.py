@@ -5,12 +5,13 @@ the root regained, every page reached again. It said nothing about what the
 pages themselves came back with, and two things can go quietly missing there.
 A screen whose widgets would not come is skipped, and its rows with it; a
 caption the catalogue would not give up reads as "", and its row is named
-"Värde N" under a key the row never had. On VSH's history page that row is
-"Avgiven värme totalt (kWh)", the delivered heat counter: read with that one
-caption lost, the page carries p30_varde_11 instead of
-p30_avgiven_varme_totalt, and a menu written from such a reading would have
-the registry tidy-up remove the counter's entry as a row the parser no longer
-builds, and the coefficient of performance sensors with it.
+"Värde N". On VSH's history page that row is "Avgiven värme totalt (kWh)",
+the delivered heat counter: read with that one caption lost, the page carried
+p30_varde_11 instead of p30_avgiven_varme_totalt, and a menu written from such
+a reading would have had the registry tidy-up remove the counter's entry as a
+row the parser no longer builds. Since roadmap L2 the key follows the row's
+place, p30_s128_v22 either way, so the entry stays; but the counter is found
+by its name, and the coefficient of performance would still lose it.
 
 Now the client counts the captions it would not get, the page read says which
 screens it skipped, the sweep leaves a page read with either out of its
@@ -34,7 +35,12 @@ from test_menu_root import FakeMenu
 ROOT = 20
 HISTORY = 30
 TABS = {ROOT: [21, 22, HISTORY]}
-COUNTER = f"p{HISTORY}_avgiven_varme_totalt"
+#: "Avgiven värme totalt (kWh)" on the i255's history page, screen 128,
+#: variable 22: the key follows its place since roadmap L2.
+COUNTER = f"p{HISTORY}_s128_v22"
+#: The same row in the sweep below, where the fake menu gives page 30 the
+#: screen 300.
+SWEPT = f"p{HISTORY}_s{HISTORY * 10}_v22"
 
 rows = load("rows")
 
@@ -104,11 +110,10 @@ def test_a_caption_that_did_not_answer_renames_the_row_and_the_reading_says_so(
     client = PageClient(web_api, history, blank=_caption_index(history))
     reading = run(catalogue.async_read_page_values(client, HISTORY, [screen]))
     keys = [value.key for value in reading.values]
-    assert COUNTER not in keys, "raden heter inte längre vad den hette"
-    renamed = set(keys) - {value.key for value in whole.values}
-    assert len(renamed) == 1 and renamed.pop().startswith(f"p{HISTORY}_varde_"), (
-        "utan bildtext döps raden Värde N, efter värdets eget index"
-    )
+    # The key follows the row's place since L2, so it stays; the name does not.
+    assert keys == [value.key for value in whole.values], "nyckeln följer platsen, inte namnet"
+    counter = next(value for value in reading.values if value.key == COUNTER)
+    assert counter.label.startswith("Värde "), "utan bildtext döps raden Värde N, efter värdets eget index"
     assert len(keys) == len(whole.values), "lika många rader: inget i listan säger att en saknas"
     assert not reading.whole
     assert reading.text_misses == 1 and reading.skipped == []
@@ -193,7 +198,7 @@ def test_a_whole_sweep_has_the_history_page_and_no_gaps(catalogue, web_api, hist
     assert {p.page for p in reading.pages} == {ROOT, 21, 22, HISTORY}
     assert reading.complete and reading.gaps == []
     page = next(p for p in reading.pages if p.page == HISTORY)
-    assert COUNTER in [v.key for v in page.values]
+    assert SWEPT in [v.key for v in page.values]
 
 
 def test_a_screen_timeout_leaves_the_page_out_and_the_reading_incomplete(
@@ -235,7 +240,7 @@ def test_the_heat_counter_survives_a_reading_where_its_screen_timed_out(
     """
     stored = _sweep(catalogue, web_api, history).pages
     registry = {value.key for page in stored for value in page.values}
-    assert COUNTER in registry
+    assert SWEPT in registry
 
     reading = _sweep(catalogue, web_api, history, down=True)
     assert not reading.complete and reading.gaps == [HISTORY]
@@ -248,15 +253,17 @@ def test_the_heat_counter_survives_a_reading_where_its_screen_timed_out(
     )
     assert rows.vanished_display_keys(menu, registry) == set(), "ingen registerpost pekas ut"
     heat, _consumed = cop.find_energy_totals(menu)
-    assert heat is not None and heat.key == COUNTER
+    assert heat is not None and heat.key == SWEPT
 
 
 def test_what_a_lost_caption_would_have_cost_had_the_page_been_taken_for_read(
     catalogue, web_api, cop, history
 ):
     # The counterfactual the fix is for: the page as a reading with one lost
-    # caption describes it, written over the stored page, points the tidy-up
-    # at the counter's entry and loses the counter.
+    # caption describes it, written over the stored page, loses the counter.
+    # Before the keys followed the row's place (L2) it also pointed the
+    # tidy-up at the counter's entry; now the entry stays, the key with it,
+    # but the counter is found by its name and the name is gone.
     lost = _caption_index(history)
     gappy = run(
         catalogue.async_read_page_values(
@@ -267,5 +274,5 @@ def test_what_a_lost_caption_would_have_cost_had_the_page_been_taken_for_read(
         page=HISTORY, title="Historik", screens=[history["screen"]], values=gappy.values,
         route=[(400, 255)],
     )
-    assert COUNTER in rows.vanished_display_keys([page], {COUNTER})
+    assert COUNTER not in rows.vanished_display_keys([page], {COUNTER})
     assert cop.find_energy_totals([page])[0] is None

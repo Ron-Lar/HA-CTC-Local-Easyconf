@@ -130,6 +130,15 @@ So the display is treated as a supplement, not the base:
   or caption did not answer during the reading is left out of it and the
   reading counts as owed, since a row without its caption would come back
   under another name; the stored menu stands until a reading is whole.
+- A display row's entity is known by where the row stands on the page, the
+  page, the screen and the first value it reads, not by its name. A newer
+  parser that reads a row's name better renames the entity and keeps it, its
+  history and whatever you set on it. Up to 0.18.0 the key was the name, so the
+  first reading of the menu after updating from there carries every row's
+  entity over to the key of its place: only the entity's unique id changes,
+  never its entity id, so dashboards and automations keep working, and what
+  the integration remembers about each row moves with it. The log says on info
+  which entities were carried over.
 - They are polled on a slow interval, thirty minutes by default.
 - A restart of Home Assistant costs the panel nothing. The last harvest is
   kept, values and the moment each was read, so the sensors come up with it,
