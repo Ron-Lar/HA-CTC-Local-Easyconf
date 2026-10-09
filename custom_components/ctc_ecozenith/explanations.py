@@ -188,7 +188,21 @@ CONTROL: dict[str, str] = {
 DERIVED: dict[str, str] = {
     "compressor_running": "Till när värmepumpens status är till värme, till kyla eller till varmvatten.",
     "defrosting": "Till medan värmepumpen avfrostar. Gäller luft/vattenpumpar.",
-    "alarm": "Till när värmepumpens status är av på grund av larm. Larm i resten av anläggningen syns i pumpens meny.",
+    "alarm": (
+        "Till när värmepumpens status är av på grund av larm. Larm i resten av anläggningen "
+        "syns i pumpens meny och, där displayen hämtas, i Senaste larm. Attributet episoder "
+        "bär de tio senaste larm displayen har visat, med kod, start, slut och utetemperatur "
+        "när larmet började."
+    ),
+    "last_alarm": (
+        "Det larm displayen visade senast, med E-kod och text så som panelen skriver dem, "
+        "till exempel [E017] Givare solpaneler ut. Läses ur rubrikikonen längst upp till "
+        "vänster på de displaysidor som hämtas, och ur statusfältet, utan att panelen flyttas "
+        "mer än hämtningen redan gör. Attributen säger när larmet började, när det försvann "
+        "och vad utetemperaturen var när det började; pågår säger om det står kvar. Uppdateras "
+        "bara när displayens sidor hämtas, så ett larm syns med upp till ett hämtningsintervalls "
+        "fördröjning. Var panelen skriver larmet är sett på en i550 Pro och bekräftas vid nästa larm."
+    ),
     "blocked": "Till när värmepumpens status är av och blockerad.",
     "immersion_active": (
         "Till när någon av elpatronerna ger effekt, den övre som i EcoZenith-tankarna sitter i "
@@ -348,7 +362,11 @@ _DISPLAY: tuple[tuple[str, str], ...] = (
     ("drift /24", "Kompressorns drifttid under förra dygnet."),
     ("antal starter /24", "Antal kompressorstarter det senaste dygnet."),
     ("antal starter", "Antal kompressorstarter sedan start."),
-    ("kritiska larm", "Räknare för kritiska larm som värmepumpen har gett."),
+    ("kritiska larm", (
+        "Displayens egen räknare över kritiska larm från värmepumpen sedan driftstarten. Den "
+        "säger hur många, inte vilka: vilka larm det var står i panelens larmlista, och det "
+        "som pågår visas i Senaste larm medan displayen hämtas."
+    )),
     ("medeltemperatur ute", "Medelvärdet av utetemperaturen de senaste 30 dagarna."),
     ("tank övre", "Temperaturen i tankens övre del. Inom parentes på panelen står börvärdet."),
     ("tank nedre", "Temperaturen i tankens nedre del. Inom parentes på panelen står börvärdet."),
@@ -438,6 +456,8 @@ def source(key: str, pages: list[Mapping[str, Any]] | None = None, interval: int
         return "Räknas fram ur Elpatron övre och Elpatron nedre, Modbus-register 62168 och 62169"
     if key == "smartgrid_active":
         return "Räknas fram ur SmartGrid-läge, Modbus-register 62301"
+    if key == "last_alarm":
+        return "Rubrikikonen och statusfältet på de displaysidor som hämtas"
     if key.startswith("cop_"):
         return "Räknas ur energiräknarna"
     if key == "made":

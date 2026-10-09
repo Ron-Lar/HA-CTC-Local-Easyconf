@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -136,6 +138,8 @@ async def async_setup_entry(
         entities.extend(CtcTransitionSensor(runtime, item) for item in TRANSITION_SENSORS)
         if runtime.web is not None and runtime.starts_per_day is not None:
             entities.append(CtcMeanRunSensor(runtime))
+    if runtime.alarms is not None:
+        entities.append(CtcLastAlarmSensor(runtime))
 
     async_add_entities(entities)
 
@@ -324,6 +328,52 @@ class CtcHarvestSensor(CoordinatorEntity, SensorEntity):
             "sidor lästa": list(getattr(coordinator, "pages_read", []) or []),
             "sidor missade": list(getattr(coordinator, "pages_missed", []) or []),
         }
+
+
+class CtcLastAlarmSensor(CoordinatorEntity, SensorEntity):
+    """The alarm the display showed last, with its E-code, as the panel prints it.
+
+    Read off the pages the harvest visits anyway, so it updates on the slow
+    interval and never costs the panel a step. Empty until the panel has
+    shown an alarm; afterwards it keeps the latest one, and the attributes say
+    whether it is still showing.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:alert-circle-outline"
+
+    def __init__(self, runtime) -> None:
+        super().__init__(runtime.web)
+        self._runtime = runtime
+        host = next(iter(runtime.device["identifiers"]))[1]
+        self._attr_unique_id = f"{DOMAIN}_{host}_last_alarm"
+        self._attr_name = "Senaste larm"
+        self._attr_device_info = runtime.device
+
+    @property
+    def native_value(self) -> str | None:
+        latest = self._runtime.alarms.latest
+        return latest["shown"] if latest else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        latest = self._runtime.alarms.latest
+        if latest is None:
+            return None
+        return {
+            "kod": latest["code"],
+            "text": latest["text"],
+            "start": latest["start"],
+            "slut": latest["end"],
+            "utetemperatur vid start": latest["outdoor"],
+            "pågår": "ja" if latest["end"] is None else "nej",
+        }
+
+    @property
+    def available(self) -> bool:
+        # Available while empty, like the coefficient of performance: the
+        # latest alarm is worth reading even after the display has gone quiet.
+        return self.coordinator.last_update_success
 
 
 class CtcIdentitySensor(SensorEntity):

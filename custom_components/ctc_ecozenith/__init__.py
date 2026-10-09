@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -27,6 +27,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from . import dashboard
+from .alarms import STORAGE_VERSION as ALARM_STORAGE_VERSION, AlarmLog
 from .catalogue import (
     async_discover_pages,
     menu_is_due,
@@ -600,6 +601,9 @@ class CtcRuntime:
     #: The display's "Antal starter /24 h" row, where the history page is
     #: harvested, which the mean run over a day divides the minutes by.
     starts_per_day: Any | None = None
+    #: The alarm the display shows and the last ten episodes of it, where the
+    #: display is harvested at all.
+    alarms: AlarmLog | None = None
 
 
 type CtcConfigEntry = ConfigEntry[CtcRuntime]
@@ -783,6 +787,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
                 Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_cop")
             )
             await runtime.cop.async_load()
+        # The alarm the panel shows, read off the same values as the rows. The
+        # harvest notes it page by page; this concludes once per round, after
+        # the listeners of the round have what they need, with the outdoor
+        # temperature Modbus has at that moment. A round that read no page is
+        # no information and leaves the log alone.
+        alarms = AlarmLog(Store(hass, ALARM_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_alarms"))
+        await alarms.async_load()
+        runtime.alarms = alarms
+
+        def _conclude_alarms() -> None:
+            read_any, shown = web.alarms.fresh()
+            if read_any:
+                alarms.note(
+                    shown, datetime.now(timezone.utc), (modbus.data or {}).get("outdoor_temp")
+                )
+
+        _conclude_alarms()
+        entry.async_on_unload(web.async_add_listener(_conclude_alarms))
 
         def _remember() -> None:
             # After every refresh, written only when a harvest actually ran;
@@ -920,11 +942,12 @@ async def async_remove_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> None
     ]
     if not others:
         dashboard.async_unregister(hass)
-    # What the unit was seen to have, what its display last gave and the
-    # energy counters behind the coefficient of performance belong to this
-    # entry alone, and go with it.
+    # What the unit was seen to have, what its display last gave, the energy
+    # counters behind the coefficient of performance and what it alarmed
+    # about belong to this entry alone, and go with it.
     await Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_seen").async_remove()
     await Store(
         hass, HARVEST_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_display"
     ).async_remove()
     await Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_cop").async_remove()
+    await Store(hass, ALARM_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_alarms").async_remove()

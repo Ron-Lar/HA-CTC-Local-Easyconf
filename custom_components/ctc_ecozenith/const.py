@@ -103,6 +103,20 @@ CONF_TRY_QUICK_MENU: Final = "try_quick_menu"
 #: installer page is titled "Avancerat", which is "Installer" in English, and
 #: pressing a heading does nothing at all. Same rule as the catalogue's.
 PAGE_HEADER_HEIGHT: Final = 45
+#: The header icon sits at the top left of a page, inside this many pixels
+#: from the left edge, at x 5 on every page captured so far.
+HEADER_ICON_MAX_X: Final = 60
+
+#: How the display prints an alarm out of its catalogue: "[E017] Givare
+#: solpaneler ut". Information texts are printed "[I...]" and are no alarm.
+ALARM_TEXT_PREFIX: Final = "[E"
+#: The row name of the status field, casefolded, in the panel's own language:
+#: the one text the panel fills from a variable that is read for an alarm
+#: besides the header icon. The word is the same in Swedish, English, Danish
+#: and Norwegian; a panel in another language has the header icon.
+STATUS_CAPTIONS: Final = ("status",)
+#: How many alarm episodes are kept, newest first.
+ALARM_EPISODES: Final = 10
 
 #: What makes a display row a period rather than a lifetime total: "Avgiven
 #: värme/30 dagar" and "Avgiven energi/24h" sit right beside the totals on the
