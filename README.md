@@ -71,7 +71,11 @@ an error that comes and goes is not counted as starts. The first round after a
 start of Home Assistant is the baseline, and nothing is stored: the day's count
 starts over with Home Assistant and says from when it counts. Where the history
 page is harvested, the day's compressor minutes from Modbus divided by the
-display's starts per day gives the mean run.
+display's starts per day gives the mean run. The defrosts of an air to water
+unit are counted the same way: how many since midnight, and when the last one
+began, with its length and the outdoor temperature at the time as attributes,
+which is where a healthy unit and an iced up one part ways. The defrost timer in
+register 62137 is shown as the controller gives it; its unit is not confirmed.
 
 ## The catch with the display, and what the integration does about it
 

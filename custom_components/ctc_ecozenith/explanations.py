@@ -75,7 +75,8 @@ MODBUS: dict[str, str] = {
     "hp1_fan": "Fläktens hastighet i procent, för luft/vattenpumpar.",
     "hp1_defrost_timer": (
         "Tid kvar innan värmepumpen tillåts avfrosta. Avfrostningen startar först när förångaren "
-        "dessutom är kall nog."
+        "dessutom är kall nog. Enheten är obekräftad: registerlistan anger ingen och panelen "
+        "skriver talet utan enhet, så det kan vara minuter likaväl som något annat."
     ),
     "hp1_outdoor_temp": "Utetemperaturen mätt vid värmepumpen.",
     "degree_minutes": (
@@ -219,6 +220,17 @@ DERIVED: dict[str, str] = {
         "Displayens räknare hämtas bara på det långsamma intervallet, så talet kan släpa något; "
         "båda talen står som attribut."
     ),
+    "defrosts_today": (
+        "Antal avfrostningar sedan midnatt, räknade ur övergångarna i Värmepump status. Gäller "
+        "luft/vattenpumpar. Många avfrostningar en kall och fuktig dag är normalt; många en torr "
+        "dag kan betyda en igenisad förångare. Nollas vid midnatt och vid omstart av Home "
+        "Assistant; attributet räknas sedan säger från när."
+    ),
+    "last_defrost": (
+        "När värmepumpen senast började avfrosta. Längden i minuter, utetemperaturen vid starten "
+        "och när den avslutades står som attribut; längden saknas medan avfrostningen pågår. En "
+        "avfrostning räknas som en del av kompressorns körning, inte som ett stopp."
+    ),
     "cop_day": (
         "Värmefaktor senaste dygnet: avgiven värme delat med tillförd el, ur två avläsningar av "
         "energiräknarna 20 till 30 timmar isär. Visas när minst 3 kWh har förbrukats."
@@ -301,14 +313,14 @@ _DISPLAY: tuple[tuple[str, str], ...] = (
     ("laddpump", "Laddpumpens drift och flöde i procent."),
     ("brinepump", "Brinepumpens drift och hastighet i procent."),
     ("fläkt", "Fläktens drift och hastighet i procent."),
-    ("timer avfrostning", "Tid kvar innan värmepumpen tillåts avfrosta. Avfrostningen startar först när förångaren dessutom är kall nog."),
+    ("timer avfrostning", "Tid kvar innan värmepumpen tillåts avfrosta. Avfrostningen startar först när förångaren dessutom är kall nog. Enheten är obekräftad: panelen skriver talet utan enhet."),
     ("ström l1/l2/l3", "Husets strömuttag per fas, mätt med strömkännare på inkommande ledningar."),
     ("ström", "Strömmen över kompressorn."),
     ("programversion vp-styrkort", "Värmepumpens programversion, skriven som ett datum."),
     ("modell", "Värmepumpens modell."),
     ("avgiven värme totalt", "All värme värmepumpen har levererat sedan driftstarten. Täljaren i värmefaktorn."),
     ("avgiven värme/30", "Värme levererad de senaste 30 dagarna."),
-    ("avgiven värme", "Värmeeffekten värmepumpen lämnar just nu, enligt dess egen beräkning."),
+    ("avgiven värme", "Värmeeffekten värmepumpen lämnar just nu, enligt dess egen beräkning. Under en avfrostning väntas talet bli negativt: kretsen vänds och värme tas ur tanken för att tina förångaren."),
     ("avgiven energi/24", "Värme levererad det senaste dygnet."),
     ("avgiven energi", "All värme värmepumpen har levererat sedan driftstarten, i den äldre displayprogramvarans räknare."),
     ("avgiven kyla totalt", "All kyla värmepumpen har levererat sedan driftstarten."),
@@ -359,7 +371,7 @@ _DISPLAY: tuple[tuple[str, str], ...] = (
     ("läge", "Vilket program som är aktivt."),
     ("energy output total", "All värme värmepumpen har levererat sedan driftstarten. Täljaren i värmefaktorn."),
     ("energy consumption total", "All el värmepumpen har förbrukat sedan driftstarten. Nämnaren i värmefaktorn."),
-    ("energy output", "Värmeeffekten värmepumpen lämnar just nu, enligt dess egen beräkning."),
+    ("energy output", "Värmeeffekten värmepumpen lämnar just nu, enligt dess egen beräkning. Under en avfrostning väntas talet bli negativt: kretsen vänds och värme tas ur tanken för att tina förångaren."),
     ("energy add", "Den elektriska effekt som går till värmepumpen just nu."),
     ("total operation time", "Drifttid i timmar: hur länge produkten har varit spänningssatt, eller kompressorns drifttid."),
 )
@@ -406,7 +418,7 @@ def source(key: str, pages: list[Mapping[str, Any]] | None = None, interval: int
         return "Knapp i Home Assistant"
     if key in ("compressor_running", "defrosting", "alarm", "blocked"):
         return "Räknas fram ur Värmepump status, Modbus-register 62017"
-    if key in ("last_start", "starts_today", "last_run"):
+    if key in ("last_start", "starts_today", "last_run", "defrosts_today", "last_defrost"):
         return "Räknas fram ur övergångarna i Värmepump status, Modbus-register 62017"
     if key == "mean_run_24h":
         return "Räknas ur Modbus-register 62234 och displayens Antal starter /24 h"
