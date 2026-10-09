@@ -21,6 +21,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .catalogue import numeric_value
+from .harvest import is_fresh, stale_after, utcnow
 from .const import (
     HARVEST_PATIENCE,
     RETRY_INTERVAL,
@@ -180,7 +181,18 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
 
 class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Harvest the display's own values for the pages the user selected."""
+    """Harvest the display's own values for the pages the user selected.
+
+    A harvest is a walk: to each selected page in turn, reading its screens,
+    and back to where the panel stood. The data keeps a value across a page
+    that could not be reached, so that a page out of reach for a moment does
+    not empty its sensors, and ``read_at`` says for every key when it was last
+    actually read off the panel. That age is what decides whether a sensor is
+    available (:meth:`is_fresh`): a value carried for longer than a whole
+    harvest may fail in a row (HARVEST_PATIENCE intervals) is called stale,
+    page by page, while a harvest that reads no page at all is a failure of
+    the whole display and is counted by Patience like any other.
+    """
 
     def __init__(
         self,
@@ -200,6 +212,10 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.client = client
         self.pages = pages
+        #: The configured interval between harvests. The coordinator's own
+        #: update_interval is shorter while the display is being retried, so
+        #: the age a reading may reach is measured against this one.
+        self.interval = interval
         self.restore_page = restore_page
         #: The page the panel was showing before this integration first touched
         #: it. Kept across restarts so that one failed restore cannot make the
@@ -208,12 +224,50 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._on_home_page_found = on_home_page_found
         self._expected_page: int | None = None
         self.last_skip_reason: str | None = None
+        #: Why the last attempt failed, in the words of its UpdateFailed, and
+        #: None after an attempt that worked.
+        self.last_failure: str | None = None
         #: When each value was last actually read off the panel. The data keeps
         #: a value through a skipped cycle, so this is the only way to tell a
         #: fresh reading from a carried one.
         self.read_at: dict[str, datetime] = {}
+        #: When a harvest last read at least one page, and the pages it read
+        #: and missed that time, by number.
+        self.last_harvest: datetime | None = None
+        self.pages_read: list[int] = []
+        self.pages_missed: list[int] = []
         #: A display that is merely slow should not take every reading with it.
         self.patience = Patience(interval, RETRY_INTERVAL, HARVEST_PATIENCE)
+
+    # ------------------------------------------------------------ the age
+
+    @property
+    def stale_after(self) -> timedelta:
+        """How long a reading stays fresh after it was read."""
+        return stale_after(self.interval, HARVEST_PATIENCE)
+
+    def last_read(self, key: str) -> datetime | None:
+        """When ``key`` was last read off the panel, or None if it never was.
+
+        Public on purpose: the coefficient of performance sensors say in their
+        reason since when the display has not answered, and the daily report
+        pairs a Modbus reading with the moment the display was read.
+        """
+        return self.read_at.get(key)
+
+    def is_fresh(self, key: str, now: datetime | None = None) -> bool:
+        """Whether ``key`` holds a value read recently enough to be shown.
+
+        Within as many intervals as a whole harvest may fail in a row, so a
+        page that has stopped answering is treated like a display that has:
+        its sensors go unavailable after the same patience, no sooner, and
+        come back the moment the page is read again.
+        """
+        if key not in (self.data or {}):
+            return False
+        return is_fresh(self.read_at.get(key), now or utcnow(), self.stale_after)
+
+    # -------------------------------------------------------- the harvest
 
     async def _async_update_data(self) -> dict[str, Any]:
         if not self.pages:
@@ -222,6 +276,7 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             try:
                 data = await self._async_harvest()
             except UpdateFailed as err:
+                self.last_failure = str(err)
                 shown = self.patience.failed(bool(self.data))
                 self.update_interval = timedelta(seconds=self.patience.seconds)
                 if shown:
@@ -229,19 +284,74 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("Display harvest failed (%s), keeping what we have: %s",
                               self.patience.failures, err)
                 return dict(self.data or {})
+        self.last_failure = None
         self.patience.worked()
         self.update_interval = timedelta(seconds=self.patience.seconds)
         return data
 
     async def _async_harvest(self) -> dict[str, Any]:
+        """One walk over the selected pages, in named steps.
+
+        Where the panel stands decides whether to walk at all; then each page
+        is read in turn, a page that cannot be reached or read costing only
+        its own readings; then the panel is put back. A page that failed is
+        no failure of the harvest while another page was read: its values age
+        in the data and its sensors go unavailable by :meth:`is_fresh`. Only
+        a walk that read no page at all is raised, so that Patience counts it
+        and a display that has stopped answering is called unavailable after
+        the usual three.
+        """
         data: dict[str, Any] = dict(self.data or {})
+        origin = await self._async_origin()
+        if self._someone_at_the_panel(origin):
+            return data
+        self._note_home(origin)
+        restore_to = self._restore_target(origin)
+
+        read: list[int] = []
+        missed: list[int] = []
+        last_error: CtcWebError | None = None
         try:
-            origin = await self.client.async_current_page()
+            for page in self.pages:
+                try:
+                    done = await self._async_read_page(page, data)
+                except CtcWebError as err:
+                    # One page's trouble, not the display's: the next page
+                    # starts from wherever the panel is, as every page does.
+                    _LOGGER.debug("Page %s could not be read this time: %s", page.page, err)
+                    last_error = err
+                    done = False
+                (read if done else missed).append(page.page)
+        finally:
+            await self._async_leave(restore_to)
+        self.pages_read, self.pages_missed = read, missed
+
+        if not read:
+            why = f": {last_error}" if last_error is not None else ""
+            raise UpdateFailed(f"no selected page of the display could be read{why}")
+        if missed:
+            _LOGGER.debug(
+                "Pages %s were not read this harvest; their readings keep their age until "
+                "they are",
+                missed,
+            )
+        if not data:
+            raise UpdateFailed("no value could be read from the display")
+        self.last_harvest = utcnow()
+        return data
+
+    async def _async_origin(self) -> int:
+        """Where the panel stands as the harvest begins."""
+        try:
+            return await self.client.async_current_page()
         except CtcWebError as err:
             raise UpdateFailed(f"could not read the panel state: {err}") from err
 
-        # Somebody standing at the panel would be fighting us for it. If the page
-        # is not where we left it, leave it alone this round.
+    def _someone_at_the_panel(self, origin: int) -> bool:
+        """Whether somebody standing at the panel would be fighting us for it.
+
+        If the page is not where we left it, leave it alone this round.
+        """
         if (
             self._expected_page is not None
             and origin != self._expected_page
@@ -249,61 +359,69 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ):
             self.last_skip_reason = "panelen används av någon annan"
             _LOGGER.debug("Panel is on page %s, not %s; skipping this cycle", origin, self._expected_page)
-            return data
+            return True
         self.last_skip_reason = None
+        return False
 
+    def _note_home(self, origin: int) -> None:
+        """First time in: whatever the panel was showing is where it belongs."""
         if self.home_page is None and origin not in {p.page for p in self.pages}:
-            # First time in: whatever the panel was showing is where it belongs.
             self.home_page = origin
             if self._on_home_page_found is not None:
                 self._on_home_page_found(origin)
 
-        restore_to = None
-        if self.restore_page:
-            # Restoring to the page this cycle started on is right until a
-            # restore fails, after which that wrong page would become the new
-            # reference. The remembered home page breaks that loop.
-            restore_to = origin
-            if origin in {p.page for p in self.pages} and self.home_page is not None:
-                restore_to = self.home_page
-        try:
-            for page in self.pages:
-                if await self.client.async_current_page() != page.page:
-                    # The route was recorded during setup. Replaying it is the
-                    # only reliable way in, since the menu layout differs between
-                    # models and cannot be derived at poll time.
-                    moved = await self.client.async_goto_page(page.page, page.route)
-                    if not moved:
-                        _LOGGER.debug("Could not reach page %s", page.page)
-                        continue
-                values_by_screen: dict[int, list[Any]] = {}
-                for screen in page.screens:
-                    try:
-                        values_by_screen[screen] = await self.client.async_vars(screen)
-                    except CtcWebError as err:
-                        _LOGGER.debug("Screen %s unreadable: %s", screen, err)
-                read_at = datetime.now(timezone.utc)
-                for value in page.values:
-                    number = numeric_value(value, values_by_screen.get(value.screen, []))
-                    if number is not None:
-                        data[value.key] = number
-                        self.read_at[value.key] = read_at
-        except CtcWebError as err:
-            raise UpdateFailed(f"display read failed: {err}") from err
-        finally:
-            if restore_to is not None:
-                try:
-                    await self._async_restore(restore_to)
-                except CtcWebError:
-                    _LOGGER.debug("Could not restore the panel to page %s", restore_to)
-            try:
-                self._expected_page = await self.client.async_current_page()
-            except CtcWebError:
-                self._expected_page = None
+    def _restore_target(self, origin: int) -> int | None:
+        """Where the panel is put back afterwards, if anywhere.
 
-        if not data:
-            raise UpdateFailed("no value could be read from the display")
-        return data
+        Restoring to the page this cycle started on is right until a restore
+        fails, after which that wrong page would become the new reference.
+        The remembered home page breaks that loop.
+        """
+        if not self.restore_page:
+            return None
+        if origin in {p.page for p in self.pages} and self.home_page is not None:
+            return self.home_page
+        return origin
+
+    async def _async_read_page(self, page: SlowPage, data: dict[str, Any]) -> bool:
+        """Walk to one page and read its screens into ``data``.
+
+        True when at least one of its screens was read, which is when its
+        values got a new moment in ``read_at``. The route was recorded during
+        setup; replaying it is the only reliable way in, since the menu layout
+        differs between models and cannot be derived at poll time.
+        """
+        if await self.client.async_current_page() != page.page:
+            if not await self.client.async_goto_page(page.page, page.route):
+                _LOGGER.debug("Could not reach page %s", page.page)
+                return False
+        values_by_screen: dict[int, list[Any]] = {}
+        for screen in page.screens:
+            try:
+                values_by_screen[screen] = await self.client.async_vars(screen)
+            except CtcWebError as err:
+                _LOGGER.debug("Screen %s unreadable: %s", screen, err)
+        if not values_by_screen:
+            return False
+        read_at = utcnow()
+        for value in page.values:
+            number = numeric_value(value, values_by_screen.get(value.screen, []))
+            if number is not None:
+                data[value.key] = number
+                self.read_at[value.key] = read_at
+        return True
+
+    async def _async_leave(self, restore_to: int | None) -> None:
+        """Put the panel back and note where it was left, for the next cycle."""
+        if restore_to is not None:
+            try:
+                await self._async_restore(restore_to)
+            except CtcWebError:
+                _LOGGER.debug("Could not restore the panel to page %s", restore_to)
+        try:
+            self._expected_page = await self.client.async_current_page()
+        except CtcWebError:
+            self._expected_page = None
 
     async def async_restore_page(self, target: int) -> bool:
         """Put the panel back on ``target``, for callers outside the harvest.

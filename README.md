@@ -262,7 +262,11 @@ write to 61500, 61503 or 62000 never reaches the wire.
   is asked for once more, with longer patience; a tap never is, since a tap that
   did land would move the panel twice. A harvest that fails keeps the readings it
   already had and tries again in five minutes instead of thirty. Only after three
-  failed harvests in a row are the display's readings called unavailable.
+  failed harvests in a row are the display's readings called unavailable. A
+  single page that cannot be reached costs that page alone: its readings keep
+  the moment they were last read, shown as the attribute *senast läst*, and go
+  unavailable once that moment is three intervals old, while the other pages
+  go on as usual.
 - **Absent hardware still answers.** The controller replies for ten heat pumps
   and four heating systems whatever is actually installed, with plausible
   numbers. Readings marked as missing use CTC's own markers, plus or minus 9999
