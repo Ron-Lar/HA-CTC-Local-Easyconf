@@ -16,6 +16,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -93,6 +94,7 @@ from .identity import (
     only_identity_differs,
 )
 from .modbus_api import CtcModbusClient, hold_library_quiet
+from .modbus_probe import BUSY, CLOSED, async_classify_cached
 from .updates import async_latest_release, check_is_due, newer
 from .seen import (
     STORAGE_MINOR_VERSION as SEEN_MINOR_VERSION,
@@ -201,6 +203,7 @@ ISSUE_PAGES = "pages_missing"
 ISSUE_HISTORY_PAGE = "history_page_missing"
 ISSUE_IDENTITY = "identity_incomplete"
 ISSUE_UPDATE_AVAILABLE = "update_available"
+ISSUE_MODBUS_BUSY = "modbus_busy"
 
 #: How often GitHub is asked. Rarely: a release is not news that cannot wait.
 UPDATE_CHECK_INTERVAL = timedelta(hours=24)
@@ -568,6 +571,63 @@ async def _async_reread_menu(
     return changed
 
 
+async def _async_name_the_failure(
+    hass: HomeAssistant, entry: "CtcConfigEntry", host: str, port: int, slave: int
+) -> ConfigEntryNotReady | None:
+    """Say what kept Modbus away from a set-up that could not read a register (roadmap L12).
+
+    pymodbus answers a refused port, a controller whose one place another
+    client holds, and a passing hiccup alike, so the entry sat in setup_retry
+    with "no Modbus register could be read" whatever the cause, and with Home
+    Assistant's backoff growing to ten minutes a stranger with a modbus: block
+    left in configuration.yaml waited long on an error without a name. A raw
+    probe tells the cases apart; see modbus_probe. It runs here only, after
+    this attempt's client has been shut, so it never meets a session that
+    works, and a verdict is reused for ten minutes so the retries do not knock
+    twice as often.
+
+    A taken place is said in the repairs view, where an owner sees it; Home
+    Assistant logs a set-up that is not ready on info only. The notice goes at
+    the first reading that works, or when a later probe finds another cause.
+    Returns the reason to raise, or None to raise the failure as it was.
+    """
+    issue_id = f"{entry.entry_id}_{ISSUE_MODBUS_BUSY}"
+    try:
+        verdict = await async_classify_cached(host, port, slave)
+    except Exception:  # noqa: BLE001 - naming the failure must never hide it
+        _LOGGER.debug("Could not probe the Modbus port after a failed set-up", exc_info=True)
+        return None
+    if verdict != BUSY:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+    if verdict == BUSY:
+        if ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None:
+            _LOGGER.warning(
+                "The heat pump accepts a Modbus connection and drops it at the first "
+                "request: another client holds its one Modbus place, a modbus: block in "
+                "configuration.yaml, a test tool or a session that was never let go"
+            )
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_MODBUS_BUSY,
+        )
+        return ConfigEntryNotReady(
+            "Another client holds the heat pump's only Modbus connection",
+            translation_domain=DOMAIN,
+            translation_key="modbus_busy",
+        )
+    if verdict == CLOSED:
+        return ConfigEntryNotReady(
+            "The heat pump does not accept a connection on its Modbus port",
+            translation_domain=DOMAIN,
+            translation_key="modbus_closed",
+        )
+    return None
+
+
 def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, Any]:
     """The integration's part of the anonymous daily report.
 
@@ -742,7 +802,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     )
     try:
         await modbus.async_config_entry_first_refresh()
-    except Exception:
+    except Exception as err:
         # The controller allows a single Modbus client. A failed attempt that
         # leaves its socket open holds that slot, so every retry then fails as
         # well and the entry can never recover on its own. Shut down rather
@@ -752,7 +812,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         # nothing is running. Announced here, since the entry is in
         # setup_retry by the time an open page asks for its layout again.
         dashboard.async_announce_change(hass)
+        # With this attempt's client shut, and only then, the cause is named.
+        reason = await _async_name_the_failure(hass, entry, host, modbus_port, slave)
+        if reason is not None:
+            raise reason from err
         raise
+    # The first reading that works: whatever held the Modbus place has let go.
+    ir.async_delete_issue(hass, DOMAIN, f"{entry.entry_id}_{ISSUE_MODBUS_BUSY}")
 
     web_client = CtcWebClient(
         async_get_clientsession(hass),
@@ -1073,6 +1139,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> None
     ]
     if not others:
         dashboard.async_unregister(hass)
+    ir.async_delete_issue(hass, DOMAIN, f"{entry.entry_id}_{ISSUE_MODBUS_BUSY}")
     # What the unit was seen to have, what its display last gave, the energy
     # counters behind the coefficient of performance and what it alarmed
     # about belong to this entry alone, and go with it.

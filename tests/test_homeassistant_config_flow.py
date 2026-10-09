@@ -324,3 +324,63 @@ async def test_read_again_that_finds_pages_makes_it_an_entry_with_a_display(hass
     assert entry.state is ConfigEntryState.LOADED
     # Data and options went in one write: one reload, so two clients in all.
     assert len(FakeModbus.instances) == 2
+
+
+# ------------------------------------------------- a Modbus place taken (L12)
+
+
+async def _pick_the_found_unit(hass):
+    result = await _start(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "scan"}
+    )
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"picked": FOUND.host}
+    )
+
+
+async def test_a_taken_modbus_place_has_a_step_of_its_own(hass, stubs, sweep, display, monkeypatch):
+    """Accepted, then dropped at the first request: another client holds the place.
+
+    The probe runs once the flow's own client is closed, the step names what
+    usually holds the place, and pressing it tries Modbus again.
+    """
+    seen: list[list[int]] = []
+
+    async def probe(host, port, unit):
+        # The flow's own client, closed before the probe knocks.
+        seen.append([client.closes for client in FakeModbus.instances])
+        return "busy"
+
+    stubs.modbus_probe.side_effect = probe
+    with patch(f"{FLOW}.CtcModbusClient", DeadModbus):
+        result = await _pick_the_found_unit(hass)
+        assert result["step_id"] == "modbus_busy"
+        assert result["data_schema"] is None or not result["data_schema"].schema
+        assert result["description_placeholders"]["host"] == FOUND.host
+        assert not result["errors"]
+        assert seen == [[1]]
+
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["step_id"] == "modbus_busy"
+        assert result["errors"] == {"base": "modbus_busy"}
+
+        monkeypatch.setattr(DeadModbus, "answers", True)
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+
+async def test_an_answer_a_moment_later_is_called_a_hiccup(hass, stubs, sweep, display):
+    stubs.modbus_probe.return_value = "answered"
+    with patch(f"{FLOW}.CtcModbusClient", DeadModbus):
+        result = await _pick_the_found_unit(hass)
+    assert result["step_id"] == "manual"
+    assert result["errors"] == {"base": "modbus_transient"}
+
+
+async def test_a_closed_port_is_the_step_about_turning_modbus_on(hass, stubs, sweep, display):
+    stubs.modbus_probe.return_value = "closed"
+    with patch(f"{FLOW}.CtcModbusClient", DeadModbus):
+        result = await _pick_the_found_unit(hass)
+    assert result["step_id"] == "modbus_failed"

@@ -66,6 +66,7 @@ from .discovery import (
     async_probe_web,
 )
 from .modbus_api import CtcModbusClient, CtcModbusError
+from .modbus_probe import ANSWERED, BUSY, async_classify
 from .web_api import CtcWebClient, CtcWebError
 
 _LOGGER = logging.getLogger(__name__)
@@ -87,6 +88,9 @@ STEP_SCAN = "scan"
 STEP_MANUAL = "manual"
 #: The display answered and Modbus did not (roadmap R16).
 STEP_MODBUS_FAILED = "modbus_failed"
+#: Modbus accepted the connection and dropped it at the first request: another
+#: client holds the controller's one place (roadmap L12).
+STEP_MODBUS_BUSY = "modbus_busy"
 
 
 class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -116,6 +120,9 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         #: False once a typed address turned out to have no web interface
         #: answering, and the entry is made on Modbus alone (roadmap R11).
         self._display = True
+        #: Set when "try again" is pressed on the step that says the Modbus
+        #: place is taken, so a second refusal says it is still taken.
+        self._busy_retry = False
 
     # ------------------------------------------------------------ entry point
 
@@ -291,26 +298,69 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
 
         client = CtcModbusClient(self._host, self._modbus_port, self._slave)
+        failed = False
         try:
             await client.async_probe()
         except CtcModbusError as err:
             _LOGGER.debug("Modbus probe failed: %s", err)
-            if not self._display:
-                # Neither the web port nor Modbus answered: no CTC at that
-                # address, as far as can be told, which the text explains.
-                return self._address_form(self._origin or STEP_MANUAL, {"base": "not_a_ctc"})
-            # Tried from this very form before: say that it failed again, or
-            # the same form coming back looks as if nothing had happened.
-            again = self._origin == STEP_MODBUS_FAILED
-            return self._address_form(
-                STEP_MODBUS_FAILED, {"base": "modbus_failed"} if again else None
-            )
+            failed = True
         finally:
             await client.async_close()
+        if failed:
+            # Only now, with the flow's own client closed: the probe is a
+            # second client and must never meet a session that works.
+            return await self._async_modbus_failed()
 
         if not self._display:
             return self._create_without_display()
         return await self.async_step_slow()
+
+    async def _async_modbus_failed(self) -> FlowResult:
+        """Name what kept Modbus away, and show the step that fits (roadmap L12).
+
+        pymodbus says the same thing whether the port refused, another client
+        holds the controller's one place, or the line hiccupped, so a raw probe
+        asks once more and tells them apart; see modbus_probe. It waits out the
+        controller's settle time after the flow's own client first, so this
+        costs some ten seconds, on the failing path only.
+        """
+        assert self._host is not None
+        retried_busy, self._busy_retry = self._busy_retry, False
+        verdict = await async_classify(self._host, self._modbus_port, self._slave)
+        if verdict == BUSY:
+            return self._busy_form({"base": "modbus_busy"} if retried_busy else None)
+        if verdict == ANSWERED:
+            # It answers now: a passing hiccup, and the form to try again.
+            return self._address_form(self._origin or STEP_MANUAL, {"base": "modbus_transient"})
+        if not self._display:
+            # Neither the web port nor Modbus answered: no CTC at that
+            # address, as far as can be told, which the text explains.
+            return self._address_form(self._origin or STEP_MANUAL, {"base": "not_a_ctc"})
+        # Tried from this very form before: say that it failed again, or the
+        # same form coming back looks as if nothing had happened.
+        again = self._origin == STEP_MODBUS_FAILED
+        return self._address_form(STEP_MODBUS_FAILED, {"base": "modbus_failed"} if again else None)
+
+    async def async_step_modbus_busy(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Another client holds the controller's one Modbus place: say so, and try again.
+
+        The address is right, since something accepted the connection there,
+        so there is nothing to type: the step explains what usually holds the
+        place, and submitting it tries Modbus again.
+        """
+        if user_input is not None:
+            self._busy_retry = True
+            return await self.async_step_connect()
+        return self._busy_form(None)
+
+    def _busy_form(self, errors: dict[str, str] | None) -> FlowResult:
+        return self.async_show_form(
+            step_id=STEP_MODBUS_BUSY,
+            errors=dict(errors or {}),
+            description_placeholders={"host": self._host or ""},
+        )
 
     def _entry_data(self) -> dict[str, Any]:
         """What the entry keeps about the unit: where it is and what it said it was."""

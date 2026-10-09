@@ -231,6 +231,7 @@ def stubs(hass, enable_custom_integrations):
     # A reading that found nothing, as the real walk answers when the display
     # would not give the menu up.
     discover = AsyncMock(return_value=MenuReading())
+    modbus_probe = AsyncMock(return_value="silent")
     with (
         patch(f"custom_components.{DOMAIN}.CtcModbusClient", FakeModbus),
         patch(f"custom_components.{DOMAIN}.config_flow.CtcModbusClient", FakeModbus),
@@ -250,8 +251,13 @@ def stubs(hass, enable_custom_integrations):
         ),
         patch(f"custom_components.{DOMAIN}.async_latest_release", AsyncMock(return_value=None)),
         patch(f"custom_components.{DOMAIN}.async_discover_pages", discover),
+        # The raw probe that names a Modbus failure (L12) opens a socket of its
+        # own, which the plugin forbids; "silent" names nothing, so a failed
+        # set-up raises as it always did unless a test says otherwise.
+        patch(f"custom_components.{DOMAIN}.async_classify_cached", modbus_probe),
+        patch(f"custom_components.{DOMAIN}.config_flow.async_classify", modbus_probe),
     ):
-        yield SimpleNamespace(discover=discover)
+        yield SimpleNamespace(discover=discover, modbus_probe=modbus_probe)
 
 
 async def _set_up(hass, **options) -> MockConfigEntry:
