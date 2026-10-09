@@ -81,6 +81,8 @@ MANUAL = "manual"
 #: (roadmap R70). Each is the id of the step it leads to.
 STEP_SCAN = "scan"
 STEP_MANUAL = "manual"
+#: The display answered and Modbus did not (roadmap R16).
+STEP_MODBUS_FAILED = "modbus_failed"
 
 
 class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -103,6 +105,10 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         #: The operation data root the reading found, kept with the menu so
         #: the harvester can step back to it between pages.
         self._root: int | None = None
+        #: The form the address was last typed into, None when it was picked
+        #: from the list or discovered. A Modbus failure after a try from the
+        #: Modbus form says so, rather than showing the same form unchanged.
+        self._origin: str | None = None
 
     # ------------------------------------------------------------ entry point
 
@@ -127,12 +133,18 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_scan(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Sweep the network, then let the user pick or type an address."""
+        """Sweep the network, then let the user pick or type an address.
+
+        An address that already has an entry is left out of the list: picking
+        it could only end in "already set up", and two units side by side are
+        told apart more easily without it.
+        """
         if user_input is not None:
             picked = user_input[CONF_PICKED]
             if picked == MANUAL:
                 return await self.async_step_manual()
             self._host = picked
+            self._origin = None
             for display in self._found:
                 if display.host == picked:
                     self._model = display.model
@@ -144,10 +156,12 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Home Assistant's own adapters and nothing else: without one,
             # there is nothing to sweep and the address form follows at once.
             networks = await async_home_assistant_networks(self.hass)
-            self._found = await async_discover(session, networks) if networks else []
+            found = await async_discover(session, networks) if networks else []
         except Exception as err:  # noqa: BLE001 - a failed sweep must not block setup
             _LOGGER.debug("Network sweep failed: %s", err)
-            self._found = []
+            found = []
+        configured = self._configured_hosts()
+        self._found = [display for display in found if display.host not in configured]
 
         if not self._found:
             return await self.async_step_manual(errors={"base": "nothing_found"})
@@ -156,14 +170,16 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             selector.SelectOptionDict(value=display.host, label=display.label)
             for display in self._found
         ]
-        options.append(
-            selector.SelectOptionDict(value=MANUAL, label="Ange IP-adress manuellt")
-        )
+        # Labelled from strings.json through the selector's translation key;
+        # the label here is only what shows where the translations are missing.
+        options.append(selector.SelectOptionDict(value=MANUAL, label="Enter an address"))
         schema = vol.Schema(
             {
                 vol.Required(CONF_PICKED, default=self._found[0].host): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=options, mode=selector.SelectSelectorMode.LIST
+                        options=options,
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key=CONF_PICKED,
                     )
                 )
             }
@@ -174,27 +190,40 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={"count": str(len(self._found))},
         )
 
+    def _configured_hosts(self) -> set[str]:
+        """The addresses that already have an entry, ignored discoveries aside."""
+        return {
+            str(entry.data.get(CONF_HOST))
+            for entry in self._async_current_entries(include_ignore=False)
+            if entry.data.get(CONF_HOST)
+        }
+
     async def async_step_manual(
         self,
         user_input: dict[str, Any] | None = None,
         errors: dict[str, str] | None = None,
     ) -> FlowResult:
         """Ask for the address by hand: chosen, picked from the list, or after an empty sweep."""
-        errors = dict(errors or {})
         if user_input is not None:
-            self._host = user_input[CONF_HOST].strip()
-            self._modbus_port = user_input[CONF_MODBUS_PORT]
-            self._web_port = user_input[CONF_WEB_PORT]
-            self._slave = user_input[CONF_SLAVE]
-            session = async_get_clientsession(self.hass)
-            display = await async_probe_host(session, self._host, self._web_port)
-            if display is None:
-                errors["base"] = "not_a_ctc"
-            else:
-                self._model = display.model
-                self._settings_name = display.settings_name
-                return await self.async_step_connect()
+            return await self._async_address_given(user_input, STEP_MANUAL)
+        return self._address_form(STEP_MANUAL, errors)
 
+    async def async_step_modbus_failed(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """The display answered and Modbus did not: what to do at the panel, and the form again.
+
+        The most common first-time failure. It used to land on the address form,
+        whose text began with "no CTC was found automatically" right after one
+        had been; this step names the menu on the panel instead, and takes the
+        same fields, so a corrected address or port goes through as typed.
+        """
+        if user_input is not None:
+            return await self._async_address_given(user_input, STEP_MODBUS_FAILED)
+        return self._address_form(STEP_MODBUS_FAILED, None)
+
+    def _address_form(self, step_id: str, errors: dict[str, str] | None) -> FlowResult:
+        """The address and its ports, filled in with what is known so far."""
         schema = vol.Schema(
             {
                 vol.Required(CONF_HOST, default=self._host or ""): str,
@@ -204,8 +233,28 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(
-            step_id="manual", data_schema=schema, errors=errors
+            step_id=step_id,
+            data_schema=schema,
+            errors=dict(errors or {}),
+            description_placeholders={"host": self._host or ""},
         )
+
+    async def _async_address_given(
+        self, user_input: dict[str, Any], step_id: str
+    ) -> FlowResult:
+        """Check a typed address: the display first, then Modbus in async_step_connect."""
+        self._origin = step_id
+        self._host = user_input[CONF_HOST].strip()
+        self._modbus_port = user_input[CONF_MODBUS_PORT]
+        self._web_port = user_input[CONF_WEB_PORT]
+        self._slave = user_input[CONF_SLAVE]
+        session = async_get_clientsession(self.hass)
+        display = await async_probe_host(session, self._host, self._web_port)
+        if display is None:
+            return self._address_form(step_id, {"base": "not_a_ctc"})
+        self._model = display.model
+        self._settings_name = display.settings_name
+        return await self.async_step_connect()
 
     # ------------------------------------------------------------- validation
 
@@ -222,19 +271,11 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await client.async_probe()
         except CtcModbusError as err:
             _LOGGER.debug("Modbus probe failed: %s", err)
-            await client.async_close()
-            return self.async_show_form(
-                step_id="manual",
-                data_schema=vol.Schema(
-                    {
-                        vol.Required(CONF_HOST, default=self._host): str,
-                        vol.Required(CONF_MODBUS_PORT, default=self._modbus_port): int,
-                        vol.Required(CONF_WEB_PORT, default=self._web_port): int,
-                        vol.Required(CONF_SLAVE, default=self._slave): int,
-                    }
-                ),
-                errors={"base": "modbus_failed"},
-                description_placeholders={"host": self._host},
+            # Tried from this very form before: say that it failed again, or
+            # the same form coming back looks as if nothing had happened.
+            again = self._origin == STEP_MODBUS_FAILED
+            return self._address_form(
+                STEP_MODBUS_FAILED, {"base": "modbus_failed"} if again else None
             )
         finally:
             await client.async_close()
@@ -352,8 +393,10 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="not_a_ctc")
 
         self._host = host
+        self._origin = None
         self._model = display.model
         self._settings_name = display.settings_name
+        # The card of a discovered unit reads strings.json's flow_title, "{name}".
         self.context["title_placeholders"] = {"name": display.label}
         return await self.async_step_confirm()
 
@@ -394,6 +437,17 @@ async def _async_version(hass) -> str:
     return str((await async_get_integration(hass, DOMAIN)).version)
 
 
+def page_label(page: Any) -> str:
+    """A page in the tick boxes: its title, and how many values it holds in brackets.
+
+    The title is the display's own, in the panel's language. The count stands
+    alone, explained in the step's text, because a selector's option label
+    cannot be translated with a number in it; it used to name the values in
+    Swedish whatever language Home Assistant spoke.
+    """
+    return f"{page.title} ({len(page.values)})"
+
+
 def _slow_schema(
     pages: list[Any],
     selected: list[int],
@@ -401,10 +455,7 @@ def _slow_schema(
     restore: bool,
 ) -> vol.Schema:
     options = [
-        selector.SelectOptionDict(
-            value=str(page.page),
-            label=f"{page.title} ({len(page.values)} värden)",
-        )
+        selector.SelectOptionDict(value=str(page.page), label=page_label(page))
         for page in pages
     ]
     return vol.Schema(
@@ -502,10 +553,7 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             ] = selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
-                        selector.SelectOptionDict(
-                            value=str(page.page),
-                            label=f"{page.title} ({len(page.values)} värden)",
-                        )
+                        selector.SelectOptionDict(value=str(page.page), label=page_label(page))
                         for page in menu
                     ],
                     multiple=True,

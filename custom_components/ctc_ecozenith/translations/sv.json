@@ -1,5 +1,6 @@
 {
   "config": {
+    "flow_title": "{name}",
     "step": {
       "user": {
         "title": "Hitta värmepumpen",
@@ -11,7 +12,7 @@
       },
       "scan": {
         "title": "Välj värmepump",
-        "description": "CTC-displayer hittade i Home Assistants egna nät: {count}.",
+        "description": "CTC-displayer hittade i Home Assistants egna nät: {count}. Adresser som redan är tillagda visas inte.",
         "data": {
           "picked": "Hittade enheter"
         }
@@ -26,9 +27,19 @@
           "slave": "Modbus-adress"
         }
       },
+      "modbus_failed": {
+        "title": "Modbus svarar inte",
+        "description": "Displayen på {host} svarar, men Modbus gör det inte. Slå på det vid panelen under Installatör, Definiera, Fjärrstyrning, där Ethernet ska stå på Modbus TCP; raden för porten visas först när det är gjort. Försök sedan igen, med samma adress eller en rättad.",
+        "data": {
+          "host": "IP-adress",
+          "modbus_port": "Modbus TCP-port",
+          "web_port": "Webbport",
+          "slave": "Modbus-adress"
+        }
+      },
       "slow": {
         "title": "Långsamma värden från displayen",
-        "description": "Modbus läses hela tiden och sköter all styrning. Displayens webbgränssnitt har dessutom värden som Modbus saknar, till exempel avgiven värme.\n\nFällan är att bara den sida panelen visar hålls färsk, så integrationen måste bläddra dit och tillbaka. Panelen rör sig då för den som står vid den. Kryssa i de sidor du vill hämta, eller hoppa över steget och kör enbart Modbus.\n\nVärmefaktorn kräver sidan med lagrad eller historisk driftinfo, där avgiven värme räknas.\n\n{count} sidor hittades i {model}.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}",
+        "description": "Modbus läses hela tiden och sköter all styrning. Displayens webbgränssnitt har dessutom värden som Modbus saknar, till exempel avgiven värme.\n\nFällan är att bara den sida panelen visar hålls färsk, så integrationen måste bläddra dit och tillbaka. Panelen rör sig då för den som står vid den. Kryssa i de sidor du vill hämta, eller hoppa över steget och kör enbart Modbus.\n\nVärmefaktorn kräver sidan med lagrad eller historisk driftinfo, där avgiven värme räknas.\n\n{count} sidor hittades i {model}; talet efter varje sida är hur många värden den har.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}",
         "data": {
           "slow_pages": "Sidor att hämta",
           "slow_interval": "Hur ofta",
@@ -42,12 +53,19 @@
     },
     "error": {
       "not_a_ctc": "Adressen svarar, men det är ingen CTC-display.",
-      "modbus_failed": "Displayen svarar men Modbus gör det inte. Slå på det i pumpens meny under Avancerat, Definiera, Fjärrstyrning, där Ethernet ska stå på Modbus TCP.",
+      "modbus_failed": "Modbus svarade inte den här gången heller.",
       "nothing_found": "Sökningen hittade ingen CTC-display. Skriv in displayens adress i stället; en display på ett annat nät nås inte av sökningen."
     },
     "abort": {
       "already_configured": "Den här värmepumpen är redan tillagd.",
       "not_a_ctc": "Enheten är ingen CTC-display."
+    }
+  },
+  "selector": {
+    "picked": {
+      "options": {
+        "manual": "Ange adress"
+      }
     }
   },
   "options": {
@@ -69,12 +87,13 @@
           "enable_control": "Skapar styrentiteter som skriver till CTC:s flyktiga 1000-register. De nollställs av pumpen cirka fem minuter efter sista skrivningen, så styrningen släpper av sig själv om Home Assistant stannar. De lagrade inställningarna i 61500-serien rörs aldrig.",
           "send_statistics": "En rapport per dygn till {endpoint}: integrationens version, Home Assistant-version, installationstyp och Python-version, språket och landet du ställt in i Home Assistant, en ungefärlig plats avrundad till cirka 11 km, antal entiteter och enheter, vilka transporter som används, om styrning är påslagen, hur många displaysidor som hämtas, om raden med total drifttid kändes igen på historiksidan, om räknarna bakom värmefaktorn hittades på displayen eller i Modbus och om var och en lämnade ett tal vid senaste läsningen, samt när värmefaktorn saknas varför: för lite energi räknad ännu, en räknare som står still fast enheten varit igång, eller en kvot ingen värmepump kan ge. Dessutom antal misslyckade registeravläsningar, innedelens och utedelens modell, programversionen i displayen, värmepumpens styrkort och styrenheten, produkt samt tillverkningsår och tillverkningsvecka ur serienumret, och värmefaktorn (COP) för senaste dygnet, rullande år, maskinens första år och hela livslängden. Ett mätvärde lämnar huset, och bara när det är fel: står en räknare still eller ger de två räknarna en omöjlig kvot skickas de två livstidsräknarna i kilowattimmar tillsammans med flaggan, aldrig annars. Aldrig namn, adress, exakt position, fullständigt serienummer, entitetsnamn eller sidnamn, aldrig något finare än ett dygn, och din IP-adress sparas inte. Dessutom skickas ett slumpat id som skapas vid installationen, så att dygnsrapporterna kan hållas isär och raderas på begäran (servern sparar det bara som en hash, och det säger inget om vem du är), en hash som knyter ihop beolinks plugin på samma Home Assistant, hur många varningar och fel integrationen loggat sedan förra rapporten, och om den är igång eller väntar på att starta igen, aldrig själva meddelandena eller skälet. Stänger du av den raderas också det som redan skickats. Hela listan: {privacy_url}",
           "visit_system_info": "Panelen går till displayens sida Systeminformation en gång och tillbaka igen, för att läsa serienummer och displayens egen programversion. Den trycker bara på Avancerat, Display och Systeminformation, kontrollerar var panelen hamnade efter varje tryck och avbryter vid minsta avvikelse.",
-          "check_updates": "Frågar GitHub en gång om dygnet om det finns en nyare release av integrationen, och säger till i reparationsvyn. Home Assistant erbjuder bara uppdateringar för det HACS installerat, så en kopia som lagts dit för hand får annars aldrig någon."
+          "check_updates": "Frågar GitHub en gång om dygnet om det finns en nyare release av integrationen, och säger till i reparationsvyn. Home Assistant erbjuder bara uppdateringar för det HACS installerat, så en kopia som lagts dit för hand får annars aldrig någon.",
+          "slow_pages": "Talet efter varje sida är hur många värden den har."
         }
       },
       "rescan": {
         "title": "Långsamma värden från displayen",
-        "description": "{count} sidor hittades. Panelen har flyttats under avläsningen och ställts tillbaka. Värmefaktorn kräver sidan med lagrad eller historisk driftinfo.",
+        "description": "{count} sidor hittades. Panelen har flyttats under avläsningen och ställts tillbaka. Värmefaktorn kräver sidan med lagrad eller historisk driftinfo. Talet efter varje sida är hur många värden den har.",
         "data": {
           "slow_pages": "Sidor att hämta",
           "slow_interval": "Hur ofta",

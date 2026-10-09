@@ -1,5 +1,6 @@
 {
   "config": {
+    "flow_title": "{name}",
     "step": {
       "user": {
         "title": "Find the heat pump",
@@ -11,7 +12,7 @@
       },
       "scan": {
         "title": "Choose heat pump",
-        "description": "CTC displays found on Home Assistant's own networks: {count}.",
+        "description": "CTC displays found on Home Assistant's own networks: {count}. Addresses that are already set up are left out.",
         "data": {
           "picked": "Devices found"
         }
@@ -26,9 +27,19 @@
           "slave": "Modbus address"
         }
       },
+      "modbus_failed": {
+        "title": "Modbus does not answer",
+        "description": "The display at {host} answers, but Modbus does not. Turn it on at the panel under Installer, Define, Remote control, where Ethernet must be set to Modbus TCP; the port row only appears once that is done. Then try again, with the same address or a corrected one.",
+        "data": {
+          "host": "IP address",
+          "modbus_port": "Modbus TCP port",
+          "web_port": "Web port",
+          "slave": "Modbus address"
+        }
+      },
       "slow": {
         "title": "Slow values from the display",
-        "description": "Modbus is read continuously and handles all control. The display's web interface additionally carries values Modbus does not have, such as delivered heat.\n\nThe catch is that only the page the panel is showing stays fresh, so the integration has to walk there and back. The panel moves while it does. Tick the pages you want, or skip this step and run on Modbus alone.\n\nThe coefficient of performance needs the page with the stored or historical operation data, where delivered heat is counted.\n\n{count} pages were found on the {model}.\n\nFrom the start, control of the heat pump, the walk to System information, the anonymous statistics and the check for new releases are switched on; all four are changed under Configure. What the statistics send: {privacy_url}",
+        "description": "Modbus is read continuously and handles all control. The display's web interface additionally carries values Modbus does not have, such as delivered heat.\n\nThe catch is that only the page the panel is showing stays fresh, so the integration has to walk there and back. The panel moves while it does. Tick the pages you want, or skip this step and run on Modbus alone.\n\nThe coefficient of performance needs the page with the stored or historical operation data, where delivered heat is counted.\n\n{count} pages were found on the {model}; the figure after each is how many values it holds.\n\nFrom the start, control of the heat pump, the walk to System information, the anonymous statistics and the check for new releases are switched on; all four are changed under Configure. What the statistics send: {privacy_url}",
         "data": {
           "slow_pages": "Pages to read",
           "slow_interval": "How often",
@@ -42,12 +53,19 @@
     },
     "error": {
       "not_a_ctc": "That address answers, but it is not a CTC display.",
-      "modbus_failed": "The display answers but Modbus does not. Turn it on from the panel under Installer, Define, Remote control, where Ethernet must be set to Modbus TCP.",
+      "modbus_failed": "Modbus did not answer this time either.",
       "nothing_found": "The search found no CTC display. Type the display's address instead; a display on another network is not reached by the search."
     },
     "abort": {
       "already_configured": "This heat pump is already set up.",
       "not_a_ctc": "The device is not a CTC display."
+    }
+  },
+  "selector": {
+    "picked": {
+      "options": {
+        "manual": "Enter an address"
+      }
     }
   },
   "options": {
@@ -69,12 +87,13 @@
           "enable_control": "Creates control entities that write to CTC's volatile 1000 registers. The controller forgets them about five minutes after the last write, so control releases itself if Home Assistant stops. The stored settings in the 61500 block are never written.",
           "send_statistics": "One report per day to {endpoint}: the integration's version, the Home Assistant version, installation type and Python version, the language and the country you configured in Home Assistant, an approximate position rounded to about 11 km, the number of entities and devices, which transports are in use, whether control is enabled, how many display pages are harvested, whether the row with the unit's operating hours was recognised on the history page, whether the counters behind the coefficient of performance were found on the display or in Modbus and whether each handed over a number at the last read, and when there is no figure, why: too little energy counted so far, a counter standing still although the unit has been running, or a quotient no heat pump could produce. Also the number of failed register reads, the indoor and outdoor unit's model, the firmware in the display, the heat pump's control board and the control unit, the product and the year and week of manufacture from the serial number, and the coefficient of performance (COP) over the last day, a rolling year, the machine's first year and the lifetime. One measurement leaves the house, and only when it is wrong: where a counter stands still or the two counters give an impossible quotient, the two lifetime totals in kilowatt hours are sent along with the flag, never otherwise. Never a name, an address, an exact position, a full serial number, an entity name or a page name, never anything finer than one day, and your IP address is not stored. It also sends a random id created when the integration was installed, so that the daily reports can be kept apart and erased on request (the server keeps it only as a hash, and it says nothing about who you are), a hash that links the beolink plugins running on the same Home Assistant, how many warnings and errors the integration logged since the previous report, and whether it is running or waiting to start again, never the messages themselves or the reason. Switching this off also erases what has already been sent. The full list: {privacy_url}",
           "visit_system_info": "The panel walks to the display's System information page once and back, to read the serial number and the display's own software version. It presses nothing but Advanced, Display and System information, checks where the panel went after every press, and gives up at the first surprise.",
-          "check_updates": "Asks GitHub once a day whether a newer release of this integration exists, and says so in the repairs view. Home Assistant only offers updates for what HACS installed, so a copy put in place by hand is otherwise never offered one."
+          "check_updates": "Asks GitHub once a day whether a newer release of this integration exists, and says so in the repairs view. Home Assistant only offers updates for what HACS installed, so a copy put in place by hand is otherwise never offered one.",
+          "slow_pages": "The figure after each page is how many values it holds."
         }
       },
       "rescan": {
         "title": "Slow values from the display",
-        "description": "{count} pages were found. The panel was moved during the scan and put back. The coefficient of performance needs the page with the stored or historical operation data.",
+        "description": "{count} pages were found. The panel was moved during the scan and put back. The coefficient of performance needs the page with the stored or historical operation data. The figure after each page is how many values it holds.",
         "data": {
           "slow_pages": "Pages to read",
           "slow_interval": "How often",

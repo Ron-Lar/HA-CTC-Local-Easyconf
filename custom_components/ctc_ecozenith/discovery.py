@@ -59,7 +59,13 @@ class DiscoveredDisplay:
 
     @property
     def label(self) -> str:
-        return f"{self.host} — {self.model}"
+        """What the list of found units and a discovered flow's card show.
+
+        The model first and the address in brackets, the way the entry title
+        reads, so the card of a discovered unit names the heat pump rather than
+        an address, and without the dash the list used to carry.
+        """
+        return f"{self.model} ({self.host})"
 
 
 async def _port_open(host: str, port: int, timeout: float = PORT_TIMEOUT) -> bool:
