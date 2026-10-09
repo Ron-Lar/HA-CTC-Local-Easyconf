@@ -206,3 +206,96 @@ def test_after_a_shutdown_a_new_client_for_the_same_pump_is_the_only_one(quick, 
     run(scenario())
     assert len(gated.clients) == 2
     assert gated.alive == []
+
+
+# ------------------------------------------------ a cancellation in flight
+
+
+class CancelSwallowingClient(FakeClient):
+    """pymodbus 3.13 and later: a cancellation inside a transaction comes out as ModbusIOException.
+
+    The request for a gated register waits, and when the task is cancelled
+    the library reports "Request cancelled outside library." with the
+    CancelledError chained as the cause, exactly as transaction.py does.
+    """
+
+    gates: dict[int, asyncio.Event] = {}
+
+    async def read_holding_registers(self, address, *, count=1, device_id=1):  # type: ignore[override]
+        gate = self.gates.get(address)
+        if gate is not None:
+            try:
+                await gate.wait()
+            except asyncio.CancelledError as exc:
+                from fake_pymodbus import ModbusIOException
+
+                raise ModbusIOException("Request cancelled outside library.") from exc
+        return await super().read_holding_registers(address, count=count, device_id=device_id)
+
+
+@pytest.fixture()
+def swallowing(monkeypatch) -> FakeLibrary:
+    CancelSwallowingClient.gates = {}
+    return FakeLibrary(client_class=CancelSwallowingClient).install(monkeypatch)
+
+
+def test_a_cancel_inside_a_transaction_ends_the_round_as_a_cancel(quick, swallowing, modbus_api, host):
+    poll = __import__("conftest").load("poll")
+    blocks = [(62000, 98), (62107, 41), (62167, 7), (62191, 25)]
+    CancelSwallowingClient.gates[62107] = asyncio.Event()
+    client = modbus_api.CtcModbusClient(host)
+
+    async def scenario():
+        task = asyncio.ensure_future(poll.read_round(client, blocks))
+        await asyncio.sleep(0.01)  # the second block is in flight and waiting
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return task
+
+    task = run(scenario())
+    assert task.cancelled(), "the task ended cancelled, not with a result"
+    # The gated request never got as far as the controller, and nothing after it was tried.
+    assert [a for _, a, _, _ in swallowing.requests] == [62000]
+    assert swallowing.alive == [], "the client was let go with the request still in flight"
+
+
+def test_a_cancel_inside_a_write_is_a_cancel_too(quick, swallowing, modbus_api, host):
+    class SwallowingWriter(CancelSwallowingClient):
+        async def write_registers(self, address, values, *, device_id=1):  # type: ignore[override]
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError as exc:
+                from fake_pymodbus import ModbusIOException
+
+                raise ModbusIOException("Request cancelled outside library.") from exc
+
+    swallowing.client_class = SwallowingWriter
+    client = modbus_api.CtcModbusClient(host)
+
+    async def scenario():
+        task = asyncio.ensure_future(client.async_write(1010, 1))
+        await asyncio.sleep(0.01)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    run(scenario())
+    assert swallowing.alive == []
+
+
+def test_the_cause_alone_is_enough_when_the_task_is_not_cancelling(quick, library, modbus_api, host):
+    """Belt and braces: the chained CancelledError is honoured even without the task flag."""
+    from fake_pymodbus import ModbusIOException
+
+    def cancelled_outside(client, kind, address):
+        try:
+            raise asyncio.CancelledError()
+        except asyncio.CancelledError as exc:
+            raise ModbusIOException("Request cancelled outside library.") from exc
+
+    library.controller.on_request = cancelled_outside
+    client = modbus_api.CtcModbusClient(host)
+    with pytest.raises(asyncio.CancelledError):
+        run(client.async_read(62000, 1))
+    assert library.alive == []

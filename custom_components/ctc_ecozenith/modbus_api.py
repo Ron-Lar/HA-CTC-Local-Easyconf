@@ -361,7 +361,21 @@ class CtcModbusClient:
         Silence keeps the client, unless the library already found the line
         gone, in which case the client is let go now so the settle counts from
         the moment it happened. Anything else is the line, and the client goes.
+
+        A cancellation is none of these. pymodbus from 3.13 catches the
+        CancelledError that lands inside a transaction and raises
+        ModbusIOException in its place, which would pass for silence here and
+        let a round carry on through its remaining blocks after Home Assistant
+        told it to stop. The task's own cancelling flag, or the cause chained
+        on the exception, says what really happened, and the cancellation is
+        raised again with the client let go.
         """
+        task = asyncio.current_task()
+        if (task is not None and task.cancelling()) or isinstance(
+            err.__cause__, asyncio.CancelledError
+        ):
+            await self._drop_client()
+            raise asyncio.CancelledError() from err
         line_up = _connected(self._client)
         if is_silence(err):
             self._last_request = time.monotonic()
