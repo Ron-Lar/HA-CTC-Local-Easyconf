@@ -18,9 +18,9 @@ which has both:
 
 Both clients are stand-ins: nothing here opens a socket, and the plugin blocks
 sockets anyway. The Modbus stand-in offers the integration's own client surface
-(async_read, async_read_one, async_probe, async_write, async_close, connected)
-and writes down what was asked of it, in order, so a test can read back that
-one client was open at a time.
+(async_read, async_read_one, async_probe, async_write, async_close,
+async_shutdown, connected) and writes down what was asked of it, in order, so a
+test can read back that one client was open at a time.
 """
 
 from __future__ import annotations
@@ -66,7 +66,10 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     DOMAIN,
 )
 from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
-from custom_components.ctc_ecozenith.modbus_api import CtcModbusError  # noqa: E402
+from custom_components.ctc_ecozenith.modbus_api import (  # noqa: E402
+    CtcModbusError,
+    CtcModbusTransportError,
+)
 from custom_components.ctc_ecozenith.web_api import CtcWebError  # noqa: E402
 
 #: A documentation address (RFC 5737), never a house's.
@@ -120,11 +123,15 @@ class FakeModbus:
         self.writes: list[tuple[int, int]] = []
         self.closes = 0
         self.connected = False
+        self.shut_down = False
         self.number = len(FakeModbus.instances) + 1
         FakeModbus.instances.append(self)
         EVENTS.append(("created", self.number))
 
     def _transaction(self) -> None:
+        if self.shut_down:
+            # As the real client: a shut-down client never connects again.
+            raise CtcModbusTransportError(f"client #{self.number} has been shut down")
         if not self.answers:
             raise CtcModbusError(f"could not connect to {self.host}:{self.port}")
         if not self.connected:
@@ -154,6 +161,11 @@ class FakeModbus:
         self.closes += 1
         self.connected = False
         EVENTS.append(("closed", self.number))
+
+    async def async_shutdown(self) -> None:
+        """The entry's final close: counted as a close, and the client is done."""
+        self.shut_down = True
+        await self.async_close()
 
 
 class DeadModbus(FakeModbus):

@@ -241,7 +241,18 @@ def decode_reading(description: ModbusSensor, raw: Mapping[int, int]) -> Reading
 
 
 class CtcModbusClient:
-    """A single, serialised Modbus TCP connection to the controller."""
+    """A single, serialised Modbus TCP connection to the controller.
+
+    The connection is let go in two ways that must not be confused. A poll
+    round that found the line dead calls :meth:`async_close`: the library
+    client goes, and the next request builds a new one after the settle time.
+    The entry on its way out calls :meth:`async_shutdown`: the client goes for
+    good, and no request on this object ever connects again. Without that
+    second kind, a keepalive write that was already queued when the entry was
+    unloaded would open a connection of its own after the close, and nothing
+    would ever close it: the controller's single slot would then be held
+    against the new entry's client until Home Assistant was restarted.
+    """
 
     def __init__(self, host: str, port: int = 502, slave: int = 1) -> None:
         self._host = host
@@ -250,8 +261,19 @@ class CtcModbusClient:
         self._client: Any = None
         self._lock = asyncio.Lock()
         self._last_request = 0.0
+        #: Set by async_shutdown and never cleared: this object is finished.
+        self._closed = False
+
+    @property
+    def closed(self) -> bool:
+        """Whether :meth:`async_shutdown` has been called."""
+        return self._closed
 
     async def _ensure_client(self) -> Any:
+        if self._closed:
+            raise CtcModbusTransportError(
+                f"the Modbus client for {self._host}:{self._port} has been shut down"
+            )
         if self._client is not None:
             if _connected(self._client):
                 return self._client
@@ -309,6 +331,24 @@ class CtcModbusClient:
             await asyncio.sleep(gap)
 
     async def async_close(self) -> None:
+        """Let the connection go, to be built again by the next request.
+
+        This is a round giving up a dead line so that the next round starts
+        over after the settle time, not the end of the client.
+        """
+        async with self._lock:
+            await self._drop_client()
+
+    async def async_shutdown(self) -> None:
+        """Let the connection go for good: no request on this object connects again.
+
+        The flag is set before the lock is waited for, so a write that is
+        already queued behind the one in flight finds the door shut when its
+        turn comes, instead of building a connection that nobody would close.
+        A request already in flight is let finish; the connection it used is
+        closed as soon as it has.
+        """
+        self._closed = True
         async with self._lock:
             await self._drop_client()
 
