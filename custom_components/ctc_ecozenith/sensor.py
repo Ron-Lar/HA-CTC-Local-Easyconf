@@ -25,7 +25,13 @@ from homeassistant.const import EntityCategory
 
 from . import CtcConfigEntry
 from .catalogue import display_state_class
-from .cop import cop_reason, current_totals, lifetime_ratio, powered_on_hours
+from .cop import (
+    cop_reason,
+    current_totals,
+    lifetime_ratio,
+    modbus_consumption_answered,
+    powered_on_hours,
+)
 from .const import DOMAIN, STATUS_UNKNOWN, ModbusSensor, SlowValue, device_class_for
 
 # By the names const.py uses, so the choice of class can be tested without
@@ -280,6 +286,10 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
                 out if self._span == "lifetime" else result.energy_out,
                 consumed if self._span == "lifetime" else result.energy_in,
                 powered_on_hours(self._runtime),
+                # Only the Modbus route can be waiting on a register; the
+                # display's own counter is a row that was recognised.
+                modbus_answered=self._runtime.energy_in is not None
+                or modbus_consumption_answered(self._runtime.modbus.answered),
             )
             if reason:
                 attributes["skäl"] = reason

@@ -88,6 +88,15 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # that lost the connection. Only used by the optional daily report,
         # which sends the delta since it last ran.
         self.read_failures = 0
+        #: Every register address that has answered at least once since Home
+        #: Assistant started, taken from the raw words of each round. This is
+        #: where "the register answered" is judged. ``data`` is no good for
+        #: it: a key is left out there both when the block was silent this
+        #: round and when a 32 bit pair decoded to CTC's marker for a counter
+        #: that is not fitted, and neither is the same as the model lacking
+        #: the register. Never emptied, like the missing blocks: a block the
+        #: model lacks never joins it, and a restart starts over.
+        self.answered: set[int] = set()
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -125,6 +134,7 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.info("Modbus rounds are back within the interval (%.1f s)", result.elapsed)
 
         raw = result.raw
+        self.answered.update(raw)
         if not raw:
             raise UpdateFailed("no Modbus register could be read")
 
