@@ -3,12 +3,14 @@
  *
  * Loaded by tests/test_card_field.py before the card itself. It installs the
  * globals the card reaches for (HTMLElement, customElements, document) so the
- * card's closure takes its browser branch and defines the elements. Two things
- * are modelled with care because the field's logic turns on them: a number
+ * card's closure takes its browser branch and defines the elements. Three things
+ * are modelled with care because the controls' logic turns on them: a number
  * input sanitizes anything that is not a number to "" the way a browser does
- * ("unavailable" included), and the root the controls live in has an
- * activeElement, which is what holding() asks about. Nothing is laid out or
- * drawn, and events are plain calls to the listeners.
+ * ("unavailable" included), a range input writes a number back in its shortest
+ * form ("40.0" reads "40") and holds the middle of its range for anything else,
+ * and the root the controls live in has an activeElement, which is what
+ * holding() asks about. Nothing is laid out or drawn, and events are plain
+ * calls to the listeners.
  */
 
 "use strict";
@@ -37,8 +39,29 @@ class Element {
 
   set value(text) {
     const asText = String(text);
-    const number = this.type === "number";
-    this._value = number && asText !== "" && !NUMBER.test(asText) ? "" : asText;
+    if (this.type === "number") {
+      this._value = asText !== "" && !NUMBER.test(asText) ? "" : asText;
+    } else if (this.type === "range") {
+      // A range input holds a number and writes it back in its shortest form,
+      // so an assigned "40.0" reads "40" while a number input keeps "40.0".
+      // Anything that is no number becomes the browser's default value, the
+      // middle of the range (0 to 100 when the range is not set).
+      const number = NUMBER.test(asText) ? Number(asText) : NaN;
+      this._value = String(Number.isFinite(number) ? number : this._midpoint());
+    } else {
+      this._value = asText;
+    }
+  }
+
+  /** A range input's default value: the middle of its range, as the browser
+   *  has it (min 0 and max 100 unless the element says otherwise). */
+  _midpoint() {
+    const bound = (given, fallback) => (
+      given !== undefined && given !== "" && Number.isFinite(Number(given)) ? Number(given) : fallback
+    );
+    const low = bound(this.min, 0);
+    const high = bound(this.max, 100);
+    return high < low ? low : low + (high - low) / 2;
   }
 
   appendChild(child) {
