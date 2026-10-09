@@ -32,7 +32,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CtcConfigEntry
-from .const import DOMAIN
+from .keys import unique_id
 from .transitions import EVENT_TYPES
 
 
@@ -62,8 +62,7 @@ class CtcEvents(CoordinatorEntity, EventEntity):
         #: How far into the watch's log this entity has fired. Starts where
         #: the watch stands, so nothing from before the entity existed fires.
         self._fired = self._watch.seq
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_events"
+        self._attr_unique_id = unique_id(runtime.device, "events")
         self._attr_device_info = runtime.device
 
     @property

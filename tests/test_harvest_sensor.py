@@ -90,7 +90,7 @@ def test_the_harvest_sensor_is_a_diagnostic_timestamp_that_stays_available():
     body = _source("sensor.py").split("class CtcHarvestSensor")[1].split("\nclass ")[0]
     assert "SensorDeviceClass.TIMESTAMP" in body
     assert "EntityCategory.DIAGNOSTIC" in body
-    assert '_display_harvest"' in body
+    assert 'unique_id(runtime.device, "display_harvest")' in body
     available = body.split("def available")[1].split("def ")[0]
     assert "return True" in available, "ett misslyckat varv är just det den ska visa"
     assert "last_harvest" in body.split("def native_value")[1].split("def ")[0]

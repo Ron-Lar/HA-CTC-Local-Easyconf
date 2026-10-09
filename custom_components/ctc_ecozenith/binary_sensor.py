@@ -22,13 +22,13 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CtcConfigEntry
 from .const import (
-    DOMAIN,
     HP_ALARM_CODE,
     HP_BLOCKED_CODE,
     HP_DEFROST_CODE,
     HP_RUNNING_CODES,
     SG_NORMAL_CODE,
 )
+from .keys import unique_id
 
 
 @dataclass(frozen=True)
@@ -159,8 +159,7 @@ class CtcDerivedBinary(CoordinatorEntity, BinarySensorEntity):
         super().__init__(runtime.modbus)
         self._item = item
         self._runtime = runtime
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_{item.key}"
+        self._attr_unique_id = unique_id(runtime.device, item.key)
         self._attr_name = item.name
         self._attr_device_info = runtime.device
         if item.device_class:

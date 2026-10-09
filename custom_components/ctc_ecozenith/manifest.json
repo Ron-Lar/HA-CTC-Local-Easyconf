@@ -17,6 +17,9 @@
   "dhcp": [
     {
       "macaddress": "020000*"
+    },
+    {
+      "registered_devices": true
     }
   ],
   "documentation": "https://github.com/beolink/HA-CTC-Local-Easyconf",

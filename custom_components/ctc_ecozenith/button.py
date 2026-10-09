@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CtcConfigEntry
-from .const import DOMAIN
+from .keys import unique_id
 
 
 async def async_setup_entry(
@@ -37,8 +37,7 @@ class CtcReleaseControl(ButtonEntity):
 
     def __init__(self, runtime) -> None:
         self._runtime = runtime
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_release_control"
+        self._attr_unique_id = unique_id(runtime.device, "release_control")
         self._attr_device_info = runtime.device
 
     async def async_press(self) -> None:

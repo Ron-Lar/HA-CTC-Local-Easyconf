@@ -26,7 +26,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CtcConfigEntry
-from .const import CONTROL_NUMBERS, DOMAIN, ControlRegister
+from .const import CONTROL_NUMBERS, ControlRegister
+from .keys import unique_id
 from .modbus_api import CtcModbusError
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,8 +68,7 @@ class CtcControlNumber(CoordinatorEntity, NumberEntity):
         super().__init__(runtime.modbus)
         self._runtime = runtime
         self._register = register
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_{register.key}"
+        self._attr_unique_id = unique_id(runtime.device, register.key)
         self._attr_name = register.name
         self._attr_device_info = runtime.device
         self._attr_native_min_value = register.minimum

@@ -598,11 +598,11 @@ def test_the_supplied_power_register_is_named_without_its_number_and_keeps_its_i
     assert power.name == "Tillförd effekt värmepump"
     assert power.address == 62331
     assert explanations.source("hp1_power") == "Modbus-register 62331"
-    # The entity's identity is "<domain>_<host>_<key>" (sensor.py), so a renamed
-    # register keeps its entity_id, its history and the user's own settings.
+    # The entity's identity is "<domain>_<device key>_<key>" (keys.unique_id), so
+    # a renamed register keeps its entity_id, its history and the user's own settings.
     sensor = _source("sensor.py")
     cls = sensor[sensor.index("class CtcModbusSensor"):sensor.index("class CtcModbusSensor") + 600]
-    assert 'self._attr_unique_id = f"{DOMAIN}_{host}_{description.key}"' in cls
+    assert "self._attr_unique_id = unique_id(runtime.device, description.key)" in cls
     assert "description.name" not in cls[:cls.index("_attr_unique_id")]
 
 
@@ -691,7 +691,7 @@ def test_every_key_on_the_page_is_a_unique_id_the_integration_creates(dashboard_
     # Entities with a key of their own, spelled out in the unique id: the
     # button, the sensor that accounts for the display harvest, and the events.
     for name in ("button.py", "sensor.py", "event.py"):
-        created |= set(re.findall(r'_\{host\}_([a-z_]+)"', _source(name)))
+        created |= set(re.findall(r'unique_id\(runtime\.device, "([a-z_]+)"\)', _source(name)))
     # The transitions' sensors are a table in transitions.py (R27, R31), and
     # the mean run over a day is the one sensor beside it.
     transitions = load("transitions")

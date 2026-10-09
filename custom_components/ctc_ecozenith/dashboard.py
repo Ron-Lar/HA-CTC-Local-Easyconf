@@ -43,6 +43,7 @@ from .const import (
     DOMAIN,
     LANG_SWEDISH,
 )
+from .keys import prefix_of
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,8 +70,7 @@ def _collect(hass: HomeAssistant) -> list[dict[str, Any]]:
         runtime = getattr(entry, "runtime_data", None)
         if entry.state is not ConfigEntryState.LOADED or runtime is None:
             continue
-        host = next(iter(runtime.device["identifiers"]))[1]
-        prefix = f"{DOMAIN}_{host}_"
+        prefix = prefix_of(runtime.device)
         entities: dict[str, str] = {}
         names: dict[str, str] = {}
         for item in er.async_entries_for_config_entry(ent_reg, entry.entry_id):

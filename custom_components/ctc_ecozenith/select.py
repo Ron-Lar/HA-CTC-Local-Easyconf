@@ -10,7 +10,8 @@ from homeassistant.const import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CtcConfigEntry
-from .const import CONTROL_SELECTS, DOMAIN, ControlRegister
+from .const import CONTROL_SELECTS, ControlRegister
+from .keys import unique_id
 from .modbus_api import CtcModbusError
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,8 +42,7 @@ class CtcControlSelect(SelectEntity):
         self._runtime = runtime
         self._register = register
         self._enum = register.enum or {}
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_{register.key}"
+        self._attr_unique_id = unique_id(runtime.device, register.key)
         self._attr_name = register.name
         self._attr_device_info = runtime.device
         self._attr_options = [RELEASE, *self._enum.values()]
