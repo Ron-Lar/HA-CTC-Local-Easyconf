@@ -374,7 +374,10 @@ write to 61500, 61503 or 62000 never reaches the wire.
   what it has seen. An entity from an earlier version for a row the display's
   menu no longer has on its page is removed from the registry, with a line in
   the log; one for a row that is still on its page, or on a page the menu does
-  not know, is left alone.
+  not know, is left alone. That includes the entities an earlier version made
+  for rows that have only ever read the marker: they stay in the registry as
+  unavailable, and can be deleted in the entity's settings dialog, since the
+  integration no longer provides them. A fresh installation never gets them.
 - **The web interface is undocumented.** A firmware update can change it. Modbus
   is documented and will keep working.
 - **The coefficient of performance is untested on an i360.** Going by CTC's
