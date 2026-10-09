@@ -52,7 +52,9 @@ when it has been quiet, while the daily figure goes with the display.
 
 A figure is shown as soon as it rests on something: ten kilowatt hours of
 consumption for the lifetime and yearly ones, three for a single day, which is
-where the display's whole kilowatt hours stop being mostly rounding. What is not
+where the display's whole kilowatt hours stop being mostly rounding, and three
+per day of the span for the week and the month, twenty-one and ninety in all.
+What is not
 shown is a quotient outside 0.5 to 10, because that is not a performance figure
 but two counters that do not belong together. When a figure is missing the sensor
 says why in its attributes, under *skäl*: no sample old enough yet, too little
@@ -237,9 +239,10 @@ it is never out of date. Each heat pump gets four tabs.
   tab that answers whether a value exists at all.
 
 The coefficient of performance says under its figure what it rests on, the
-last day, a rolling year, the first year or the whole life, and while it has no
-figure it says why instead: no sample old enough yet, too little energy so far,
-a counter standing still. It stays on the page as long as its sensor does.
+last day, the last seven or thirty days, a rolling year, the first year or the
+whole life, and while it has no figure it says why instead: no sample old
+enough yet, too little energy so far, a counter standing still. It stays on the
+page as long as its sensor does.
 
 The cards are the integration's own rather than Home Assistant's tiles, because
 a heat pump has a hundred values and they have to fit on a screen: chips for the
