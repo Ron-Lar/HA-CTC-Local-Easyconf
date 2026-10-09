@@ -51,6 +51,15 @@ REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
 #: never repeated, because a tap that did land would move the panel twice.
 PATIENT_TIMEOUT = aiohttp.ClientTimeout(total=25)
 
+#: The panel's own control, top right. On a subpage it steps back; on the home
+#: screen the same spot is a button of its own (the quick menu on an i550 Pro),
+#: so it is never pressed on a page known to be home.
+BACK_BUTTON = (440, 23)
+#: The panel is 480 by 272. A tap outside it is a verified no-operation, used
+#: to fetch screens without pressing anything.
+PANEL_WIDTH = 480
+PANEL_HEIGHT = 272
+
 
 class CtcWebError(Exception):
     """Raised when the display's web server cannot be used."""
@@ -330,6 +339,23 @@ class CtcWebClient:
         #: home for the rest of the run, even in a moment when its tile's
         #: caption cannot be read; see async_goto_home.
         self._home: int | None = None
+        #: The operation data tile per home page, once found: which screen it
+        #: is on, the page's screens, and where to press. Static on a given
+        #: panel, and finding it costs the home page's every widget and label,
+        #: which every harvest used to pay again for every page it visited.
+        self._tiles: dict[int, tuple[int, list[int], tuple[int, int]]] = {}
+        #: The operation data root, the page the tile leads to: given from the
+        #: stored menu where it is known, otherwise learnt the first time the
+        #: tile is pressed in this run. Between two pages of a harvest the
+        #: panel steps back to it and the number is checked before a route is
+        #: replayed, so a route is only ever replayed from the page it was
+        #: recorded on. See async_goto_page.
+        self.root: int | None = None
+        #: How many requests this client has made, and how many of them were
+        #: taps that moved the panel. Cumulative; the harvester logs the
+        #: difference per walk, which is how a walk that costs too much is seen.
+        self.requests = 0
+        self.taps = 0
 
     @property
     def base_url(self) -> str:
@@ -346,6 +372,7 @@ class CtcWebClient:
         timeouts = (REQUEST_TIMEOUT, PATIENT_TIMEOUT) if body is None else (REQUEST_TIMEOUT,)
         async with self._semaphore:
             for attempt, timeout in enumerate(timeouts, start=1):
+                self.requests += 1
                 try:
                     if body is None:
                         response = await self._session.get(url, timeout=timeout)
@@ -580,6 +607,8 @@ class CtcWebClient:
 
     async def async_click(self, screens: list[int], x: int, y: int) -> list[list[Any]]:
         """Send a tap. This moves the physical panel."""
+        if 0 <= x < PANEL_WIDTH and 0 <= y < PANEL_HEIGHT:
+            self.taps += 1
         payload = await self._request(f"/click/{self._click_path(screens)}", f"{x},{y}")
         return [parse_vars(line) for line in payload.split("\r")]
 
@@ -602,6 +631,15 @@ class CtcWebClient:
         the operation data root, which is reliable across models. Without one the
         only thing attempted is stepping back, which is enough to restore the
         page the panel started on.
+
+        The root is regained the short way where it can be: from a page of the
+        operation data subtree, which is where one harvested page leaves the
+        panel for the next, a step back or two lands on the root, and its
+        number says so. Only when that fails is the long way taken, over the
+        home screen and its tile, which costs the home page's widgets and
+        labels on every page passed. The root page itself, where it is
+        harvested, is reached the same two ways; the back button is never
+        pressed on the home screen for it, where that button is the quick menu.
         """
         page_map = await self.async_screen_map()
         if target not in page_map:
@@ -610,14 +648,48 @@ class CtcWebClient:
             return True
 
         if route:
-            if not await self.async_goto_operation_root():
-                return False
+            if not await self._async_back_to_root():
+                if not await self.async_goto_operation_root():
+                    return False
             for x, y in route:
                 here = await self.async_current_page()
                 await self.async_click(page_map.get(here, []), x, y)
             return await self.async_current_page() == target
 
+        if target == self.root:
+            if await self._async_back_to_root():
+                return True
+            return (
+                await self.async_goto_operation_root()
+                and await self.async_current_page() == target
+            )
+
         return await self.async_step_back_to(target)
+
+    async def _async_back_to_root(self, hops: int = 4) -> bool:
+        """Step back to the operation data root, when it and the home screen are known.
+
+        The number is checked after every step, so a route is only ever replayed
+        from the page it was recorded on. Nothing is pressed on the home screen,
+        whose top right button is not a back button, and a press that changed
+        nothing ends the attempt; the caller then takes the long way round.
+        """
+        root, home = self.root, self._home
+        if root is None or home is None:
+            return False
+        page_map = await self.async_screen_map()
+        seen: set[int] = set()
+        for _ in range(hops):
+            here = await self.async_current_page()
+            if here == root:
+                return True
+            if here == home or here in seen:
+                return False
+            seen.add(here)
+            await self.async_click(page_map.get(here, []), *BACK_BUTTON)
+            if await self.async_current_page() == here:
+                return False
+        return await self.async_current_page() == root
 
     async def async_step_back_to(self, target: int, hops: int = 6) -> bool:
         """Press the chrome's back button until ``target`` is showing.
@@ -635,7 +707,7 @@ class CtcWebClient:
             if here in seen:
                 return False
             seen.add(here)
-            await self.async_click(page_map.get(here, []), 440, 23)
+            await self.async_click(page_map.get(here, []), *BACK_BUTTON)
             if await self.async_current_page() == here:
                 return False
         return await self.async_current_page() == target
@@ -643,9 +715,18 @@ class CtcWebClient:
     async def _async_operation_tile(
         self, page: int
     ) -> tuple[int, list[int], tuple[int, int]] | None:
-        """Find the operation data tile on ``page``, if it is there."""
+        """Find the operation data tile on ``page``, if it is there.
+
+        Remembered per page once found: the tile does not move, and finding it
+        means reading every widget and label of the page. A page where it is
+        not found is not remembered as such, since a label that was slow for a
+        moment reads as nothing (see async_text), and the next look may find it.
+        """
         from .const import OPERATION_DATA_LABEL_EN
 
+        found = self._tiles.get(page)
+        if found is not None:
+            return found
         page_map = await self.async_screen_map()
         screens = page_map.get(page, [])
         for screen in screens:
@@ -657,7 +738,9 @@ class CtcWebClient:
                 if not widget.visible or widget.label is None or widget.width <= 0:
                     continue
                 if await self.async_english_label(screen, widget) == OPERATION_DATA_LABEL_EN:
-                    return screen, screens, tap_target(widgets, widget)
+                    found = (screen, screens, tap_target(widgets, widget))
+                    self._tiles[page] = found
+                    return found
         return None
 
     async def async_goto_home(self, hops: int = 6) -> int | None:
@@ -693,7 +776,7 @@ class CtcWebClient:
             if here in seen:
                 return None
             seen.add(here)
-            await self.async_click(page_map.get(here, []), 440, 23)
+            await self.async_click(page_map.get(here, []), *BACK_BUTTON)
             if await self.async_current_page() == here:
                 return None
         here = await self.async_current_page()
@@ -703,7 +786,13 @@ class CtcWebClient:
         return here if here == self._home else None
 
     async def async_goto_operation_root(self) -> bool:
-        """Navigate to the operation data menu from wherever the panel is."""
+        """Navigate to the operation data menu from wherever the panel is.
+
+        The page the tile leads to is the root, and is remembered as such
+        where no root is known yet. A press of the remembered tile that moves
+        nothing drops it from memory, so a stale point costs one walk and not
+        the rest of the run.
+        """
         home = await self.async_goto_home()
         if home is None:
             return False
@@ -713,4 +802,10 @@ class CtcWebClient:
         _screen, screens, (x, y) = found
         before = await self.async_current_page()
         await self.async_click(screens, x, y)
-        return await self.async_current_page() != before
+        after = await self.async_current_page()
+        if after == before:
+            self._tiles.pop(home, None)
+            return False
+        if self.root is None:
+            self.root = after
+        return True

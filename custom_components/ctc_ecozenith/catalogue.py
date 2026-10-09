@@ -507,6 +507,20 @@ class MenuReading:
 
     pages: list[SlowPage] = field(default_factory=list)
     complete: bool = False
+    #: The operation data root's page number, where the sweep found it. Every
+    #: recorded route starts there, and the harvester steps back to it between
+    #: two pages; a SlowPage does not carry it, so the menu does.
+    root: int | None = None
+
+
+def menu_root(pages: list[SlowPage]) -> int | None:
+    """The operation data root among stored pages: the one with an empty route.
+
+    Every other page's route starts from it. A root without values of its own
+    is not among the pages at all, and then the number comes from where the
+    menu was stored (CONF_MENU_ROOT) or is learnt when the tile is pressed.
+    """
+    return next((page.page for page in pages if not page.route), None)
 
 
 async def async_discover_pages(
@@ -570,7 +584,11 @@ async def async_discover_pages(
     finally:
         await _async_restore(client, page_map, origin, found)
 
-    return MenuReading([page for page in discovered if page.values], complete)
+    return MenuReading(
+        [page for page in discovered if page.values],
+        complete,
+        root=found[0] if found is not None else None,
+    )
 
 
 class PanelBusy(Exception):

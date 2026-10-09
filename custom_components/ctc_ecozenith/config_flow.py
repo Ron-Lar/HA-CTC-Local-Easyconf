@@ -40,6 +40,7 @@ from .const import (
     CONF_SLAVE,
     CONF_SLOW_INTERVAL,
     CONF_MENU,
+    CONF_MENU_ROOT,
     CONF_MENU_VERSION,
     CONF_SLOW_PAGES,
     CONF_VISIT_SYSTEM_INFO,
@@ -93,6 +94,9 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         #: Whether ``_pages`` is the whole menu, read from a verified root with
         #: nothing given up on the way. Only then is the version stamped.
         self._complete = False
+        #: The operation data root the reading found, kept with the menu so
+        #: the harvester can step back to it between pages.
+        self._root: int | None = None
 
     # ------------------------------------------------------------ entry point
 
@@ -234,6 +238,8 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # unstamped, the entry is owed a reading, and the background
                 # reads the menu again a few minutes in, up to three times.
                 options[CONF_MENU_VERSION] = await _async_version(self.hass)
+            if self._root is not None:
+                options[CONF_MENU_ROOT] = self._root
             return self.async_create_entry(
                 title=f"{self._model} ({self._host})",
                 data={
@@ -256,6 +262,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             reading = MenuReading()
         self._pages = reading.pages
         self._complete = reading.complete
+        self._root = reading.root
 
         if not self._pages:
             # Modbus alone is a perfectly good entry; the display is a bonus.
@@ -393,6 +400,8 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         #: Whether ``_pages`` came off the panel just now, or out of storage
         #: because the panel would not give the menu up.
         self._fresh = False
+        #: The operation data root the reading found, if it found one.
+        self._root: int | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -546,6 +555,8 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             }
             if self._fresh:
                 data[CONF_MENU_VERSION] = await _async_version(self.hass)
+            if self._root is not None:
+                data[CONF_MENU_ROOT] = self._root
             return self.async_create_entry(title="", data=data)
 
         try:
@@ -567,6 +578,7 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             reading.pages,
             reading.complete,
         )
+        self._root = reading.root
 
         already = [
             page.page for page in pages_from_storage(self._entry.options.get(CONF_SLOW_PAGES, []))

@@ -110,6 +110,16 @@ class Identity:
         """True once every field the display can offer has been seen."""
         return all(asdict(self).values())
 
+    @property
+    def needs_system_screen(self) -> bool:
+        """Whether the system information screen still has something to give."""
+        return not all((self.serial, self.mac, self.display_firmware, self.bootloader))
+
+    @property
+    def needs_heatpump_screen(self) -> bool:
+        """Whether the heat pump's own screen still has something to give."""
+        return not all((self.heatpump_model, self.heatpump_firmware))
+
     def merged_with(self, newer: "Identity") -> "Identity":
         """Take what the newer read found, and keep the rest.
 
@@ -139,6 +149,36 @@ class Identity:
         if not 1 <= int(week) <= 53:
             return None
         return f"20{year} vecka {int(week)}"
+
+
+@dataclass
+class IdentityScreens:
+    """Where the two screens were found, so they can be read without the sweep.
+
+    Screen numbering differs between models, so the screens are located by
+    fingerprint the first time, which asks the display for the values of every
+    screen in its map, 154 on an i255. Once found they are kept in the options
+    and read on their own, one request each, for as long as a field is still
+    missing: a screen the display has not written yet holds nothing today and
+    may hold everything tomorrow, when someone has opened the page.
+    """
+
+    system: int | None = None
+    heatpump: int | None = None
+
+    def as_dict(self) -> dict[str, int]:
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+    @classmethod
+    def from_dict(cls, stored: Any) -> "IdentityScreens":
+        screens = cls()
+        if not isinstance(stored, dict):
+            return screens
+        for name in ("system", "heatpump"):
+            value = stored.get(name)
+            if isinstance(value, int) and not isinstance(value, bool):
+                setattr(screens, name, value)
+        return screens
 
 
 def _same_row(one: Widget, other: Widget) -> bool:
@@ -221,43 +261,66 @@ async def _async_read_heatpump_screen(
     return found
 
 
-async def async_read_identity(client: CtcWebClient) -> Identity:
-    """Find and read the unit's identity.
+async def async_read_identity(
+    client: CtcWebClient,
+    screens: IdentityScreens | None = None,
+    sweep: bool = True,
+    need_system: bool = True,
+    need_heatpump: bool = True,
+) -> Identity:
+    """Find and read the unit's identity, without moving the panel.
 
-    Candidate screens are shortlisted from their values alone, which is one
-    cheap request each, before any screen definition is fetched.
+    With ``screens`` naming where a screen was found before, that screen is
+    read on its own, one request for its values; the sweep that shortlists
+    candidate screens from the values of every screen in the map runs only
+    for a screen that is still unknown, and only when ``sweep`` allows it.
+    The screens the sweep finds are written back into ``screens``, so the
+    caller can keep them. A known screen that is no longer in the map, after
+    a firmware update, say, counts as unknown. ``need_system`` and
+    ``need_heatpump`` leave a screen alone whose every field is already known.
     """
     identity = Identity()
+    known = screens if screens is not None else IdentityScreens()
     page_map = await client.async_screen_map()
-    screens = sorted({s for members in page_map.values() for s in members})
+    all_screens = sorted({s for members in page_map.values() for s in members})
 
-    system_candidates: list[int] = []
-    heatpump_candidates: list[int] = []
-    for screen in screens:
-        try:
-            values = await client.async_vars(screen)
-        except CtcWebError:
-            continue
-        if sum(1 for v in values if isinstance(v, str) and v) >= 3:
-            system_candidates.append(screen)
-        if any(
-            isinstance(v, int) and FIRMWARE_MIN <= v < FIRMWARE_MAX for v in values
-        ):
-            heatpump_candidates.append(screen)
+    def still_there(screen: int | None) -> int | None:
+        return screen if screen is not None and screen in all_screens else None
 
-    for screen in system_candidates:
-        try:
-            if await _async_read_system_screen(client, screen, identity):
-                break
-        except CtcWebError as err:
-            _LOGGER.debug("System screen %s unreadable: %s", screen, err)
+    system_candidates: list[int] = [s for s in (still_there(known.system),) if s is not None]
+    heatpump_candidates: list[int] = [s for s in (still_there(known.heatpump),) if s is not None]
+    wanted_system = need_system and not system_candidates
+    wanted_heatpump = need_heatpump and not heatpump_candidates
+    if sweep and (wanted_system or wanted_heatpump):
+        for screen in all_screens:
+            try:
+                values = await client.async_vars(screen)
+            except CtcWebError:
+                continue
+            if wanted_system and sum(1 for v in values if isinstance(v, str) and v) >= 3:
+                system_candidates.append(screen)
+            if wanted_heatpump and any(
+                isinstance(v, int) and FIRMWARE_MIN <= v < FIRMWARE_MAX for v in values
+            ):
+                heatpump_candidates.append(screen)
 
-    for screen in heatpump_candidates:
-        try:
-            if await _async_read_heatpump_screen(client, screen, identity):
-                break
-        except CtcWebError as err:
-            _LOGGER.debug("Heat pump screen %s unreadable: %s", screen, err)
+    if need_system:
+        for screen in system_candidates:
+            try:
+                if await _async_read_system_screen(client, screen, identity):
+                    known.system = screen
+                    break
+            except CtcWebError as err:
+                _LOGGER.debug("System screen %s unreadable: %s", screen, err)
+
+    if need_heatpump:
+        for screen in heatpump_candidates:
+            try:
+                if await _async_read_heatpump_screen(client, screen, identity):
+                    known.heatpump = screen
+                    break
+            except CtcWebError as err:
+                _LOGGER.debug("Heat pump screen %s unreadable: %s", screen, err)
 
     if identity.is_empty:
         _LOGGER.debug("Could not read any identity from the display")
@@ -408,6 +471,7 @@ async def async_read_identity_via_panel(
     depth: int = 4,
     restore: "Callable[[int], Awaitable[Any]] | None" = None,
     quick_menu: bool = False,
+    screens: IdentityScreens | None = None,
 ) -> Identity:
     """Walk the panel to the system information page, read it, and go back.
 
@@ -423,6 +487,9 @@ async def async_read_identity_via_panel(
     With ``quick_menu`` the panel's own button on the home screen is tried too,
     once the captions have led nowhere. That press has no caption to go by and
     has never been made on a real i550 Pro, so it is off unless asked for.
+
+    The screen the page was read from is written into ``screens``, so the
+    next reading can go straight to it without walking or sweeping.
     """
     identity = Identity()
     try:
@@ -445,6 +512,8 @@ async def async_read_identity_via_panel(
         for screen in (await client.async_screen_map()).get(page, []):
             try:
                 if await _async_read_system_screen(client, screen, identity):
+                    if screens is not None:
+                        screens.system = screen
                     break
             except CtcWebError as err:
                 _LOGGER.debug("System screen %s unreadable: %s", screen, err)

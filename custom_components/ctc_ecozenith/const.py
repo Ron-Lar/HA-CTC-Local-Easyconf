@@ -37,6 +37,14 @@ CONF_MENU: Final = "menu"
 #: The integration version that read the menu. A new version reads it again, so
 #: pages and rows a newer parser understands are picked up by themselves.
 CONF_MENU_VERSION: Final = "menu_version"
+#: The operation data root's page number, as the menu reading found it. The
+#: harvester steps back to it between two pages instead of going home for
+#: each, and checks the number before it replays a route from there.
+CONF_MENU_ROOT: Final = "menu_root"
+#: Where the display keeps its system information and heat pump screens, once
+#: found, so the identity is read from those two screens alone instead of a
+#: sweep over the values of every screen in the map.
+CONF_IDENTITY_SCREENS: Final = "identity_screens"
 #: Whether the panel may be walked to the system information page once, to read
 #: the serial number and the display's own software version.
 CONF_VISIT_SYSTEM_INFO: Final = "visit_system_info"

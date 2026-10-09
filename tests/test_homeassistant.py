@@ -222,6 +222,7 @@ def stubs(hass, enable_custom_integrations):
     integration._MENU_TRIES.clear()
     integration._MENU_LAST.clear()
     integration._WALKED.clear()
+    integration._SWEPT.clear()
     integration._FAILURES.clear()
     closed_at = getattr(modbus_api, "_CLOSED_AT", None)
     if isinstance(closed_at, dict):
