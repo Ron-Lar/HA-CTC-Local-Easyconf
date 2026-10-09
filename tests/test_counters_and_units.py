@@ -99,11 +99,25 @@ def test_lifetime_counters_only_grow_whatever_their_unit(catalogue):
 
 
 def test_the_same_names_over_a_period_are_not_counters(catalogue):
-    assert catalogue.display_state_class(None, "Antal starter /24") is None
+    assert catalogue.display_state_class(None, "Antal starter /24") != "total_increasing"
     assert catalogue.display_state_class("min", "Drift /24") == "measurement"
     assert catalogue.display_state_class("h", "Drifttid total/30 dagar") == "measurement"
     assert not catalogue.is_lifetime_counter("Antal starter /24")
     assert not catalogue.is_lifetime_counter("Drift /24")
+
+
+def test_starts_per_day_are_a_measurement_although_they_have_no_unit(catalogue):
+    # The h the row used to carry belonged to the 24, and went with 0.16.0. The
+    # statistics it had under that h stay worth keeping, and R38 graphs them,
+    # so the state class stays while the unit goes.
+    assert catalogue.display_state_class(None, "Antal starter /24") == "measurement"
+    assert catalogue.display_state_class(None, "Number of starts /24") == "measurement"
+    assert catalogue._is_period_count("Antal starter /24")
+    # Only that row: the other unitless rows with a "/" in the name are the
+    # refrigerant pairs, and a "/" alone does not make a count.
+    for label in ("Överhettning S/H 1", "Förångning °C/bar 2", "Kondensering °C/bar 1", "Antal starter"):
+        assert not catalogue._is_period_count(label), label
+        assert catalogue.display_state_class(None, label) != "measurement", label
 
 
 def test_a_number_without_a_unit_still_has_no_state_class(catalogue):
@@ -186,8 +200,8 @@ def test_a_clock_value_survives_storage(catalogue, const):
 # --------------------------------------------- the four real pages, end to end
 
 #: What the i255's history page becomes: the two energy counters and the
-#: operating hours are sums, the day's compressor minutes a measurement, and
-#: the periods carry no state class.
+#: operating hours are sums, the day's compressor minutes and starts are
+#: measurements, and the energy periods carry no state class.
 I255_HISTORY = [
     ("p30_total_drifttid", "h", "total_increasing"),
     ("p30_hogsta_framledning", "°C", "measurement"),
@@ -195,7 +209,7 @@ I255_HISTORY = [
     ("p30_emxxx", "kWh", "total_increasing"),
     ("p30_avgiven_varme_totalt", "kWh", "total_increasing"),
     ("p30_drift_24_h_m", "min", "measurement"),
-    ("p30_antal_starter_24", None, None),
+    ("p30_antal_starter_24", None, "measurement"),
     ("p30_drifttid_total", "h", "total_increasing"),
     ("p30_antal_starter", None, "total_increasing"),
     ("p30_kritiska_larm_raknare_1", None, None),
@@ -221,7 +235,7 @@ I550_HISTORY = [
     ("p30_drift_24_h_m", "min", "measurement"),
     ("p30_varde_13", None, None),
     ("p30_emxxx", "kWh", "total_increasing"),
-    ("p30_antal_starter_24", None, None),
+    ("p30_antal_starter_24", None, "measurement"),
     ("p30_antal_starter", None, "total_increasing"),
     ("p30_energi_el_30_dagar", "kWh", None),
     ("p30_medeltemperatur_ute_30_dagar", "°C", "measurement"),
