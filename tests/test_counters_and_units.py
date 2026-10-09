@@ -126,7 +126,7 @@ def test_the_energy_rules_are_unchanged(catalogue):
 
 def _clock_value(const, fmt="%02d:%02d", indices=(27, 26)):
     return const.SlowValue(
-        key="p30_drift_24", label="Drift /24", page=30, screen=128,
+        key="p30_drift_24_h_m", label="Drift /24", page=30, screen=128,
         fmt=fmt, var_indices=list(indices), unit="min",
     )
 
@@ -194,7 +194,7 @@ I255_HISTORY = [
     ("p30_energi_el_total", "kWh", "total_increasing"),
     ("p30_emxxx", "kWh", "total_increasing"),
     ("p30_avgiven_varme_totalt", "kWh", "total_increasing"),
-    ("p30_drift_24", "min", "measurement"),
+    ("p30_drift_24_h_m", "min", "measurement"),
     ("p30_antal_starter_24", None, None),
     ("p30_drifttid_total", "h", "total_increasing"),
     ("p30_antal_starter", None, "total_increasing"),
@@ -218,7 +218,7 @@ I550_HISTORY = [
     ("p30_hogsta_framledning", "°C", "measurement"),
     ("p30_energi_el_total", "kWh", "total_increasing"),
     ("p30_avgiven_varme_totalt", "kWh", "total_increasing"),
-    ("p30_drift_24", "min", "measurement"),
+    ("p30_drift_24_h_m", "min", "measurement"),
     ("p30_varde_13", None, None),
     ("p30_emxxx", "kWh", "total_increasing"),
     ("p30_antal_starter_24", None, None),
@@ -236,16 +236,19 @@ I550_HISTORY = [
 def test_the_i255_history_page_end_to_end(catalogue, page):
     values = _page_values(catalogue, page("i255_128"))
     assert _table(catalogue, values) == I255_HISTORY
-    clock = next(v for v in values if v.key == "p30_drift_24")
+    clock = next(v for v in values if v.key == "p30_drift_24_h_m")
     assert clock.label == "Drift /24"
     assert clock.fmt == "%02d:%02d" and clock.var_indices == [27, 26]
-    assert not any(v.key.startswith("p30_drift_24_h_m") for v in values)
+    # The two integers' keys, _1 and _2, are gone with the fold; the one row
+    # carries the key the i550 has always had, so the name can improve freely.
+    assert not any(v.key.startswith("p30_drift_24_h_m_") for v in values)
+    assert "p30_drift_24" not in {v.key for v in values}
 
 
 def test_the_i550_history_page_end_to_end(catalogue, page):
     values = _page_values(catalogue, page("i550_136"))
     assert _table(catalogue, values) == I550_HISTORY
-    clock = next(v for v in values if v.key == "p30_drift_24")
+    clock = next(v for v in values if v.key == "p30_drift_24_h_m")
     assert clock.label == "Drift /24"
     assert clock.var_indices == [7, 8]
 

@@ -148,6 +148,24 @@ def _clean_label(label: str) -> str:
     return f"{cleaned}{suffix.group(0)}" if suffix else cleaned
 
 
+#: What a row's key has been built from since the first release: the row name
+#: as the panel wrote it, less one trailing unit. Frozen on purpose. The key is
+#: the entity's identity, sensor.py builds unique_id from it, and every key that
+#: moves leaves an entity behind in the registry with a twin beside it. So the
+#: name is free to improve in _clean_label, "Drift /24 h:m" reads "Drift /24",
+#: while the key stays what every installation already carries, until keys are
+#: built from the row's place on the page instead (roadmap L2).
+_KEY_UNIT = re.compile(r"[( ](kWh|l/min|ppm|°C|kW|rps|bar|min|%|A|V|h)\)?\s*$")
+
+
+def _key_label(label: str) -> str:
+    """The name a row's key is made of, built the way the first release built it."""
+    suffix = _POSITION_SUFFIX.search(label.strip())
+    base = _base_label(label)
+    cleaned = _KEY_UNIT.sub("", base).strip(" ()") or base
+    return f"{cleaned}{suffix.group(0)}" if suffix else cleaned
+
+
 def display_state_class(unit: str | None, label: str | None) -> str | None:
     """The state class a display reading should carry, going by its unit and row.
 
@@ -183,11 +201,15 @@ def numeric_value(value: SlowValue, raw: list[Any]) -> float | None:
     """Turn a raw variable into a number, honouring CTC's missing markers.
 
     A clock row holds hours and minutes in two variables and is read as one
-    figure in minutes, so "03:46" becomes 226 and can be graphed.
+    figure in minutes, so "03:46" becomes 226 and can be graphed. The row says
+    so by its unit. A menu stored by a version from before the minutes carries
+    the same format with no unit, and that row goes on reading its hours, as it
+    always has, until the menu has been read again and the unit arrives with
+    it: the figure and its unit change together, never one before the other.
     """
     if not value.var_indices:
         return None
-    if is_clock_format(value.fmt) and len(value.var_indices) == 2:
+    if value.unit == "min" and is_clock_format(value.fmt) and len(value.var_indices) == 2:
         hours, minutes = (_raw_number(raw, index) for index in value.var_indices)
         if hours is None or minutes is None:
             return None
@@ -383,7 +405,9 @@ def _join_clock_rows(readings: list[_Reading]) -> list[_Reading]:
     variables. An i255 prints the same row as two integers with a ":" between
     them, which the pairing names "Drift /24 h:m 1" and "... 2". Two readings
     of a clock row make one figure, not two unitless sensors, so the second is
-    folded into the first and the pair looks the way the i550 draws it.
+    folded into the first and the pair looks the way the i550 draws it: one
+    row named "Drift /24 h:m", and so one key, the one an i550 Pro has always
+    had. The i255's two keys with _1 and _2 end here, by design.
     """
     joined: list[_Reading] = []
     for raw_label, fmt, indices, index in readings:
@@ -430,7 +454,9 @@ async def async_page_values(
         for raw_label, fmt, indices, index in _join_clock_rows(readings):
             unit = _unit(fmt, raw_label)
             label = _clean_label(raw_label)
-            base = _slug(label, f"s{screen}_w{index}")
+            # The key from the row's own name, never from the cleaned one: the
+            # name may get better, the key is what the entity is known by.
+            base = _slug(_key_label(raw_label), f"s{screen}_w{index}")
             key = f"p{page}_{base}"
             suffix = 2
             while key in seen:
