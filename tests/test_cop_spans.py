@@ -221,11 +221,17 @@ def test_a_quiet_display_that_never_answered_is_dated_from_the_start(cop):
 
 
 def test_the_coordinators_own_moment_wins_once_it_has_one(cop):
-    # The other track's helper, read with a default so either order of
-    # merging works. Anything but a datetime there is ignored, not trusted.
-    web = _web(False, {"a": _at(8)}, **{cop.LAST_HARVEST_ATTRIBUTE: _at(9)})
+    # The coordinator's own attribute, by its real name and not by the
+    # constant, so a constant that drifts from CtcWebCoordinator.last_harvest
+    # fails here instead of falling back to read_at for good (F3.2, F8.3).
+    # Anything but a datetime there is ignored, not trusted.
+    assert cop.LAST_HARVEST_ATTRIBUTE == "last_harvest"
+    web = _web(False, {"a": _at(8)}, last_harvest=_at(9))
     assert "2026-10-09T09:00:00" in cop.display_silence(web)
-    web = _web(False, {"a": _at(8)}, **{cop.LAST_HARVEST_ATTRIBUTE: "nyss"})
+    web = _web(False, {"a": _at(8)}, last_harvest="nyss")
+    assert "2026-10-09T08:00:00" in cop.display_silence(web)
+    # The old, never matching name is read as nothing.
+    web = _web(False, {"a": _at(8)}, last_harvest_at=_at(9))
     assert "2026-10-09T08:00:00" in cop.display_silence(web)
 
 
