@@ -141,7 +141,11 @@ MODBUS: dict[str, str] = {
         "Värmekurvans justering, som flyttar hela kurvan uppåt eller nedåt. Är det för kallt inne "
         "när det är över noll ute, ökas justeringen ett par grader."
     ),
-    "set_hp1_blocked": "Om kompressorn är tillåten eller spärrad i pumpens meny.",
+    "set_hp1_blocked": (
+        "Om kompressorn är tillåten eller spärrad i pumpens meny. Ja betyder att värmepumpen "
+        "får gå, Nej att den är spärrad. Registret heter Värmepump tillåten i CTC:s "
+        "registerlista (61521) och svarar 1 för Ja och 0 för Nej."
+    ),
     "set_heating_mode_1": (
         "Värmeläget för värmesystem 1. Auto: värmen stängs av och slås på efter utetemperaturen. "
         "Till och Från: alltid på eller alltid av."

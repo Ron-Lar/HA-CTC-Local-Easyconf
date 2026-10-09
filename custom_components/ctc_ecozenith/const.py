@@ -288,6 +288,10 @@ SG_MODE: Final = {0: "Normal", 1: "Blockering", 2: "Lågpris", 3: "Överkapacite
 SG_NORMAL_CODE: Final = 0
 PRICE_MODE: Final = {1: "Låg", 2: "Normal", 3: "Hög"}
 ZONE_MODE: Final = {0: "Av", 1: "Värme", 2: "Kyla", 3: "Auto", 4: "På"}
+#: A stored setting that is a yes or a no, so it reads as a word rather than
+#: the 1 the controller answers with. Whether the heat pump is allowed to run
+#: (61521) is the one such setting in the 61500 block the integration reads.
+YES_NO: Final = {0: "Nej", 1: "Ja"}
 
 _T = "temperature"
 _P = "power"
@@ -369,7 +373,7 @@ MODBUS_SETTINGS: Final[tuple[ModbusSensor, ...]] = (
     ModbusSensor("set_room_1", 61509, "Inställd rumstemperatur", 0.1, "°C", _T),
     ModbusSensor("set_slope_1", 61513, "Kurvlutning", 0.1, None, None, icon="mdi:chart-line-variant"),
     ModbusSensor("set_adjust_1", 61517, "Kurvjustering", 0.1, None, None, icon="mdi:tune-vertical"),
-    ModbusSensor("set_hp1_blocked", 61521, "Värmepump tillåten", 1, None, None, None, icon="mdi:heat-pump-outline"),
+    ModbusSensor("set_hp1_blocked", 61521, "Värmepump tillåten", 1, None, None, None, enum=YES_NO, icon="mdi:heat-pump-outline"),
     ModbusSensor("set_heating_mode_1", 61542, "Inställt värmeläge", 1, None, None, None, enum=HEATING_MODE, icon="mdi:radiator"),
     ModbusSensor("set_max_rps_1", 61572, "Inställt max varvtal", 0.1, "rps", None, icon="mdi:speedometer"),
     ModbusSensor("set_max_immersion_lower", 61590, "Max elpatron nedre", 0.1, "kW", _P),
