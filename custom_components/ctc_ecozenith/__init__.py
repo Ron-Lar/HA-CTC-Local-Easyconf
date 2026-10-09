@@ -76,7 +76,7 @@ from .const import (
 )
 from .coordinator import CtcControlManager, CtcModbusCoordinator, CtcWebCoordinator
 from .identity import Identity, async_read_identity, async_read_identity_via_panel
-from .modbus_api import CtcModbusClient
+from .modbus_api import CtcModbusClient, hold_library_quiet
 from .updates import async_latest_release, newer
 from .seen import SeenValues
 from .seen_history import async_seed_from_statistics
@@ -455,6 +455,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         await dashboard.async_register(hass, str(integration.version))
     except Exception:  # noqa: BLE001 - the page must never break a set-up
         _LOGGER.warning("Could not add the CTC page", exc_info=True)
+
+    # pymodbus writes an error line of its own for every register nobody
+    # answers, which on a model that lacks a block is twelve red lines per
+    # start about something the round handles and says on debug. Kept out of
+    # the log for as long as an entry is loaded, and only that one line.
+    entry.async_on_unload(hold_library_quiet())
 
     modbus_client = CtcModbusClient(host, modbus_port, slave)
     modbus = CtcModbusCoordinator(

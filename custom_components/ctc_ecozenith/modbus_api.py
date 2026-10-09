@@ -38,7 +38,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from .const import CONTROL_ADDRESSES, SENTINELS, ModbusSensor, enum_label
 
@@ -98,6 +98,56 @@ def settle_wait(host: str, port: int, now: float) -> float:
     if closed is None:
         return 0.0
     return max(0.0, CLOSE_SETTLE - (now - closed))
+
+
+#: The logger pymodbus writes to, and the start of the line it writes, at
+#: ERROR, for a request nobody answered. That is how CTC says a register the
+#: model lacks, which the poll round handles and says on debug; with the
+#: integration's retries=0 the line names zero retries, which no other client
+#: in the process is likely to produce, so the match is as narrow as it can be.
+LIBRARY_LOGGER = "pymodbus.logging"
+LIBRARY_SILENCE_LINE = "No response received after 0 retries"
+
+
+class _QuietSilence(logging.Filter):
+    """Keeps the library's own line about a silent register out of the log."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not record.getMessage().startswith(LIBRARY_SILENCE_LINE)
+
+
+_QUIET = _QuietSilence()
+_QUIET_HOLDS = 0
+
+
+def hold_library_quiet() -> Callable[[], None]:
+    """Keep pymodbus' error line about a silent register out of the log; returns the undo.
+
+    Held for as long as an entry is loaded and let go at its unload, so the
+    library speaks for itself again once no heat pump is set up. On a model
+    that lacks the stored block the line would otherwise come twelve times
+    per start, in red, for something the round handles and says on debug.
+    Only that one line is kept out: anything else the library has to say,
+    a lost connection included, still reaches the log.
+    """
+    global _QUIET_HOLDS
+    logger = logging.getLogger(LIBRARY_LOGGER)
+    if _QUIET_HOLDS == 0:
+        logger.addFilter(_QUIET)
+    _QUIET_HOLDS += 1
+    released = False
+
+    def _release() -> None:
+        nonlocal released
+        global _QUIET_HOLDS
+        if released:
+            return
+        released = True
+        _QUIET_HOLDS -= 1
+        if _QUIET_HOLDS == 0:
+            logger.removeFilter(_QUIET)
+
+    return _release
 
 
 def client_options() -> dict[str, Any]:
