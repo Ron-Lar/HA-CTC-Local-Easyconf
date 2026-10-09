@@ -26,11 +26,16 @@ supplied power, which gives a real coefficient of performance, plus the
 expansion valve position, superheat, evaporation and condensation in bar, and
 the inverter's own voltages and currents.
 
-**The coefficient of performance over a day, a year and the lifetime.** Only the
-display counts delivered heat, on its history page, called stored operation data
-on older display software, so that page has to be among the harvested ones. The
-energy consumed comes from the display's own counter where it has one. The older
-software has none, and there it comes from Modbus register 62341 instead, which
+**The coefficient of performance over a day, a week, a month, a year and the
+lifetime.** Only the display counts delivered heat, on its history page, called
+stored operation data on older display software, so that page has to be among
+the harvested ones. The week and the month are read against the daily samples
+the integration keeps for the year, so they appear a week and a month after it
+was set up, long before the first yearly figure; the display's own "/30 dagar"
+rows are not used, since they stand at zero on both units they have been read
+from. The energy consumed comes from the display's own counter where it has
+one. The older software has none, and there it comes from Modbus register 62341
+instead, which
 holds the same number: 9166 kWh against the display's 9166.0 on an i255. It is
 read at the moment the display is, so the two always form a pair. The sensors
 exist from the start, whatever Modbus has said so far, and their attributes say
@@ -348,7 +353,8 @@ It also sends what the installation is made of and how well it performs: the
 indoor unit's model, the outdoor unit's model, the firmware in the display, in
 the heat pump's control board and in the control unit, the week the machine was
 built, and its coefficient of performance over the last day, over a rolling
-year, over the machine's first year and over its lifetime.
+year, over the machine's first year and over its lifetime. The figures over a
+week and a month are not sent.
 
 The flags and the numbers the report can carry are two closed lists next to
 the code that builds it, `FEATURE_KEYS` and `METRIC_KEYS` in `stats_extra.py`,
