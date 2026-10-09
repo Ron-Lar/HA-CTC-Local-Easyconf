@@ -146,12 +146,16 @@ def first_harvest_delay(
     One interval after the last reading, as if Home Assistant had never been
     away, so a restart within the interval moves the panel not at all and a
     longer absence harvests as soon as the platforms are up. With nothing
-    stored there is nothing to show, and the harvest is made at once.
+    stored there is nothing to show, and the harvest is made at once. Never
+    later than one interval from now, whatever the store says: a moment from
+    the future, left by a clock that was ahead when the harvest was written
+    and has been set right since, would otherwise put the first harvest off
+    by the whole difference, with the stored values held fresh all the while.
     """
     if stored is None or stored.latest is None:
         return MIN_FIRST_DELAY
     due = stored.latest + timedelta(seconds=float(interval))
-    return max(MIN_FIRST_DELAY, (due - now).total_seconds())
+    return max(MIN_FIRST_DELAY, min(float(interval), (due - now).total_seconds()))
 
 
 class HarvestMemory:
