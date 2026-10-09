@@ -31,6 +31,48 @@ def model_slug(model: str | None) -> str:
     return MODEL_SLUGS.get(model.strip(), "other")
 
 
+#: The stem of the display's settings file names the family of controllers it
+#: belongs to: ezi2xx on an i255, ezi5xx on an i550 Pro. A model reported as
+#: "other" says nothing about which family turned up, so for those alone the
+#: stem goes along as a flag of its own, family_<stem>, and only when it has
+#: the shape of a stem: two to sixteen lowercase letters and digits. The key
+#: is the one feature that is built rather than listed (see FEATURE_KEYS),
+#: and the pattern is what keeps anything but a family code out of it.
+FAMILY_PREFIX = "family_"
+FAMILY_STEM = re.compile(r"^[a-z0-9]{2,16}$")
+_MODEL_STEM = re.compile(r"\(([^()]*)\)\s*$")
+
+
+def entry_stem(data: Any) -> str | None:
+    """An entry's settings file stem, from what its data holds.
+
+    ``settings_stem`` where the entry was made with one; otherwise the name of
+    the settings file the display gave at set-up, which every entry keeps;
+    otherwise the parentheses at the end of the model name, which is where an
+    entry for a family the integration did not know put the stem. Lower case
+    and stripped, not yet checked against FAMILY_STEM.
+    """
+    if not hasattr(data, "get"):
+        return None
+    name = data.get("settings_name")
+    if isinstance(name, str):
+        name = name.strip().removeprefix("settings_").removesuffix(".bin")
+    model = data.get("model")
+    found = _MODEL_STEM.search(model) if isinstance(model, str) else None
+    for candidate in (data.get("settings_stem"), name, found.group(1) if found else None):
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip().lower()
+    return None
+
+
+def family_feature(slug: str, stem: Any) -> str | None:
+    """The family flag's key for a model reported as "other", or None."""
+    if slug != "other" or not isinstance(stem, str):
+        return None
+    cleaned = stem.strip().lower()
+    return FAMILY_PREFIX + cleaned if FAMILY_STEM.match(cleaned) else None
+
+
 #: CTC names its outdoor units EA or EP followed by three digits and sometimes
 #: an M. Matching the shape rather than keeping a list means a model released
 #: tomorrow still reports as itself, while anything else reports as "other", so
@@ -152,6 +194,8 @@ class ErrorCounter:
 #: test builds the report with everything set and requires the key sets to match
 #: these exactly, so a key cannot turn up in the report without being written
 #: here, and nothing written here goes unmentioned in what the owner agreed to.
+#: The one feature outside the list is family_<stem>, built from FAMILY_PREFIX
+#: and a stem that matches FAMILY_STEM, and only for a model reported as other.
 FEATURE_KEYS = frozenset(
     {
         "modbus",
@@ -211,6 +255,7 @@ def build_extra(
     menu_pages: int | None = None,
     menu_home: bool | None = None,
     menu_root: bool | None = None,
+    settings_stem: str | None = None,
     heat_total_kwh: float | None = None,
     consumption_total_kwh: float | None = None,
     cop_day: Any = None,
@@ -288,6 +333,12 @@ def build_extra(
         payload["features"]["menu_pages"] = max(0, int(menu_pages))
     walk = {"menu_home": menu_home, "menu_root": menu_root}
     payload["features"].update({k: bool(v) for k, v in walk.items() if v is not None})
+
+    # Which family a model the integration does not know belongs to, by its
+    # settings file stem; a known model sends no such flag.
+    family = family_feature(models[0], settings_stem)
+    if family is not None:
+        payload["features"][family] = True
 
     # The firmware in each board. Three separate versions, because a fault that
     # only shows up on one combination is exactly what this is for.

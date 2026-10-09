@@ -15,6 +15,7 @@ from __future__ import annotations
 import inspect
 import json
 import pathlib
+import re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMPONENT = ROOT / "custom_components" / "ctc_ecozenith"
@@ -45,6 +46,9 @@ EVERYTHING = {
     "menu_pages": 7,
     "menu_home": True,
     "menu_root": True,
+    # A known model sends no family flag, so the closed list holds as it is;
+    # the flag for a model reported as other is tested below.
+    "settings_stem": "ezi2xx",
     "heat_total_kwh": 22499.0,
     "consumption_total_kwh": 9116.0,
     "cop_day": 2.9,
@@ -90,6 +94,21 @@ def test_the_lists_do_not_overlap_and_are_what_the_consent_text_counts(stats_ext
     assert len(stats_extra.FEATURE_KEYS) == 16
 
 
+def test_a_model_reported_as_other_adds_its_family_and_nothing_else(stats_extra):
+    # The one built key: family_<stem>, beside the closed list, for a model the
+    # integration does not know (R19). Everything the backend takes: a boolean
+    # or a whole number under a key of its pattern, at most 24 of them.
+    payload = stats_extra.build_extra(
+        **{**EVERYTHING, "model": "EcoZenith (ezi4xx)", "settings_stem": "ezi4xx"}
+    )
+    assert payload["models"] == ["other", "ea720m"]
+    assert set(payload["features"]) == stats_extra.FEATURE_KEYS | {"family_ezi4xx"}
+    assert payload["features"]["family_ezi4xx"] is True
+    for key in payload["features"]:
+        assert re.match(r"^[a-z][a-z0-9_]{0,31}$", key), key
+    assert len(payload["features"]) <= 24
+
+
 # ------------------------------------------------------ the consent text
 
 
@@ -120,6 +139,8 @@ def test_the_english_consent_text_names_what_the_report_carries():
             # menu_pages, menu_home and menu_root.
             "pages the display's menu has",
             "home screen",
+            # family_<stem>, for a model the integration does not know.
+            "family code",
             "{endpoint}",
             "{privacy_url}",
         ):
@@ -142,6 +163,7 @@ def test_the_swedish_consent_text_names_what_the_report_carries():
         "drifttid",
         "sidor displayens meny har",
         "hemskärmen",
+        "familjekoden",
         "{endpoint}",
         "{privacy_url}",
     ):
@@ -169,6 +191,7 @@ def test_the_readme_tells_the_same_story():
         "operating hours",
         "pages the display's menu has",
         "home screen",
+        "family code",
         "FEATURE_KEYS",
         "METRIC_KEYS",
         "only when it is wrong",
