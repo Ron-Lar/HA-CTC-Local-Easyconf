@@ -103,3 +103,72 @@ def test_the_swedish_flow_texts_use_no_dash_as_punctuation():
 
     for text in strings(_texts("translations/sv.json")["config"]):
         assert "–" not in text and "—" not in text and " - " not in text, text
+
+
+# ------------------------------------------------ the flow for a stranger (R16)
+
+
+@pytest.mark.parametrize("name", FILES)
+def test_a_discovered_unit_is_named_on_its_card(name):
+    assert _texts(name)["config"]["flow_title"] == "{name}"
+    assert 'self.context["title_placeholders"] = {"name": display.label}' in FLOW
+
+
+def test_the_list_names_the_model_first_and_carries_no_dash(discovery):
+    found = discovery.DiscoveredDisplay(host="192.168.1.55", settings_name="settings_ezi2xx.bin")
+    assert found.label == "EcoZenith i255 (192.168.1.55)"
+    assert "—" not in found.label and "–" not in found.label
+
+
+def test_no_label_in_the_flow_is_written_in_one_language():
+    # The two that were: the list's way to the address form, and the count
+    # behind every page in the tick boxes.
+    assert "Ange" not in FLOW and "värden" not in FLOW
+    assert "translation_key=CONF_PICKED" in FLOW
+    assert FLOW.count("label=page_label(page)") == 2, "båda kryssrutelistorna använder samma etikett"
+    assert 'return f"{page.title} ({len(page.values)})"' in FLOW
+
+
+@pytest.mark.parametrize("name", FILES)
+def test_the_way_to_the_address_form_is_labelled_in_every_language(name):
+    assert _texts(name)["selector"]["picked"]["options"]["manual"]
+
+
+@pytest.mark.parametrize(
+    ("name", "menus"),
+    [
+        ("strings.json", ("Installer, Define, Remote control", "Modbus TCP")),
+        ("translations/en.json", ("Installer, Define, Remote control", "Modbus TCP")),
+        ("translations/sv.json", ("Installatör, Definiera, Fjärrstyrning", "Modbus TCP")),
+    ],
+)
+def test_modbus_that_does_not_answer_has_a_step_of_its_own(name, menus):
+    steps = _texts(name)["config"]["step"]
+    failed = steps["modbus_failed"]
+    assert set(failed["data"]) == set(steps["manual"]["data"]), "samma fält som adressformuläret"
+    for words in menus:
+        assert words in failed["description"]
+    assert "{host}" in failed["description"]
+    assert 'STEP_MODBUS_FAILED = "modbus_failed"' in FLOW
+    connect = _method("async_step_connect")
+    assert "STEP_MODBUS_FAILED" in connect and '"manual"' not in connect
+
+
+def test_addresses_already_set_up_are_left_out_of_the_list():
+    scan = _method("async_step_scan")
+    assert "self._configured_hosts()" in scan
+    assert "display.host not in configured" in scan
+
+
+def _keys(node, prefix=""):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield from _keys(value, f"{prefix}/{key}")
+    else:
+        yield prefix
+
+
+def test_the_three_files_carry_the_same_keys():
+    english = _texts("strings.json")
+    assert english == _texts("translations/en.json")
+    assert sorted(_keys(english)) == sorted(_keys(_texts("translations/sv.json")))

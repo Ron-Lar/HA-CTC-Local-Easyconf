@@ -182,7 +182,10 @@ every form of them, on both models tested.
    bridge. A network of more than 1024 addresses, a /16 for instance, is
    searched as the /24 around Home Assistant's own address on it.
    **Enter an address** skips the search. If yours is on another subnet, or the
-   search finds nothing, type the address instead.
+   search finds nothing, type the address instead. Addresses that already
+   have an entry are left out of the list. When the display answers and Modbus
+   does not, a step of its own says where on the panel Modbus TCP is turned on,
+   and takes the address again.
 3. Tick the display pages you want harvested. The menu is read from the unit
    itself, so the list matches your model and your installed options, in your
    own language. Everything is ticked to begin with; switch off what you do not
