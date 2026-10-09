@@ -167,6 +167,9 @@ FEATURE_KEYS = frozenset(
         "cop_floor",
         "cop_stuck",
         "cop_implausible",
+        "menu_pages",
+        "menu_home",
+        "menu_root",
     }
 )
 METRIC_KEYS = frozenset(
@@ -205,6 +208,9 @@ def build_extra(
     cop_floor: bool | None = None,
     cop_stuck: bool | None = None,
     cop_implausible: bool | None = None,
+    menu_pages: int | None = None,
+    menu_home: bool | None = None,
+    menu_root: bool | None = None,
     heat_total_kwh: float | None = None,
     consumption_total_kwh: float | None = None,
     cop_day: Any = None,
@@ -272,6 +278,16 @@ def build_extra(
         "cop_implausible": cop_implausible,
     }
     payload["features"].update({k: bool(v) for k, v in flags.items() if v is not None})
+
+    # Whether no page is harvested because nothing is ticked or because the
+    # display's menu was never read, and if never, how far the last walk
+    # through it got in this run: the home screen recognised, the operation
+    # data menu entered. A count and two yes or no, never what the menu says.
+    # The two steps are left out when no walk has been made in this run.
+    if menu_pages is not None:
+        payload["features"]["menu_pages"] = max(0, int(menu_pages))
+    walk = {"menu_home": menu_home, "menu_root": menu_root}
+    payload["features"].update({k: bool(v) for k, v in walk.items() if v is not None})
 
     # The firmware in each board. Three separate versions, because a fault that
     # only shows up on one combination is exactly what this is for.

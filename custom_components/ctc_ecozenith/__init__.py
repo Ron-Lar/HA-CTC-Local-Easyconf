@@ -30,6 +30,7 @@ from homeassistant.util import dt as dt_util
 from . import dashboard
 from .alarms import STORAGE_VERSION as ALARM_STORAGE_VERSION, AlarmLog
 from .catalogue import (
+    MenuReading,
     async_discover_pages,
     menu_is_due,
     menu_root,
@@ -114,7 +115,7 @@ from .seen_history import async_seed_from_statistics
 from .stats import async_setup_stats, async_stop_stats
 from .stats_extra import ErrorCounter, build_extra
 from .transitions import TransitionWatch, find_starts_per_day, sample_of
-from .web_api import CtcWebClient
+from .web_api import CtcWebClient, CtcWebError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -191,8 +192,26 @@ _MENU_LAST: dict[str, float] = {}
 MENU_READ_TRIES = 3
 MENU_READ_RETRY = timedelta(minutes=5)
 
+#: How each entry's last walk through the menu in this run went, as
+#: MenuReading.outcome gives it, empty before the first (roadmap L6). Kept
+#: outside the entry like the tries, since a reload follows every menu that is
+#: written, and the very same dictionary sits on the runtime, where the daily
+#: report and the diagnostics read it: it is updated in place, so a walk made
+#: from the options form reaches a runtime that is still loaded. Never written
+#: to the options: every write of them reloads the entry.
+_MENU_OUTCOME: dict[str, dict[str, Any]] = {}
 
-def menu_read_from_the_options(entry_id: str, now: float) -> None:
+
+def _keep_menu_outcome(entry_id: str, reading: MenuReading) -> None:
+    """Keep how a walk through the menu went, in place of how the last one went."""
+    kept = _MENU_OUTCOME.setdefault(entry_id, {})
+    kept.clear()
+    kept.update(reading.outcome())
+
+
+def menu_read_from_the_options(
+    entry_id: str, now: float, reading: MenuReading | None = None
+) -> None:
     """Book a reading of the menu that the options form made just now.
 
     The tries are for the reading owed after an update, and they stop after
@@ -202,10 +221,14 @@ def menu_read_from_the_options(entry_id: str, now: float) -> None:
     background reading that follows a form whose own reading missed is owed
     its tries again rather than left a version behind until a restart. The
     form's reading counts as the last attempt, so that background reading
-    waits its pause before walking the panel again.
+    waits its pause before walking the panel again. How the form's walk went
+    replaces how the last one went, so the report does not speak of a walk
+    that has since been made again.
     """
     _MENU_TRIES.pop(entry_id, None)
     _MENU_LAST[entry_id] = now
+    if reading is not None:
+        _keep_menu_outcome(entry_id, reading)
 
 ISSUE_PAGES = "pages_missing"
 #: The two things the pages_missing issue can say, under its one id (R12): a
@@ -556,12 +579,18 @@ async def _async_reread_menu(
     written over the stored page it would rename a row and the registry
     tidy-up would then take that row's entity. The stored menu stands and the
     reading is tried again.
+
+    How far the walk got is kept for the report and the diagnostics, and the
+    warning that ends the tries says it. A display that stopped answering
+    partway is raised once that is done, as it was before the walk gave it
+    back in the reading, so the rest of the round waits for the next one.
     """
     options = entry.options
     async with client.panel:
         # Without the operation data root there is no menu to read, only the
         # page the panel happens to show, and that must not replace the menu.
         reading = await async_discover_pages(client, require_root=True)
+    _keep_menu_outcome(entry.entry_id, reading)
     if not reading.pages or not reading.complete:
         spent = _MENU_TRIES.get(entry.entry_id, 0)
         if reading.gaps:
@@ -573,12 +602,12 @@ async def _async_reread_menu(
         elif reading.pages:
             what = "Only part of the display's menu could be read"
         else:
-            what = "The display's menu could not be read"
+            what = f"The display's menu could not be read ({reading.how_far()})"
         if spent >= MENU_READ_TRIES:
             _LOGGER.warning(
                 "%s in %s attempts, so the menu stored by an earlier version is kept and "
-                "anything a newer one would make sense of is not harvested. Reload the "
-                "integration to try again",
+                "anything a newer one would make sense of is not harvested. Choose Read "
+                "the display's menu again under Configure to try again",
                 what,
                 MENU_READ_TRIES,
             )
@@ -590,6 +619,8 @@ async def _async_reread_menu(
                 MENU_READ_TRIES,
                 int(MENU_READ_RETRY.total_seconds() // 60),
             )
+        if reading.error is not None:
+            raise CtcWebError(reading.error)
         return {}
 
     stored_menu = pages_from_storage(options.get(CONF_MENU))
@@ -682,6 +713,14 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
     """
     runtime = getattr(entry, "runtime_data", None)
     failures = _FAILURES.setdefault(entry.entry_id, ErrorCounter())
+    # The menu as stored, and how far this run's last walk through it got:
+    # whether no page is read because nothing is ticked or because the menu
+    # was never read, and if never, at which step (roadmap R12 and L6).
+    menu = {
+        "menu_pages": len(pages_from_storage(entry.options.get(CONF_MENU))),
+        "menu_home": _MENU_OUTCOME.get(entry.entry_id, {}).get("home_found"),
+        "menu_root": _MENU_OUTCOME.get(entry.entry_id, {}).get("root_entered"),
+    }
     if runtime is None:
         # Set-up has not finished. The model is the one thing the config
         # knows; a read failure is recorded so a controller that never
@@ -692,6 +731,7 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
             control_enabled=False,
             page_count=0,
             read_failures=1,
+            **menu,
         )
     # Recognising a counter and reading it are different things, so the report
     # says which of the two happened. See stats_extra.build_extra.
@@ -722,6 +762,7 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
         cop_implausible=fault == "implausible",
         heat_total_kwh=heat if fault else None,
         consumption_total_kwh=consumed if fault else None,
+        **menu,
         **cop_for_report(runtime),
     )
 
@@ -856,6 +897,9 @@ class CtcRuntime:
     #: The alarm the display shows and the last ten episodes of it, where the
     #: display is harvested at all.
     alarms: AlarmLog | None = None
+    #: How the last walk through the menu in this run went, empty before the
+    #: first: the entry's own dictionary in _MENU_OUTCOME, shared, not copied.
+    menu_outcome: dict[str, Any] = field(default_factory=dict)
 
 
 type CtcConfigEntry = ConfigEntry[CtcRuntime]
@@ -953,6 +997,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         web_client=web_client,
         control_enabled=bool(options.get(CONF_ENABLE_CONTROL, True)),
         identity=identity,
+        menu_outcome=_MENU_OUTCOME.setdefault(entry.entry_id, {}),
         # From the entry, not from the local copy above: the identity read a
         # moment ago may already have been written to the options.
         applied_data=dict(entry.data),

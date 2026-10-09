@@ -386,6 +386,12 @@ class CtcWebClient:
         #: replayed, so a route is only ever replayed from the page it was
         #: recorded on. See async_goto_page.
         self.root: int | None = None
+        #: Whether the last attempt to enter the operation data root found the
+        #: tile on the home screen: None before any attempt and when the home
+        #: screen itself was not found. The menu sweep reports it (roadmap L6),
+        #: since a tile that is not there and a tile that leads nowhere are
+        #: two different faults behind the same False.
+        self.tile_found: bool | None = None
         #: How many requests this client has made, and how many of them were
         #: taps that moved the panel. Cumulative; the harvester logs the
         #: difference per walk, which is how a walk that costs too much is seen.
@@ -903,10 +909,12 @@ class CtcWebClient:
         nothing drops it from memory, so a stale point costs one walk and not
         the rest of the run.
         """
+        self.tile_found = None
         home = await self.async_goto_home()
         if home is None:
             return False
         found = await self._async_operation_tile(home)
+        self.tile_found = found is not None
         if found is None:
             return False
         _screen, screens, (x, y) = found

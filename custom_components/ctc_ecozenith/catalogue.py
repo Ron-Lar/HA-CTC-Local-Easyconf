@@ -540,6 +540,15 @@ class MenuReading:
     with it, VSH's delivered heat counter among the rows that have read that
     way; now the entity stays, but the counter is found by its name, so the
     coefficient of performance would still lose it until the next reading.
+
+    The walk also says how far it got (roadmap L6): whether the home screen
+    was recognised, whether the operation data tile was found on it, whether
+    pressing the tile led into the menu, and, where the display stopped
+    answering partway, what it said. A walk that ends in nothing used to look
+    the same whichever step failed, which is how an i360 could stand without
+    a page read through several releases with nobody able to say why. The
+    steps are None on a reading the sweep did not make, such as the empty
+    one a caller puts in place of a walk that could not start.
     """
 
     pages: list[SlowPage] = field(default_factory=list)
@@ -550,6 +559,92 @@ class MenuReading:
     root: int | None = None
     #: Pages read with a gap this time, by number; see the class docstring.
     gaps: list[int] = field(default_factory=list)
+    #: How far the walk got; see the class docstring.
+    home_found: bool | None = None
+    tile_found: bool | None = None
+    root_entered: bool | None = None
+    #: What the display client said when the display stopped answering
+    #: partway. The pages found before it are not offered: a walk the display
+    #: cut short is not a menu, and the readers took it for none before.
+    error: str | None = None
+
+    @property
+    def mapped(self) -> bool:
+        """Whether the walk got into the operation data menu and found pages there."""
+        return self.error is None and bool(self.pages) and self.root_entered is not False
+
+    def how_far(self) -> str:
+        """Where a walk that found no menu stopped, as a clause for the log."""
+        if self.error is not None:
+            if self.root_entered:
+                where = "inside the operation data menu"
+            elif self.home_found:
+                where = "after the home screen was found"
+            else:
+                where = "before the home screen was found"
+            return f"the display stopped answering {where} ({self.error})"
+        if not self.home_found:
+            said = (
+                "the home screen was not recognised, so the operation data tile was "
+                "never looked for and nothing but the panel's own back button was pressed"
+            )
+        elif not self.tile_found:
+            said = (
+                "the home screen was found but the operation data tile on it was not, "
+                "so nothing on it was pressed"
+            )
+        elif not self.root_entered:
+            said = "the operation data tile was found but pressing it did not lead into the menu"
+        else:
+            said = "the operation data menu was entered but no page with a reading was found in it"
+        if self.pages and not self.root_entered:
+            said += "; the page the panel was showing is offered on its own"
+        return said
+
+    def describe(self) -> str:
+        """One line on how the walk went, for the log."""
+        if not self.mapped:
+            return f"The display's menu could not be read: {self.how_far()}"
+        text = (
+            f"The display's menu was read: home screen, operation data tile and menu "
+            f"found, {len(self.pages)} page(s)"
+        )
+        if not self.complete:
+            text += ", though not the whole menu, so it is read again"
+        return text
+
+    def outcome(self) -> dict[str, Any]:
+        """The walk in brief, for the runtime, the report and the diagnostics."""
+        return {
+            "home_found": self.home_found,
+            "tile_found": self.tile_found,
+            "root_entered": self.root_entered,
+            "pages": len(self.pages),
+            "complete": self.complete,
+            "gaps": list(self.gaps),
+            "error": self.error,
+        }
+
+
+#: The outcomes said out loud in this run, by display and by whether the walk
+#: failed: a failure is a warning once, a success an info line once, and every
+#: walk after that the same way is a debug line. The menu is read up to three
+#: times a run, and a panel that never gives it up should not say so three
+#: times; a panel that gives it up after a failure should still say that.
+_SAID: set[tuple[str, bool]] = set()
+
+
+def _say(client: Any, reading: MenuReading) -> None:
+    """Log how the walk went, once per run per display and outcome."""
+    failed = not reading.mapped
+    level = logging.WARNING if failed else logging.INFO
+    where = getattr(client, "base_url", None)
+    if isinstance(where, str):
+        if (where, failed) in _SAID:
+            level = logging.DEBUG
+        else:
+            _SAID.add((where, failed))
+    _LOGGER.log(level, "%s", reading.describe())
 
 
 def menu_root(pages: list[SlowPage]) -> int | None:
@@ -587,9 +682,22 @@ async def async_discover_pages(
     stops the moment it cannot get back to the root, because every tap it
     makes is meant for a page it has verified it is on, and the reading then
     says it is not complete (see :class:`MenuReading`).
+
+    The reading also says how far the walk got, and the walk says it in the
+    log, once per run per display on warning where it found no menu and on
+    info where it did. A display that stops answering partway is one of the
+    ways it finds none: the panel is put back as usual and the reading
+    carries the error, with no pages, rather than the error being raised.
     """
-    page_map = await client.async_screen_map(refresh=True)
-    origin = await client.async_current_page()
+    reading = MenuReading(home_found=False, tile_found=False, root_entered=False)
+    try:
+        page_map = await client.async_screen_map(refresh=True)
+        origin = await client.async_current_page()
+    except CtcWebError as err:
+        # Nothing has been pressed, so there is nothing to put back.
+        reading.error = str(err)
+        _say(client, reading)
+        return reading
     discovered: list[SlowPage] = []
     visited: set[int] = set()
     gaps: set[int] = set()
@@ -597,21 +705,15 @@ async def async_discover_pages(
     found: tuple[int, int] | None = None
 
     try:
-        found = await _async_operation_root(client, page_map, origin)
+        found = await _async_operation_root(client, page_map, origin, reading)
         if found is None:
-            if require_root:
-                _LOGGER.warning(
-                    "Could not find the operation data menu, so no page was read; "
-                    "nothing but the panel's own back button was pressed on the way"
+            if not require_root:
+                _LOGGER.debug(
+                    "Could not find the operation data menu; reading the page the panel "
+                    "is showing without pressing anything on it"
                 )
-                return MenuReading()
-            _LOGGER.warning(
-                "Could not find the operation data menu; reading the page the panel is "
-                "showing without pressing anything on it (nothing but the panel's own "
-                "back button was pressed on the way)"
-            )
-            here = await client.async_current_page()
-            await _async_collect(client, page_map, here, discovered, visited, [], gaps)
+                here = await client.async_current_page()
+                await _async_collect(client, page_map, here, discovered, visited, [], gaps)
         else:
             root, home = found
             # The home screen is where the sweep came in from, not a page of
@@ -623,10 +725,12 @@ async def async_discover_pages(
             complete = await _async_explore(
                 client, page_map, root, home, discovered, visited, gaps=gaps
             )
+    except CtcWebError as err:
+        reading.error = str(err)
     finally:
         await _async_restore(client, page_map, origin, found)
 
-    if gaps:
+    if gaps and reading.error is None:
         # A page read with a gap is a page not read: left out, and the
         # reading is owed, as it is for a page the sweep did not reach.
         _LOGGER.info(
@@ -635,13 +739,13 @@ async def async_discover_pages(
             "the menu is read again",
             ", ".join(str(page) for page in sorted(gaps)),
         )
-        complete = False
-    return MenuReading(
-        [page for page in discovered if page.values and page.page not in gaps],
-        complete,
-        root=found[0] if found is not None else None,
-        gaps=sorted(gaps),
-    )
+    if reading.error is None:
+        reading.pages = [page for page in discovered if page.values and page.page not in gaps]
+        reading.complete = complete and not gaps
+        reading.gaps = sorted(gaps)
+    reading.root = found[0] if found is not None else None
+    _say(client, reading)
+    return reading
 
 
 class PanelBusy(Exception):
@@ -940,7 +1044,10 @@ async def _async_collect(
 
 
 async def _async_operation_root(
-    client: CtcWebClient, page_map: dict[int, list[int]], origin: int
+    client: CtcWebClient,
+    page_map: dict[int, list[int]],
+    origin: int,
+    steps: MenuReading | None = None,
 ) -> tuple[int, int] | None:
     """Navigate to the operation data menu; return its page and the home screen.
 
@@ -948,16 +1055,25 @@ async def _async_operation_root(
     tile, and the sweep needs to know it: a tap in the subtree that lands there
     must not make it a page of the menu. The client remembers a home screen it
     has recognised, so asking for it first and then for the root costs no
-    second press.
+    second press. Each step reached is noted on ``steps``.
     """
     home = await client.async_goto_home()
     if home is None:
         return None
-    if not await client.async_goto_operation_root():
+    if steps is not None:
+        steps.home_found = True
+    entered = await client.async_goto_operation_root()
+    if steps is not None:
+        # The client says whether it found the tile; one that keeps no such
+        # record is taken at its word that pressing the tile got in.
+        steps.tile_found = bool(getattr(client, "tile_found", entered))
+    if not entered:
         return None
     root = await client.async_current_page()
     if root == home:
         return None
+    if steps is not None:
+        steps.root_entered = True
     return root, home
 
 

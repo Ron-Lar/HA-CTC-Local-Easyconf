@@ -344,6 +344,28 @@ def test_control_the_counters_the_transitions_and_the_alarms(full):
     assert "7208 2540 XXXX" in episode["text"]
 
 
+def test_the_last_walk_through_the_menu_is_there_washed(diagnostics_data, const):
+    # How far the last walk got (L6), with the display client's message about
+    # an address it could not reach.
+    walk = {
+        "home_found": True,
+        "tile_found": True,
+        "root_entered": False,
+        "pages": 0,
+        "complete": False,
+        "gaps": [],
+        "error": "/sm/all failed: Cannot connect to host 10.1.2.3:80",
+    }
+    found, text = dump(diagnostics_data, data(const), options(const), None, menu_outcome=walk)
+    last = found["menu"]["last_walk"]
+    assert last["home_found"] is True and last["root_entered"] is False
+    assert last["error"] == "/sm/all failed: Cannot connect to host **REDACTED**:80"
+    assert "10.1.2.3" not in text
+    # Before the first walk of the run there is nothing to say.
+    found, _text = dump(diagnostics_data, data(const), options(const), None, menu_outcome={})
+    assert found["menu"]["last_walk"] is None
+
+
 # ------------------------------------------------- when things are missing
 
 

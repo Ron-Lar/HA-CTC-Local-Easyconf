@@ -929,7 +929,7 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         # is read by tests that run without it.
         from . import menu_read_from_the_options
 
-        menu_read_from_the_options(self._entry.entry_id, self.hass.loop.time())
+        menu_read_from_the_options(self._entry.entry_id, self.hass.loop.time(), reading)
         # An interrupted sweep is offered for what it found, beside the stored
         # pages it did not reach, and is not fresh: nothing disappears and the
         # version is not stamped. See catalogue.menu_after_rescan.
