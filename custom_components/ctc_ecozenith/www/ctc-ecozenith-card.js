@@ -229,7 +229,28 @@
 
     _missing(item) {
       const stateObj = this._state(item.entity);
-      return Boolean(item.hide_unavailable) && (!stateObj || HIDDEN_STATES.has(stateObj.state));
+      if (!stateObj) return Boolean(item.hide_unavailable || item.show_reason);
+      // R35: a value that can say why it is empty stays while merely unknown.
+      if (item.show_reason) return stateObj.state === "unavailable";
+      return Boolean(item.hide_unavailable) && HIDDEN_STATES.has(stateObj.state);
+    }
+
+    /** R35: the small line under a value: what the figure rests on, or, while
+     *  there is no figure, why there is none. Both are attributes of the
+     *  entity, named in the item as one name or a list of names, so an
+     *  attribute the integration renames is still found by the page. */
+    _below(item, stateObj) {
+      if (!stateObj || (!item.sub && !item.reason)) return "";
+      const attributes = stateObj.attributes || {};
+      const first = (names) => {
+        for (const name of [].concat(names || [])) {
+          const found = attributes[name];
+          if (found !== undefined && found !== null && String(found) !== "") return String(found);
+        }
+        return "";
+      };
+      if (HIDDEN_STATES.has(stateObj.state)) return first(item.reason) || first(item.sub);
+      return first(item.sub);
     }
 
     /** The service call for a control, returned so the caller can see it
@@ -337,6 +358,11 @@
     .tiles { display: grid; gap: 14px 24px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
     .tile .label { display: block; color: var(--secondary-text-color); font-size: .8em; overflow-wrap: anywhere; }
     .tile .big { font-size: 1.6rem; font-weight: 500; color: var(--primary-text-color); }
+    /* R35: what the figure rests on, or why there is none, in small text under it. */
+    .tile .sub {
+      color: var(--secondary-text-color); font-size: .75em; line-height: 1.3; overflow-wrap: anywhere;
+    }
+    .tile .sub:empty { display: none; }
     .tile .note { padding-top: 2px; }
   `;
 
@@ -357,9 +383,17 @@
         note.hidden = true;
         const value = document.createElement("div");
         value.className = "big";
-        tile.append(this._named(item, note, "div"), value, note);
+        tile.append(this._named(item, note, "div"), value);
+        let sub = null;
+        if (item.sub || item.reason) {
+          // R35: the line under the figure, drawn from the entity's attributes.
+          sub = document.createElement("div");
+          sub.className = "sub";
+          tile.appendChild(sub);
+        }
+        tile.appendChild(note);
         grid.appendChild(tile);
-        return { item, tile, value };
+        return { item, tile, value, sub };
       });
       card.append(grid);
     }
@@ -367,8 +401,10 @@
     _update() {
       if (!this._hass) return;
       for (const row of this._items) {
+        const stateObj = this._state(row.item.entity);
         row.tile.hidden = this._missing(row.item);
-        row.value.textContent = this._text(this._state(row.item.entity));
+        row.value.textContent = this._text(stateObj);
+        if (row.sub) row.sub.textContent = this._below(row.item, stateObj);
       }
     }
   }
@@ -620,6 +656,9 @@
     .row:hover, .row:focus-visible { background: var(--secondary-background-color, #f5f5f5); outline: none; }
     .row .label { color: var(--primary-text-color); overflow-wrap: anywhere; }
     .value { color: var(--primary-text-color); font-weight: 500; white-space: nowrap; text-align: right; }
+    /* R35: what a figure rests on, or why there is none, under its row. */
+    .row .sub { grid-column: 1 / -1; color: var(--secondary-text-color); font-size: .75em; line-height: 1.3; }
+    .row .sub:empty { display: none; }
     .note { grid-column: 1 / -1; }
     .empty { color: var(--secondary-text-color); padding: 16px 4px; }
   `;
@@ -698,7 +737,15 @@
       note.hidden = true;
       const value = document.createElement("span");
       value.className = "value";
-      element.append(this._named(item, note), value, note);
+      element.append(this._named(item, note), value);
+      let sub = null;
+      if (item.sub || item.reason) {
+        // R35: the line under the row, drawn from the entity's attributes.
+        sub = document.createElement("div");
+        sub.className = "sub";
+        element.appendChild(sub);
+      }
+      element.appendChild(note);
       const toggle = () => {
         this._toggle(item, note);
         element.setAttribute("aria-expanded", String(!note.hidden));
@@ -710,7 +757,7 @@
           toggle();
         }
       });
-      return { item, element, note, value, seen: undefined, gone: false };
+      return { item, element, note, value, sub, seen: undefined, gone: false };
     }
 
     _update() {
@@ -723,6 +770,7 @@
         if (!stateObj || row.seen === stateObj) continue;
         row.seen = stateObj;
         row.value.textContent = this._text(stateObj);
+        if (row.sub) row.sub.textContent = this._below(row.item, stateObj);
       }
       this._show();
     }
@@ -751,6 +799,7 @@
       const item = row.item;
       const haystack = [
         item.name, item.explanation, item.source, item.entity, row.value.textContent,
+        row.sub ? row.sub.textContent : "",
       ].join(" ").toLowerCase();
       return this._query.split(/\s+/).every((word) => haystack.includes(word));
     }

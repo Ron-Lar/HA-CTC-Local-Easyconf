@@ -184,10 +184,52 @@ def test_the_key_readings_are_large_numbers_that_hide_while_they_have_nothing(
     ]
     (card,) = _cards(readings)
     assert card["type"] == READINGS
-    assert all(item["hide_unavailable"] for _k, item, _e in _items(readings))
+    items = dict(zip(_keys(pump, readings), (i for _k, i, _e in _items(readings))))
+    # The coefficient of performance is the one figure that stays while merely
+    # unknown, with its reason under it (R35); everything else hides.
+    assert all(item["hide_unavailable"] for key, item in items.items() if key != "cop_day")
+    assert items["cop_day"]["show_reason"] is True
     # The card goes when every figure on it has.
     (either,) = card["visibility"]
     assert len(either["conditions"]) == len(_items(readings))
+
+
+def test_the_coefficient_of_performance_says_what_it_rests_on_and_why_it_is_empty(
+    dashboard_views, pumps
+):
+    """R35: underlag and skäl under the figure, and a tile that stays while merely unknown."""
+    pump = pumps["vsh"]
+    for tab, heading, other in (
+        ("overview", "Nyckeltal", "outdoor_temp"),
+        ("performance", "Energi och värmefaktor", "compressor_kwh"),
+    ):
+        section = _section(_tab(dashboard_views, pump, tab), heading)
+        items = dict(zip(_keys(pump, section), (i for _k, i, _e in _items(section))))
+        for key, item in items.items():
+            if key.startswith("cop_"):
+                # Today's attribute names and the English ones they may get, so
+                # a renaming in the integration does not blank the line.
+                assert item["sub"] == ["underlag", "basis"]
+                assert item["reason"] == ["skäl", "reason"]
+                assert item["show_reason"] is True and "hide_unavailable" not in item
+            else:
+                assert not {"sub", "reason", "show_reason"} & item.keys()
+        # The card's visibility follows: unknown keeps the coefficient on the page.
+        (card,) = _cards(section)
+        conditions = {c["entity"]: c["state_not"] for c in card["visibility"][0]["conditions"]}
+        assert conditions[pump["entities"]["cop_day"]] == ["unavailable"]
+        assert conditions[pump["entities"][other]] == ["unavailable", "unknown"]
+    # The graph of it is drawn for the same states.
+    graph = _section(_tab(dashboard_views, pump, "performance"), "Värmefaktor per dygn")["cards"][1]
+    assert graph["visibility"] == [
+        {"condition": "state", "entity": pump["entities"]["cop_day"], "state_not": ["unavailable"]}
+    ]
+    # The full list never hides a row, and still writes the line under it.
+    config = dashboard_views.build_dashboard([pump], "sv", NEW_HA)
+    rows = {row["entity"]: row for row in _values_card(config)["rows"] if "entity" in row}
+    cop = rows[pump["entities"]["cop_lifetime"]]
+    assert cop["sub"] == ["underlag", "basis"] and cop["reason"] == ["skäl", "reason"]
+    assert "show_reason" not in cop and "hide_unavailable" not in cop
 
 
 def test_the_overview_ends_in_a_day_of_the_circuit(dashboard_views, pumps):
