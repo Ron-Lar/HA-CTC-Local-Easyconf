@@ -25,6 +25,8 @@ pytest.importorskip("pytest_homeassistant_custom_component")
 
 from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
     HOST,
+    IDENTITY,
+    MODEL,
     FakePanel,
     _entity_id,
     _needs_auto_asyncio_mode,
@@ -33,12 +35,20 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
 )
 
 from homeassistant.config_entries import ConfigEntryState  # noqa: E402
+from homeassistant.const import CONF_HOST  # noqa: E402
 from homeassistant.helpers import entity_registry as er  # noqa: E402
+from homeassistant.loader import async_get_integration  # noqa: E402
+from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
 
 from custom_components.ctc_ecozenith.catalogue import pages_to_storage  # noqa: E402
 from custom_components.ctc_ecozenith.const import (  # noqa: E402
+    CONF_IDENTITY,
     CONF_MENU,
+    CONF_MENU_VERSION,
+    CONF_MODBUS_PORT,
+    CONF_SLAVE,
     CONF_SLOW_PAGES,
+    CONF_WEB_PORT,
     DOMAIN,
     SlowPage,
     SlowValue,
@@ -112,8 +122,129 @@ async def _harvest_again(hass, entry) -> None:
         await hass.async_block_till_done()
 
 
-def _has_entity(hass, key: str) -> bool:
-    return er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{HOST}_p{PAGE}_{key}") is not None
+def _row_entity(hass, key: str) -> str | None:
+    return er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{HOST}_p{PAGE}_{key}")
+
+
+async def _entry_with_the_page(hass) -> MockConfigEntry:
+    """The entry before set-up, for a test that wants to seed storage or the registry first."""
+    stored = pages_to_storage([HEATPUMP])
+    version = str((await async_get_integration(hass, DOMAIN)).version)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=f"{DOMAIN}_{HOST}",
+        title=f"{MODEL} ({HOST})",
+        data={CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1, "model": MODEL},
+        options={CONF_MENU_VERSION: version, CONF_IDENTITY: IDENTITY,
+                 CONF_SLOW_PAGES: stored, CONF_MENU: stored},
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def _set_up_entry(hass, entry) -> None:
+    with patch(f"custom_components.{DOMAIN}.CtcWebClient", ServingPanel):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+
+
+# ------------------------------------------------------- rows that wait
+
+
+async def test_a_row_that_reads_the_marker_gets_its_entity_when_it_first_leaves_it(hass, stubs):
+    """Two brine rows on an air to water unit, as on VSH's i255.
+
+    At set-up they read 9999 and have never read as a number, so no entity is
+    made for them, while the two rows that read get theirs as before. The
+    first harvest in which the brine rows read as numbers adds them through
+    the platform's own async_add_entities: no reload, same unique ids. Once
+    made they stay, unavailable while the marker is back, like any reading.
+    """
+    ServingPanel.vars = [72, 215, 9999, 9999]
+    ServingPanel.header = []
+    entry = await _set_up_with_the_page(hass)
+
+    assert hass.states.get(_row_entity(hass, "utetemperatur")).state == "7.2"
+    assert hass.states.get(_row_entity(hass, "vp_in_ut_1")).state == "21.5"
+    assert _row_entity(hass, "brine_in_ut_1") is None
+    assert _row_entity(hass, "brine_in_ut_2") is None
+
+    ServingPanel.vars = [72, 215, 35, 0]
+    await _harvest_again(hass, entry)
+    assert hass.states.get(_row_entity(hass, "brine_in_ut_1")).state == "3.5"
+    assert hass.states.get(_row_entity(hass, "brine_in_ut_2")).state == "0.0", "en äkta nolla är ett tal"
+    assert entry.runtime_data.seen.numeric >= {f"p{PAGE}_brine_in_ut_1", f"p{PAGE}_brine_in_ut_2"}
+
+    # The marker is back: the entities stay. The harvest carries a row's last
+    # reading through a round it did not get one (its age is R5's business),
+    # and the rows are numbers in the record, so a later set-up makes them too.
+    ServingPanel.vars = [72, 215, 9999, 9999]
+    await _harvest_again(hass, entry)
+    assert hass.states.get(_row_entity(hass, "brine_in_ut_1")).state == "3.5"
+    assert _row_entity(hass, "brine_in_ut_2") is not None
+
+
+async def test_a_row_that_has_been_a_number_is_made_at_once_and_the_old_store_is_migrated(
+    hass, stubs, hass_storage
+):
+    """An installation from before: the seen store at version 1 names the row.
+
+    Home Assistant finds the file one version behind and asks the store to
+    migrate it; the display rows it knew become the numeric record, so a row
+    that reads the marker right now, an outdoor unit switched off, still gets
+    its entity at set-up, and the file is written back at version 2.
+    """
+    entry = await _entry_with_the_page(hass)
+    hass_storage[f"{DOMAIN}_{entry.entry_id}_seen"] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": f"{DOMAIN}_{entry.entry_id}_seen",
+        "data": {"keys": [f"p{PAGE}_brine_in_ut_1", "hp1_rps"]},
+    }
+    ServingPanel.vars = [72, 215, 9999, 9999]
+    ServingPanel.header = []
+    await _set_up_entry(hass, entry)
+
+    assert hass.states.get(_row_entity(hass, "brine_in_ut_1")).state == "unavailable"
+    assert _row_entity(hass, "brine_in_ut_2") is None
+    seen = entry.runtime_data.seen
+    assert f"p{PAGE}_brine_in_ut_1" in seen.numeric and "hp1_rps" in seen.keys
+    stored = hass_storage[f"{DOMAIN}_{entry.entry_id}_seen"]
+    assert stored["version"] == 2
+    assert f"p{PAGE}_brine_in_ut_1" in stored["data"]["numeric"]
+    assert set(stored["data"]["keys"]) >= {f"p{PAGE}_brine_in_ut_1", "hp1_rps"}
+
+
+async def test_only_a_row_gone_from_a_page_the_menu_still_has_leaves_the_registry(hass, stubs):
+    """Three entries from an earlier version, three fates.
+
+    A row the parser no longer builds on page 22, which the menu has: removed.
+    A row on page 99, which the menu does not know, so was not reached: kept.
+    A row still on page 22 that reads the marker: kept, however long it does.
+    """
+    entry = await _entry_with_the_page(hass)
+    registry = er.async_get(hass)
+    gone = registry.async_get_or_create(
+        "sensor", DOMAIN, f"{DOMAIN}_{HOST}_p{PAGE}_overhettning_s_h_4", config_entry=entry
+    )
+    unknown_page = registry.async_get_or_create(
+        "sensor", DOMAIN, f"{DOMAIN}_{HOST}_p99_varmvatten", config_entry=entry
+    )
+    marker_row = registry.async_get_or_create(
+        "sensor", DOMAIN, f"{DOMAIN}_{HOST}_p{PAGE}_brine_in_ut_2", config_entry=entry
+    )
+    ServingPanel.vars = [72, 215, 9999, 9999]
+    ServingPanel.header = []
+    await _set_up_entry(hass, entry)
+
+    assert registry.async_get(gone.entity_id) is None
+    assert registry.async_get(unknown_page.entity_id) is not None
+    assert registry.async_get(marker_row.entity_id) is not None
+    # And the marker row's entry is waiting for its entity, not provided yet.
+    assert hass.states.get(marker_row.entity_id) is None or (
+        hass.states.get(marker_row.entity_id).state == "unavailable"
+    )
 
 
 # --------------------------------------------------------------- the alarm

@@ -8,6 +8,12 @@ therefore something only that installation can tell, by giving a value. Every va
 the two coordinators read is noted here once it is a number other than zero, and the
 CTC page leaves out a reading that is zero and has never been anything else.
 
+A second set remembers which keys have ever been a number at all, a true zero
+included. The display answers for a sensor that is not fitted with a marker,
+9999, which is no number, and a row that has only ever read the marker gets no
+entity until it first leaves one (sensor.py, roadmap L3). The zero set cannot
+serve for that: a row of true zeros is a number every time.
+
 Kept in a Store per entry, so a value seen once stays known across restarts. Free of
 Home Assistant imports: the store is handed in, as for cop.CopTracker.
 """
@@ -15,12 +21,20 @@ Home Assistant imports: the store is handed in, as for cop.CopTracker.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Mapping
+import re
+from typing import Any, Callable, Iterable, Mapping
 
 _LOGGER = logging.getLogger(__name__)
 
 #: How long a change to the set may wait before it is written down.
 SAVE_DELAY_SECONDS = 60
+
+#: Version 1 held the zero set alone, as ``{"keys": [...]}``. Version 2 adds
+#: ``numeric``, the keys that have ever been a number; see :func:`migrate`.
+STORAGE_VERSION = 2
+
+#: How a display row's key begins: the page it is harvested from.
+_DISPLAY_KEY = re.compile(r"^p\d+_")
 
 
 def is_zero(value: Any) -> bool:
@@ -37,13 +51,45 @@ def is_zero(value: Any) -> bool:
     return False
 
 
+def is_number(value: Any) -> bool:
+    """A number, zero included. Text is not one, nor is a boolean."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def is_display_key(key: str) -> bool:
+    """Whether a key names a display row, ``p22_utetemperatur``."""
+    return _DISPLAY_KEY.match(key) is not None
+
+
+def migrate(old_version: int, data: Any) -> dict[str, list[str]]:
+    """The store's content as version 2 writes it, from any earlier shape.
+
+    Version 1 knew only which keys had been something other than zero. A
+    display row among them was a number, since the display's rows never read
+    as anything else, so those seed the numeric set; a Modbus key may have been
+    an enumeration's label, and is not presumed. Rubbish gives an empty store.
+    """
+    keys: set[str] = set()
+    numeric: set[str] = set()
+    if isinstance(data, Mapping):
+        if isinstance(data.get("keys"), list):
+            keys = {str(key) for key in data["keys"]}
+        if old_version >= 2 and isinstance(data.get("numeric"), list):
+            numeric = {str(key) for key in data["numeric"]}
+        else:
+            numeric = {key for key in keys if is_display_key(key)}
+    return {"keys": sorted(keys), "numeric": sorted(numeric)}
+
+
 class SeenValues:
-    """The keys that have had a value other than zero, ever."""
+    """The keys that have had a value other than zero, ever, and those that were numbers."""
 
     def __init__(self, store: Any, on_new: Callable[[], None] | None = None) -> None:
         self._store = store
         self._on_new = on_new
         self.keys: set[str] = set()
+        #: Keys that have ever read as a number, a true zero included.
+        self.numeric: set[str] = set()
         #: True until something was stored: an installation new to this, whose
         #: past values are worth looking up in the recorded history once.
         self.fresh = True
@@ -51,29 +97,60 @@ class SeenValues:
     async def async_load(self) -> None:
         stored = await self._store.async_load()
         if isinstance(stored, Mapping) and isinstance(stored.get("keys"), list):
-            self.keys = {str(key) for key in stored["keys"]}
+            # The store migrates on disk; this reads the old shape as well,
+            # for a store handed in by something that does not.
+            data = migrate(2 if "numeric" in stored else 1, stored)
+            self.keys = set(data["keys"])
+            self.numeric = set(data["numeric"])
             self.fresh = False
 
     def note(self, data: Mapping[str, Any] | None) -> None:
         """Take in a coordinator's data, and remember what is new."""
-        self.add(
-            key for key, value in (data or {}).items()
-            if value is not None and not is_zero(value)
+        items = list((data or {}).items())
+        self._remember(
+            (key for key, value in items if value is not None and not is_zero(value)),
+            (key for key, value in items if is_number(value)),
         )
 
-    def add(self, keys: Any) -> int:
-        """Remember these keys as having had a value. Returns how many were new."""
-        new = {str(key) for key in keys} - self.keys
-        if not new:
-            return 0
-        self.keys |= new
+    def add(self, keys: Iterable[Any]) -> int:
+        """Remember these keys as having had a value. Returns how many were new.
+
+        A display row with a value was a number, the display's rows never read
+        as anything else, so it joins the numeric set as well; that is what
+        lets the record seeded from the recorder's statistics count there too.
+        """
+        return self._remember(keys, ())[0]
+
+    def add_numeric(self, keys: Iterable[Any]) -> int:
+        """Remember these keys as having read as a number. Returns how many were new."""
+        return self._remember((), keys)[1]
+
+    def _remember(self, valued: Iterable[Any], numbers: Iterable[Any]) -> tuple[int, int]:
+        """Take in both kinds at once: one save, and one announcement.
+
+        Only a new key with a value is announced: the page's choice of what to
+        show rests on that set, while the numeric one decides only which
+        display rows get an entity.
+        """
+        new_keys = {str(key) for key in valued} - self.keys
+        new_numeric = ({str(key) for key in numbers} | {k for k in new_keys if is_display_key(k)}) - self.numeric
+        if not new_keys and not new_numeric:
+            return 0, 0
+        self.keys |= new_keys
+        self.numeric |= new_numeric
+        self._save()
+        if new_keys and self._on_new is not None:
+            self._on_new()
+        return len(new_keys), len(new_numeric)
+
+    def _save(self) -> None:
         try:
-            self._store.async_delay_save(lambda: {"keys": sorted(self.keys)}, SAVE_DELAY_SECONDS)
+            self._store.async_delay_save(
+                lambda: {"keys": sorted(self.keys), "numeric": sorted(self.numeric)},
+                SAVE_DELAY_SECONDS,
+            )
         except Exception as err:  # noqa: BLE001 - a lost save only means a later rediscovery
             _LOGGER.debug("Could not schedule saving the seen values: %s", err)
-        if self._on_new is not None:
-            self._on_new()
-        return len(new)
 
     def unused(self, values: Mapping[str, Any]) -> set[str]:
         """Of these current values, the keys that are zero and never were anything else."""

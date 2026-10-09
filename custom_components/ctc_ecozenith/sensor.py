@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -27,7 +28,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import EntityCategory
 
 from . import CtcConfigEntry
-from .catalogue import display_state_class
+from .catalogue import display_state_class, pages_from_storage
 from .cop import (
     WINDOWS,
     current_totals,
@@ -37,6 +38,7 @@ from .cop import (
     reason_for,
 )
 from .const import (
+    CONF_MENU,
     DOMAIN,
     STATUS_UNKNOWN,
     ModbusSensor,
@@ -63,6 +65,9 @@ IDENTITY_ROWS = (
     ("serial", "Serienummer", lambda i: i.serial, "mdi:identifier"),
     ("made", "Tillverkad", lambda i: i.manufactured, "mdi:factory"),
 )
+from .rows import due_rows, split_rows, vanished_display_keys
+
+_LOGGER = logging.getLogger(__name__)
 
 # By the names const.py uses, so the choice of class can be tested without
 # Home Assistant installed.
@@ -104,9 +109,36 @@ async def async_setup_entry(
         for description in runtime.modbus.descriptions
     ]
     if runtime.web is not None:
-        for page in runtime.pages:
-            for value in page.values:
-                entities.append(CtcDisplaySensor(runtime, page.title, value))
+        _async_remove_vanished_rows(hass, entry, runtime)
+        # A row that reads CTC's marker for a sensor that is not fitted, and
+        # never has read as a number, waits for its entity until it does; see
+        # rows.py. The first harvest that gives it a number adds it here.
+        numeric = runtime.seen.numeric if runtime.seen is not None else set()
+        now, pending = split_rows(runtime.pages, runtime.web.data, numeric)
+        entities.extend(CtcDisplaySensor(runtime, page.title, value) for page, value in now)
+        if pending:
+            web = runtime.web
+            _LOGGER.info(
+                "%d display rows have never read as a number, so their entities wait "
+                "until they do: %s",
+                len(pending),
+                ", ".join(sorted(pending)),
+            )
+
+            @callback
+            def _add_rows_that_left_a_number() -> None:
+                due = due_rows(pending, web.data)
+                if not due:
+                    return
+                new = [pending.pop(key) for key in due]
+                _LOGGER.info(
+                    "Display rows that read as a number for the first time get their "
+                    "entities: %s",
+                    ", ".join(due),
+                )
+                async_add_entities([CtcDisplaySensor(runtime, page.title, value) for page, value in new])
+
+            entry.async_on_unload(web.async_add_listener(_add_rows_that_left_a_number))
         entities.append(CtcHarvestSensor(runtime))
 
     # What the unit is: static once read, but read late where the system
@@ -149,6 +181,39 @@ async def async_setup_entry(
             async_add_entities(new)
 
     entry.async_on_unload(async_dispatcher_connect(hass, signal, _identity_filled_in))
+
+
+def _async_remove_vanished_rows(hass: HomeAssistant, entry: CtcConfigEntry, runtime) -> None:
+    """Take the registry entries away for rows no longer on a page the menu still has.
+
+    The rule is rows.vanished_display_keys: a page the menu does not know, one
+    the sweep did not reach, keeps every entry it has, and a row that is still
+    on its page is never removed however long it has read the marker. What
+    goes is a row the parser folded away or renamed, the i255's two halves of
+    the clock row for instance, which otherwise sit in the registry
+    unavailable for good. One line in the log per entry, so the owner can see
+    what went and why.
+    """
+    from homeassistant.helpers import entity_registry as er
+
+    menu = pages_from_storage(entry.options.get(CONF_MENU)) + list(runtime.pages)
+    host = next(iter(runtime.device["identifiers"]))[1]
+    prefix = f"{DOMAIN}_{host}_"
+    registry = er.async_get(hass)
+    entries = {
+        item.unique_id[len(prefix):]: item
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if item.domain == "sensor" and item.unique_id and item.unique_id.startswith(prefix)
+    }
+    for key in sorted(vanished_display_keys(menu, entries)):
+        item = entries[key]
+        _LOGGER.info(
+            "The display row %s is no longer on its page in the display's menu, so its "
+            "entity %s is removed from the registry",
+            key,
+            item.entity_id,
+        )
+        registry.async_remove(item.entity_id)
 
 
 class CtcModbusSensor(CoordinatorEntity, SensorEntity):

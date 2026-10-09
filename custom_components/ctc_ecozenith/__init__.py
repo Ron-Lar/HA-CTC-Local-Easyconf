@@ -92,7 +92,7 @@ from .identity import (
 )
 from .modbus_api import CtcModbusClient, hold_library_quiet
 from .updates import async_latest_release, check_is_due, newer
-from .seen import SeenValues
+from .seen import STORAGE_VERSION as SEEN_STORAGE_VERSION, SeenValues, migrate as migrate_seen
 from .seen_history import async_seed_from_statistics
 from .stats import async_setup_stats, async_stop_stats
 from .stats_extra import ErrorCounter, build_extra
@@ -106,6 +106,22 @@ _LOGGER = logging.getLogger(__name__)
 COP_SAMPLE_INTERVAL = timedelta(hours=6)
 
 
+
+
+class SeenStore(Store):
+    """The record of what the installation has seen, brought up to the current shape.
+
+    Version 1 held only the keys that had been something other than zero.
+    Version 2 adds the keys that have ever been a number, which decides which
+    display rows get an entity (roadmap L3). The rule itself is seen.migrate,
+    free of Home Assistant and tested on its own; this is where Home Assistant
+    calls it, once, when it finds a file of an older version.
+    """
+
+    async def _async_migrate_func(
+        self, old_major_version: int, old_minor_version: int, old_data: Any
+    ) -> Any:
+        return migrate_seen(old_major_version, old_data)
 
 
 _FAILURES: dict[str, ErrorCounter] = {}
@@ -822,7 +838,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     # What this installation actually has, learnt from what it reports: CTC
     # answers with a clean zero for hardware and registers it does not use.
     seen = SeenValues(
-        Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_seen"),
+        SeenStore(hass, SEEN_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_seen"),
         on_new=lambda: dashboard.async_announce_change(hass),
     )
     await seen.async_load()
@@ -945,7 +961,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> None
     # What the unit was seen to have, what its display last gave, the energy
     # counters behind the coefficient of performance and what it alarmed
     # about belong to this entry alone, and go with it.
-    await Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_seen").async_remove()
+    await Store(hass, SEEN_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_seen").async_remove()
     await Store(
         hass, HARVEST_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_display"
     ).async_remove()

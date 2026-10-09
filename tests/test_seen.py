@@ -29,7 +29,11 @@ def test_values_other_than_zero_are_remembered_and_announced_once(seen):
     tracker.note({"hp1_fan": 0.0, "hp1_rps": 42.5, "system_status": "Värme", "room_temp_2": None})
     assert tracker.keys == {"hp1_rps", "system_status"}
     assert announced == [True]
-    assert store.saves[-1] == ({"keys": ["hp1_rps", "system_status"]}, seen.SAVE_DELAY_SECONDS)
+    # One save for both sets: the fan's zero is a number too (L3, test_lazy_rows.py).
+    assert store.saves[-1] == (
+        {"keys": ["hp1_rps", "system_status"], "numeric": ["hp1_fan", "hp1_rps"]},
+        seen.SAVE_DELAY_SECONDS,
+    )
     # Nothing new: no save, no announcement. A value going back to zero is still known.
     tracker.note({"hp1_fan": 0.0, "hp1_rps": 0.0})
     assert announced == [True] and len(store.saves) == 1
