@@ -92,7 +92,12 @@ from .identity import (
 )
 from .modbus_api import CtcModbusClient, hold_library_quiet
 from .updates import async_latest_release, check_is_due, newer
-from .seen import STORAGE_VERSION as SEEN_STORAGE_VERSION, SeenValues, migrate as migrate_seen
+from .seen import (
+    STORAGE_MINOR_VERSION as SEEN_MINOR_VERSION,
+    STORAGE_VERSION as SEEN_STORAGE_VERSION,
+    SeenValues,
+    migrate as migrate_seen,
+)
 from .seen_history import async_seed_from_statistics
 from .stats import async_setup_stats, async_stop_stats
 from .stats_extra import ErrorCounter, build_extra
@@ -111,17 +116,39 @@ COP_SAMPLE_INTERVAL = timedelta(hours=6)
 class SeenStore(Store):
     """The record of what the installation has seen, brought up to the current shape.
 
-    Version 1 held only the keys that had been something other than zero.
-    Version 2 adds the keys that have ever been a number, which decides which
-    display rows get an entity (roadmap L3). The rule itself is seen.migrate,
-    free of Home Assistant and tested on its own; this is where Home Assistant
-    calls it, once, when it finds a file of an older version.
+    Minor 1 held only the keys that had been something other than zero. Minor
+    2 adds the keys that have ever been a number, which decides which display
+    rows get an entity (roadmap L3). The rule itself is seen.migrate, free of
+    Home Assistant and tested on its own; this is where Home Assistant calls
+    it, once, when it finds a file of an older shape.
+
+    The major version stays at 1, on purpose. Home Assistant refuses to load
+    a file whose major version is above the one the code opens it with, and
+    the release before this one opens the file as a plain Store at version 1,
+    with nothing to catch the refusal: had this release written the file as
+    version 2, a return to that release would have left the entry in
+    SETUP_ERROR with every entity gone until somebody deleted the file by
+    hand. At the same major, that release reads the file straight through,
+    keeps the numeric set it does not know, writes it back as 1.1, and the
+    next start of this release brings it up to 1.2 again. The same rule holds
+    for the display, alarm and energy counter stores: a new shape is a new
+    minor version, never a new major.
     """
 
     async def _async_migrate_func(
         self, old_major_version: int, old_minor_version: int, old_data: Any
     ) -> Any:
-        return migrate_seen(old_major_version, old_data)
+        return migrate_seen(old_data)
+
+
+def seen_store(hass: HomeAssistant, entry_id: str) -> SeenStore:
+    """The entry's seen store, opened as this release writes it: major 1, minor 2."""
+    return SeenStore(
+        hass,
+        SEEN_STORAGE_VERSION,
+        f"{DOMAIN}_{entry_id}_seen",
+        minor_version=SEEN_MINOR_VERSION,
+    )
 
 
 _FAILURES: dict[str, ErrorCounter] = {}
@@ -838,7 +865,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     # What this installation actually has, learnt from what it reports: CTC
     # answers with a clean zero for hardware and registers it does not use.
     seen = SeenValues(
-        SeenStore(hass, SEEN_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_seen"),
+        seen_store(hass, entry.entry_id),
         on_new=lambda: dashboard.async_announce_change(hass),
     )
     await seen.async_load()

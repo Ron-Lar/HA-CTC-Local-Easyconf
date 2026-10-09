@@ -70,18 +70,28 @@ def test_a_display_row_added_from_the_recorded_statistics_counts_as_numeric():
     assert tracker.numeric == {"p30_total_drifttid"}, "displayrader är tal, Modbus-nycklar kan vara etiketter"
 
 
-def test_version_one_is_carried_over_with_the_display_rows_as_numeric():
+def test_minor_one_is_carried_over_with_the_display_rows_as_numeric():
     old = {"keys": ["hp1_rps", "p22_utetemperatur", "p30_total_drifttid", "system_status"]}
-    assert seen.migrate(1, old) == {
+    assert seen.migrate(old) == {
         "keys": ["hp1_rps", "p22_utetemperatur", "p30_total_drifttid", "system_status"],
         "numeric": ["p22_utetemperatur", "p30_total_drifttid"],
     }
-    # Version 2 passes through as it is, and rubbish gives an empty record.
+    # Minor 2 passes through as it is, and rubbish gives an empty record.
     two = {"keys": ["hp1_rps"], "numeric": ["hp1_rps", "p22_kompressor"]}
-    assert seen.migrate(2, two) == {"keys": ["hp1_rps"], "numeric": ["hp1_rps", "p22_kompressor"]}
-    assert seen.migrate(1, "not a dict") == {"keys": [], "numeric": []}
-    assert seen.migrate(2, {"keys": "no", "numeric": "no"}) == {"keys": [], "numeric": []}
-    assert seen.STORAGE_VERSION == 2
+    assert seen.migrate(two) == {"keys": ["hp1_rps"], "numeric": ["hp1_rps", "p22_kompressor"]}
+    assert seen.migrate("not a dict") == {"keys": [], "numeric": []}
+    assert seen.migrate({"keys": "no", "numeric": "no"}) == {"keys": [], "numeric": []}
+    # A file the release before wrote back after a return: minor 1 on the
+    # outside, the numeric set still inside, and a display row it learnt
+    # meanwhile among the keys. Nothing of it is thrown away.
+    returned = {"keys": ["hp1_rps", "p22_fläkt"], "numeric": ["hp1_rps", "p22_kompressor"]}
+    assert seen.migrate(returned) == {
+        "keys": ["hp1_rps", "p22_fläkt"],
+        "numeric": ["hp1_rps", "p22_fläkt", "p22_kompressor"],
+    }
+    # The major stays at 1 so that the release before can still read the
+    # file; the new shape is a new minor.
+    assert seen.STORAGE_VERSION == 1 and seen.STORAGE_MINOR_VERSION == 2
 
 
 def test_loading_reads_the_old_shape_and_the_new_alike():
