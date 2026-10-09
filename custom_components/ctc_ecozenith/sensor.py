@@ -436,9 +436,17 @@ class CtcLastAlarmSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        # Available while empty, like the coefficient of performance: the
-        # latest alarm is worth reading even after the display has gone quiet.
-        return self.coordinator.last_update_success
+        # Available while empty and while the display is quiet, like the
+        # harvest sensor and the stored spans of the coefficient of
+        # performance: the state and the attributes come out of the alarm
+        # log's own store, not out of the harvest's data, and are as true
+        # after three missed harvests as before them. Going unavailable then
+        # would show an automation a change of state that no alarm made, and
+        # take the code, the start and the outdoor temperature out of the
+        # history for as long as the display stays quiet. That the display is
+        # quiet is already said by Senaste displayskörd and by the reason
+        # under the coefficient of performance.
+        return True
 
 
 class CtcIdentitySensor(SensorEntity):
