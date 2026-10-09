@@ -79,10 +79,13 @@
    *  rather than "Unknown". A 0 the pump means as no limit at all is a word
    *  too, for the keys the page marks with `zeroMeans`, and only for the
    *  pump's own value: a 0 somebody wrote through the control is a 0. An
-   *  enum sensor's state is the integration's own string already and is left
-   *  to Home Assistant, as is everything the table has no word for, so an
-   *  older page without the table reads as it did. */
-  function ownWord(entityId, stateObj, states, zeroMeans) {
+   *  unknown that means nothing has happened yet (the last alarm before a
+   *  panel has shown one) is a word as well, for the items the page marks
+   *  with `unknownMeans`, so the full list does not read "Okänd" for months.
+   *  An enum sensor's state is the integration's own string already and is
+   *  left to Home Assistant, as is everything the table has no word for, so
+   *  an older page without the table reads as it did. */
+  function ownWord(entityId, stateObj, states, zeroMeans, unknownMeans) {
     if (!stateObj || !states) return undefined;
     const domain = String(entityId || "").split(".")[0];
     const state = stateObj.state;
@@ -92,6 +95,7 @@
       return (deviceClass && states[`${deviceClass}_${state}`]) || states[state];
     }
     if (CONTROL_DOMAINS.has(domain) && state === "unknown") return states.unset;
+    if (unknownMeans && state === "unknown") return states[unknownMeans];
     if (zeroMeans && parseFieldValue(state) === 0 && attributes["styrning aktiv"] !== "ja") {
       return states[zeroMeans];
     }
@@ -260,7 +264,8 @@
      *  Home Assistant makes of the state, else the state with its unit. */
     _text(item, stateObj) {
       if (!stateObj) return "";
-      const own = ownWord(item.entity, stateObj, this._config.states, item.zero_means);
+      const own = ownWord(item.entity, stateObj, this._config.states, item.zero_means,
+                          item.unknown_means);
       if (own !== undefined) return own;
       try {
         return this._hass.formatEntityState

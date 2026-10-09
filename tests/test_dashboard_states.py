@@ -32,10 +32,16 @@ def test_the_words_are_the_text_tables_state_entries_without_the_prefix(dashboar
     assert {k: v for k, v in sv.items() if k != "unset_note"} == {
         "on": "Till", "off": "Av", "problem_on": "Utlöst", "problem_off": "OK",
         "unset": "ej satt", "no_limit": "ingen gräns",
+        "none_alarm": "inget larm ännu", "none_event": "ingen händelse ännu",
+        "none_start": "ingen start ännu", "none_run": "ingen körning ännu",
+        "none_defrost": "ingen avfrostning ännu",
     }
     assert {k: v for k, v in en.items() if k != "unset_note"} == {
         "on": "On", "off": "Off", "problem_on": "Raised", "problem_off": "OK",
         "unset": "not set", "no_limit": "no limit",
+        "none_alarm": "no alarm yet", "none_event": "no event yet",
+        "none_start": "no start yet", "none_run": "no run yet",
+        "none_defrost": "no defrost yet",
     }
     # The note the "i" beside "ej satt" opens: why there is no value.
     assert sv["unset_note"].startswith("Pumpen lämnar inte ut sitt eget värde här")
