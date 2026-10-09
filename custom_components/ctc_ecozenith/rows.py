@@ -19,6 +19,15 @@ A row that still is on its page is never removed, however long it has read
 the marker: its entry is what a customised name or an area lives in, and the
 row comes back the day the unit is switched on again.
 
+That a page is in the menu is not by itself proof that a row left it: a page
+read while a screen or a caption did not answer has fewer rows, or the same
+rows under other keys, "Värde 12" where "Avgiven värme totalt" stands. The
+rule therefore rests on the menu being written only from a reading that was
+whole, screens and captions included; the sweep leaves a page with such a gap
+out of its reading and calls the reading incomplete (catalogue.MenuReading),
+and an incomplete reading is never written over the stored menu. A page in
+the menu is a page that was read whole at least once.
+
 Free of Home Assistant imports, so sensor.py's decisions can be tested without
 an installation.
 """

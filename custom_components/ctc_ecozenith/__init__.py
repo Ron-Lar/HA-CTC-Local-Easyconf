@@ -483,7 +483,11 @@ async def _async_reread_menu(
     counts as failed here: the sweep lost the root or could not reach a page
     again, so a page it would otherwise have found is missing from it, and
     folding it in would make that page and its entities disappear until the
-    next release. The stored menu stands and the reading is tried again.
+    next release. So does a reading with a gap: a page whose screen or caption
+    did not answer is left out of it by the sweep (MenuReading.gaps), since
+    written over the stored page it would rename a row and the registry
+    tidy-up would then take that row's entity. The stored menu stands and the
+    reading is tried again.
     """
     options = entry.options
     async with client.panel:
@@ -492,11 +496,16 @@ async def _async_reread_menu(
         reading = await async_discover_pages(client, require_root=True)
     if not reading.pages or not reading.complete:
         spent = _MENU_TRIES.get(entry.entry_id, 0)
-        what = (
-            "Only part of the display's menu could be read"
-            if reading.pages
-            else "The display's menu could not be read"
-        )
+        if reading.gaps:
+            what = (
+                "Page(s) %s of the display's menu were read with a gap, a screen or a "
+                "caption that did not answer, so the reading is not the whole menu"
+                % ", ".join(str(page) for page in reading.gaps)
+            )
+        elif reading.pages:
+            what = "Only part of the display's menu could be read"
+        else:
+            what = "The display's menu could not be read"
         if spent >= MENU_READ_TRIES:
             _LOGGER.warning(
                 "%s in %s attempts, so the menu stored by an earlier version is kept and "

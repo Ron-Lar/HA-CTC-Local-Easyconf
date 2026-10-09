@@ -448,17 +448,52 @@ def _join_clock_rows(readings: list[_Reading]) -> list[_Reading]:
     return joined
 
 
+@dataclass
+class PageValues:
+    """What one reading of a page's screens came back with, gaps included.
+
+    A screen whose widgets could not be read leaves its rows out, and a
+    caption the catalogue would not give up (web_api.async_text answers ""
+    for it) leaves its row named "Värde N" under a key the row never had. Both
+    are silent in ``values``: the list is as true as it goes and says nothing
+    about what is missing. So the reading says it beside the values, and a
+    page that was not read whole is not taken for the page.
+    """
+
+    values: list[SlowValue] = field(default_factory=list)
+    #: The page's screens whose widgets could not be read this time.
+    skipped: list[int] = field(default_factory=list)
+    #: How many captions the catalogue would not give up while the page was
+    #: read, where the client counts them (web_api.CtcWebClient.text_misses).
+    text_misses: int = 0
+
+    @property
+    def whole(self) -> bool:
+        """Whether every screen was read and every caption answered."""
+        return not self.skipped and not self.text_misses
+
+
 async def async_page_values(
     client: CtcWebClient, page: int, screens: list[int]
 ) -> list[SlowValue]:
-    """Describe every formatted value on a page."""
+    """Describe every formatted value on a page, gaps and all; see async_read_page_values."""
+    return (await async_read_page_values(client, page, screens)).values
+
+
+async def async_read_page_values(
+    client: CtcWebClient, page: int, screens: list[int]
+) -> PageValues:
+    """Describe every formatted value on a page, and say whether the page was read whole."""
     found: list[SlowValue] = []
+    skipped: list[int] = []
     seen: set[str] = set()
+    misses_before = int(getattr(client, "text_misses", 0) or 0)
     for screen in screens:
         try:
             widgets = await client.async_widgets(screen)
         except CtcWebError as err:
             _LOGGER.debug("Skipping screen %s: %s", screen, err)
+            skipped.append(screen)
             continue
         pairing = _pair_labels(widgets)
         readings: list[_Reading] = []
@@ -493,7 +528,8 @@ async def async_page_values(
                     scale=_decimals(fmt),
                 )
             )
-    return found
+    misses = int(getattr(client, "text_misses", 0) or 0) - misses_before
+    return PageValues(found, skipped, max(misses, 0))
 
 
 @dataclass
@@ -512,6 +548,15 @@ class MenuReading:
     make that page, and its entities, disappear until the next release. So
     the readers that fold a reading into a stored menu treat an incomplete one
     as a reading still owed, and nothing stamps the version for it.
+
+    ``gaps`` names the pages the sweep reached but did not read whole: a
+    screen whose widgets would not come, or a caption the catalogue would not
+    give up, which renames the row it belonged to (see :class:`PageValues`).
+    Such a page is left out of ``pages`` and makes the reading incomplete,
+    for the same reason an unreached page does: written in place of the
+    stored page it would take a row's entity with it, VSH's delivered heat
+    counter among the rows that have read that way, and the registry tidy-up
+    would then remove that row's entry as one the parser no longer builds.
     """
 
     pages: list[SlowPage] = field(default_factory=list)
@@ -520,6 +565,8 @@ class MenuReading:
     #: recorded route starts there, and the harvester steps back to it between
     #: two pages; a SlowPage does not carry it, so the menu does.
     root: int | None = None
+    #: Pages read with a gap this time, by number; see the class docstring.
+    gaps: list[int] = field(default_factory=list)
 
 
 def menu_root(pages: list[SlowPage]) -> int | None:
@@ -562,6 +609,7 @@ async def async_discover_pages(
     origin = await client.async_current_page()
     discovered: list[SlowPage] = []
     visited: set[int] = set()
+    gaps: set[int] = set()
     complete = False
     found: tuple[int, int] | None = None
 
@@ -580,7 +628,7 @@ async def async_discover_pages(
                 "back button was pressed on the way)"
             )
             here = await client.async_current_page()
-            await _async_collect(client, page_map, here, discovered, visited, [])
+            await _async_collect(client, page_map, here, discovered, visited, [], gaps)
         else:
             root, home = found
             # The home screen is where the sweep came in from, not a page of
@@ -588,15 +636,28 @@ async def async_discover_pages(
             # not collect it, or its tiles would be pressed one by one at the
             # second level: Varmvatten, Värme, Avancerat.
             visited.add(home)
-            await _async_collect(client, page_map, root, discovered, visited, [])
-            complete = await _async_explore(client, page_map, root, home, discovered, visited)
+            await _async_collect(client, page_map, root, discovered, visited, [], gaps)
+            complete = await _async_explore(
+                client, page_map, root, home, discovered, visited, gaps=gaps
+            )
     finally:
         await _async_restore(client, page_map, origin, found)
 
+    if gaps:
+        # A page read with a gap is a page not read: left out, and the
+        # reading is owed, as it is for a page the sweep did not reach.
+        _LOGGER.info(
+            "Page(s) %s of the display's menu were read with a gap, a screen or a "
+            "caption that did not answer, so they are left out of this reading and "
+            "the menu is read again",
+            ", ".join(str(page) for page in sorted(gaps)),
+        )
+        complete = False
     return MenuReading(
-        [page for page in discovered if page.values],
+        [page for page in discovered if page.values and page.page not in gaps],
         complete,
         root=found[0] if found is not None else None,
+        gaps=sorted(gaps),
     )
 
 
@@ -635,6 +696,7 @@ async def _async_explore(
     into: list[SlowPage],
     visited: set[int],
     max_taps: int = 26,
+    gaps: set[int] | None = None,
 ) -> bool:
     """Tap what looks like a control, note where it leads, and go one deeper.
 
@@ -650,7 +712,7 @@ async def _async_explore(
     either way, and the caller says what an incomplete reading is worth.
     """
     taps, intact, whole = await _async_tap_pages(
-        client, page_map, root, root, home, into, visited, max_taps
+        client, page_map, root, root, home, into, visited, max_taps, gaps=gaps
     )
 
     # Second level: pages found above that carry a strip of their own.
@@ -670,7 +732,7 @@ async def _async_explore(
             whole = False
             continue
         more, intact, page_whole = await _async_tap_pages(
-            client, page_map, page, root, home, into, visited, max_taps - taps, route
+            client, page_map, page, root, home, into, visited, max_taps - taps, route, gaps
         )
         taps += more
         whole = whole and page_whole
@@ -694,6 +756,7 @@ async def _async_tap_pages(
     visited: set[int],
     budget: int,
     prefix: list[tuple[int, int]] | None = None,
+    gaps: set[int] | None = None,
 ) -> tuple[int, bool, bool]:
     """Tap every target on one page, recording where each tap led.
 
@@ -728,7 +791,7 @@ async def _async_tap_pages(
         if landed == page or landed in visited:
             continue
         await _async_collect(
-            client, page_map, landed, into, visited, list(prefix or []) + [(x, y)]
+            client, page_map, landed, into, visited, list(prefix or []) + [(x, y)], gaps
         )
     return taps, True, True
 
@@ -854,22 +917,40 @@ async def _async_collect(
     into: list[SlowPage],
     visited: set[int],
     route: list[tuple[int, int]],
+    gaps: set[int] | None = None,
 ) -> None:
-    """Describe one page and remember how it was reached."""
+    """Describe one page and remember how it was reached.
+
+    A page is noted in ``gaps`` when it was not read whole: a screen whose
+    widgets would not come, or a caption the catalogue would not give up
+    while the title or the rows were read. The page is still described and
+    kept in ``into``, so the sweep goes on from it as before; the reading as
+    a whole decides what a page with a gap is worth (see MenuReading).
+    """
     if page in visited:
         return
     visited.add(page)
     screens = page_map.get(page, [])
     if not screens:
         return
+    misses_before = int(getattr(client, "text_misses", 0) or 0)
     title = await async_page_title(client, screens)
-    values = await async_page_values(client, page, screens)
+    title_misses = int(getattr(client, "text_misses", 0) or 0) - misses_before
+    reading = await async_read_page_values(client, page, screens)
+    if gaps is not None and (not reading.whole or title_misses > 0):
+        _LOGGER.debug(
+            "Page %s was read with a gap: screens %s skipped, %s caption(s) not answered",
+            page,
+            reading.skipped,
+            reading.text_misses + max(title_misses, 0),
+        )
+        gaps.add(page)
     into.append(
         SlowPage(
             page=page,
             title=title,
             screens=list(screens),
-            values=values,
+            values=reading.values,
             route=list(route),
         )
     )
