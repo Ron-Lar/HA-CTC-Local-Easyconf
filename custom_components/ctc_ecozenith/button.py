@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CtcConfigEntry
 from .keys import unique_id
+from .entity import async_switch_on_new_defaults
 
 
 async def async_setup_entry(
@@ -19,7 +20,9 @@ async def async_setup_entry(
     runtime = entry.runtime_data
     if not runtime.control_enabled:
         return
-    async_add_entities([CtcReleaseControl(runtime)])
+    entities = [CtcReleaseControl(runtime)]
+    async_switch_on_new_defaults(hass, entry, "button", entities)
+    async_add_entities(entities)
 
 
 class CtcReleaseControl(ButtonEntity):

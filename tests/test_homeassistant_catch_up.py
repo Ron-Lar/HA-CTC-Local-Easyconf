@@ -98,14 +98,14 @@ async def test_a_missed_menu_reading_keeps_its_tries_when_a_screen_is_found_besi
         await _let_the_background_run(hass)
         assert entry.state is ConfigEntryState.LOADED
 
-        # The first round: the menu missed, and where the identity was short
-        # the sweep ran and the screen it found was written to the options.
+        # The first round: the menu missed, and the sweep ran and the screen it
+        # found was written to the options. With a complete identity too since
+        # R21: the identity is read at every start, so a firmware update of the
+        # display reaches the device, and the screens it is read from have to
+        # be known for that.
         assert stubs.discover.await_count == 1
         assert integration._MENU_TRIES[entry.entry_id] == 1
-        if complete:
-            assert CONF_IDENTITY_SCREENS not in entry.options, "ingen svepning med komplett identitet"
-        else:
-            assert entry.options[CONF_IDENTITY_SCREENS] == {"heatpump": HEATPUMP_SCREEN}
+        assert entry.options[CONF_IDENTITY_SCREENS] == {"heatpump": HEATPUMP_SCREEN}
         assert len(FakeModbus.instances) == 1, "skärmarna laddar inte om"
 
         # The second and third try come as promised, in this run, without a reload.
@@ -120,8 +120,7 @@ async def test_a_missed_menu_reading_keeps_its_tries_when_a_screen_is_found_besi
         # And not a fourth: the panel is a physical thing.
         await _advance(hass, retry)
         assert stubs.discover.await_count == 3
-        if not complete:
-            assert entry.options[CONF_IDENTITY_SCREENS] == {"heatpump": HEATPUMP_SCREEN}
+        assert entry.options[CONF_IDENTITY_SCREENS] == {"heatpump": HEATPUMP_SCREEN}
 
 
 # --------------------------------------------- a retry that works still reloads
