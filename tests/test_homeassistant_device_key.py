@@ -32,6 +32,7 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     FakePanel,
     _advance,
     _entity_id,
+    _let_the_background_run,
     _needs_auto_asyncio_mode,
     _set_up,
     stubs,
@@ -47,12 +48,14 @@ from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo  # noqa: E40
 from custom_components.ctc_ecozenith.catalogue import MenuReading  # noqa: E402
 from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_DEVICE_KEY,
+    CONF_IDENTITY,
     CONF_MODBUS_PORT,
     CONF_SLAVE,
     CONF_WEB_PORT,
     DOMAIN,
 )
 from custom_components.ctc_ecozenith.discovery import DiscoveredDisplay  # noqa: E402
+from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
 
 #: Where the unit turns up after a new lease, a documentation address too.
 MOVED_TO = "192.0.2.77"
@@ -93,6 +96,22 @@ async def test_an_entry_from_before_the_key_keeps_its_unique_ids_and_gets_its_ma
     device = _the_device(hass, entry)
     assert device.identifiers == {(DOMAIN, HOST)}
     assert (dr.CONNECTION_NETWORK_MAC, IDENTITY["mac"]) in device.connections
+
+
+async def test_a_mac_read_later_reaches_the_device_without_a_reload(hass):
+    """The MAC read after set-up goes on the device in place.
+
+    Only the MAC is new, so no identity sensor is added that would carry it
+    on to the device by itself: the device is told directly.
+    """
+    without_mac = {key: value for key, value in IDENTITY.items() if key != "mac"}
+    found = Identity(mac=IDENTITY["mac"])
+    with patch(f"custom_components.{DOMAIN}.async_read_identity", AsyncMock(return_value=found)):
+        entry = await _set_up(hass, **{CONF_IDENTITY: without_mac})
+        await _let_the_background_run(hass)
+    assert entry.options[CONF_IDENTITY]["mac"] == IDENTITY["mac"]
+    assert (dr.CONNECTION_NETWORK_MAC, IDENTITY["mac"]) in _the_device(hass, entry).connections
+    assert len(FakeModbus.instances) == 1, "ingen omladdning för identiteten"
 
 
 # ---------------------------------------------------------- the DHCP flow
