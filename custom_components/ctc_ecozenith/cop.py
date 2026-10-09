@@ -238,32 +238,91 @@ def cop_reason(
     return None
 
 
-#: The attribute T1a's web coordinator may carry for the moment of the last
-#: successful harvest. Read with a default, so the code is the same before and
-#: after the two tracks are merged: without it the newest read_at serves, which
-#: is the same moment, since read_at is only ever written by a read that worked.
-LAST_HARVEST_ATTRIBUTE = "last_harvest_at"
+#: The web coordinator's attribute for the moment of the last harvest that read
+#: a page: CtcWebCoordinator.last_harvest, kept across a restart by the display
+#: store. Read with a default so a test double without it still gets a notice:
+#: the newest read_at then serves, which is the same moment to within seconds,
+#: since read_at is only ever written by a read that worked.
+LAST_HARVEST_ATTRIBUTE = "last_harvest"
 
 
-def display_silence(web: Any) -> str | None:
+def row_read_at(web: Any, key: str) -> datetime | None:
+    """When the display row ``key`` was last read off the panel, or None.
+
+    Through the coordinator's ``last_read`` where there is one; a double
+    without it, as the sensor tests build, has never read anything.
+    """
+    read = getattr(web, "last_read", None)
+    if not callable(read):
+        return None
+    moment = read(key)
+    return moment if isinstance(moment, datetime) else None
+
+
+def row_is_fresh(web: Any, key: str) -> bool | None:
+    """Whether the row is fresh by the coordinator's own rule, or None if it cannot say."""
+    fresh = getattr(web, "is_fresh", None)
+    if not callable(fresh):
+        return None
+    return bool(fresh(key))
+
+
+def stale_rows(web: Any, rows: Collection[Any]) -> list[tuple[Any, datetime]]:
+    """The rows among ``rows`` that were read once and have since gone stale.
+
+    A row that has never been read is not stale, it is unread, and the sensors
+    say so in other words. Stale is the coordinator's judgement (R5): the
+    page the row sits on has not been reached for as long as a whole harvest
+    may fail in a row, which is when the row's own display sensor goes
+    unavailable. Each stale row comes with the moment it was last read.
+    """
+    found: list[tuple[Any, datetime]] = []
+    for row in rows:
+        if row is None:
+            continue
+        read = row_read_at(web, row.key)
+        if read is not None and row_is_fresh(web, row.key) is False:
+            found.append((row, read))
+    return found
+
+
+def _row_name(row: Any) -> str:
+    return (getattr(row, "label", None) or getattr(row, "key", None) or "?").strip()
+
+
+def display_silence(web: Any, *rows: Any) -> str | None:
     """Why the display's figures are old: the reason text, or None while it answers.
 
-    After three failed harvests in a row the web coordinator reports failure
-    and the display sensors go unavailable. The figures that rest on stored
-    samples stay available instead, and this is what they say about it.
+    Two silences. After three failed harvests in a row the web coordinator
+    reports failure and every display sensor goes unavailable; the figures
+    that rest on stored samples stay available instead, and this is what they
+    say about it, dated with the last harvest that read a page. Since R5 a
+    page that is not reached is no failure of the harvest: the other pages
+    are read, the coordinator reports success, and only that page's rows age
+    in the data until their own sensors go unavailable. The counters the
+    figures are read off are such rows, so they are handed in as ``rows``
+    and a stale one gives the notice too, naming the row and dated with its
+    own last read, instead of a figure read off a value nobody has read.
     """
-    if web is None or getattr(web, "last_update_success", True):
+    if web is None:
         return None
-    moment = getattr(web, LAST_HARVEST_ATTRIBUTE, None)
-    if not isinstance(moment, datetime):
-        stamps = [
-            stamp for stamp in (getattr(web, "read_at", None) or {}).values()
-            if isinstance(stamp, datetime)
-        ]
-        moment = max(stamps, default=None)
-    if moment is None:
-        return "displayen har inte svarat sedan Home Assistant startade"
-    return f"displayen har inte svarat sedan {moment.isoformat(timespec='seconds')}"
+    if not getattr(web, "last_update_success", True):
+        moment = getattr(web, LAST_HARVEST_ATTRIBUTE, None)
+        if not isinstance(moment, datetime):
+            stamps = [
+                stamp for stamp in (getattr(web, "read_at", None) or {}).values()
+                if isinstance(stamp, datetime)
+            ]
+            moment = max(stamps, default=None)
+        if moment is None:
+            return "displayen har inte svarat sedan Home Assistant startade"
+        return f"displayen har inte svarat sedan {moment.isoformat(timespec='seconds')}"
+    for row, read in stale_rows(web, rows):
+        return (
+            f"displayens rad {_row_name(row)} har inte lästs sedan "
+            f"{read.isoformat(timespec='seconds')}"
+        )
+    return None
 
 
 def reason_for(
@@ -351,10 +410,23 @@ class CopTracker:
         today: date | None = None,
         now: datetime | None = None,
     ) -> None:
-        """Store the counters: one per day for the year, and a timestamped run."""
+        """Store the counters: one per day for the year, and a timestamped run.
+
+        ``now`` is the moment the counters were read off the panel, where the
+        caller knows it. A reading is recorded once: a moment no newer than
+        the newest sample already kept is the same reading coming round again,
+        as it does when the page the counters sit on has not been reached
+        since, or when the pair comes back out of the display store after a
+        restart, and recording it again would stamp a day's sample with a
+        pair that was read on another day.
+        """
         if energy_out is None or energy_in is None:
             return
         await self.async_load()
+        if now is not None:
+            newest = self.last_sample_at
+            if newest is not None and now <= newest:
+                return
         when = now or datetime.now(timezone.utc)
         stamp = (today or when.date()).isoformat()
         self._samples[stamp] = [float(energy_out), float(energy_in)]
@@ -394,6 +466,17 @@ class CopTracker:
     @property
     def anchor(self) -> date | None:
         return date.fromisoformat(self._anchor) if self._anchor else None
+
+    @property
+    def last_sample_at(self) -> datetime | None:
+        """When the newest timestamped sample was read, or None without one."""
+        stamps = []
+        for row in self._recent:
+            try:
+                stamps.append(_parse(row[0]))
+            except (TypeError, ValueError):
+                continue
+        return max(stamps, default=None)
 
     def _capture_first_year(self, today: date) -> None:
         """Keep the first year's figure once a sample from its end exists.
@@ -792,6 +875,37 @@ def current_totals(runtime: Any) -> tuple[float | None, float | None]:
         snapshot = getattr(runtime, "consumption_snapshot", None)
         consumed = snapshot.value if snapshot is not None else None
     return out, consumed
+
+
+def counter_rows(runtime: Any) -> list[Any]:
+    """The display rows the two lifetime counters are read off.
+
+    Delivered heat always; consumed energy only where the display has the
+    row, since on the Modbus route the consumption is a register taken at
+    the moment delivered heat was read, and shares that row's age.
+    """
+    rows = [getattr(runtime, "energy_out", None), getattr(runtime, "energy_in", None)]
+    return [row for row in rows if row is not None]
+
+
+def counters_read_at(runtime: Any) -> datetime | None:
+    """When the pair :func:`current_totals` returns was read off the panel.
+
+    None unless every counter row has been read and is still fresh by the
+    coordinator's rule (R5), so a page that has stopped being reached gives
+    no sample at all rather than yesterday's pair stamped with today. The
+    moment is the delivered heat row's, which is also the moment the Modbus
+    consumption was paired with it; where both counters sit on the display
+    they sit on the same page and share it.
+    """
+    web = getattr(runtime, "web", None)
+    rows = counter_rows(runtime)
+    if web is None or not rows:
+        return None
+    for row in rows:
+        if row_read_at(web, row.key) is None or row_is_fresh(web, row.key) is False:
+            return None
+    return row_read_at(web, rows[0].key)
 
 
 #: The coefficient of performance figures the report carries, by the name the

@@ -31,11 +31,13 @@ from . import CtcConfigEntry
 from .catalogue import display_state_class, pages_from_storage
 from .cop import (
     WINDOWS,
+    counter_rows,
     current_totals,
     display_silence,
     modbus_consumption_answered,
     powered_on_hours,
     reason_for,
+    stale_rows,
 )
 from .const import (
     CONF_MENU,
@@ -533,7 +535,13 @@ class CtcMeanRunSensor(CoordinatorEntity, SensorEntity):
 
     Modbus 62234 is fresh every round; the display's "Antal starter /24 h" is
     harvested on the slow interval, so the figure can lag by up to that. Both
-    numbers stand as attributes. Only where the history page is harvested.
+    numbers stand as attributes, with the moment the starts were read. Only
+    where the history page is harvested, and only while that row is fresh by
+    the coordinator's rule (R5): the data carries the row across a page that
+    is not reached and seeds it from the store at a restart, so without the
+    rule today's minutes would be divided by a count from days ago and shown
+    as the day's figure. The row's own sensor goes unavailable at that point,
+    and this figure goes empty with it.
     """
 
     _attr_has_entity_name = True
@@ -553,7 +561,10 @@ class CtcMeanRunSensor(CoordinatorEntity, SensorEntity):
     def _parts(self) -> tuple[object, object]:
         minutes = (self.coordinator.data or {}).get(MINUTES_24H_KEY)
         web = self._runtime.web
-        starts = (web.data or {}).get(self._runtime.starts_per_day.key) if web else None
+        key = self._runtime.starts_per_day.key
+        starts = None
+        if web is not None and web.last_update_success and web.is_fresh(key):
+            starts = (web.data or {}).get(key)
         return minutes, starts
 
     @property
@@ -563,9 +574,14 @@ class CtcMeanRunSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, object]:
         minutes, starts = self._parts()
+        web = self._runtime.web
+        read_at = web.last_read(self._runtime.starts_per_day.key) if web is not None else None
         return {
             "kompressordrift senaste dygnet": minutes,
             "antal starter /24 h": starts,
+            "antal starter senast läst": (
+                read_at.isoformat(timespec="seconds") if read_at is not None else None
+            ),
         }
 
 
@@ -621,11 +637,14 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
 
         The first year is stored once and for all, so a display that has gone
         quiet cannot age it. Every other span is a difference against counters
-        that are no longer being read, and shows nothing but the notice.
+        that are no longer being read, and shows nothing but the notice. The
+        counters' own rows go in too: since R5 a page that is not reached is
+        no failure of the harvest, so the display answers while the counters
+        age, and the notice has to come from the rows themselves.
         """
         if self._span == "first_year":
             return None
-        return display_silence(self._runtime.web)
+        return display_silence(self._runtime.web, *counter_rows(self._runtime))
 
     @property
     def native_value(self) -> float | None:
@@ -666,8 +685,14 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
         # attributes, and the attributes are where the reason for the empty
         # figure is written. The day is the exception: it is a difference
         # against the counters as they stand now, so a display that has gone
-        # quiet takes it with it, as it takes the display's own sensors. The
-        # other spans rest on stored samples and say that the display is quiet.
+        # quiet takes it with it, as it takes the display's own sensors, and
+        # so does a counter row that was read once and has gone stale since,
+        # which is when that row's own sensor goes unavailable (R5). A row
+        # that has never been read leaves the day standing, with the reason
+        # that the counters have not been read. The other spans rest on
+        # stored samples and say that the display is quiet.
         if self._span == "day":
-            return self.coordinator.last_update_success
+            return self.coordinator.last_update_success and not stale_rows(
+                self.coordinator, counter_rows(self._runtime)
+            )
         return True

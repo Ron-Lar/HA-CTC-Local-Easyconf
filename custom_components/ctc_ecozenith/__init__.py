@@ -43,6 +43,7 @@ from .cop import (
     CopTracker,
     cop_for_report,
     counter_fault,
+    counters_read_at,
     current_totals,
     find_energy_totals,
     find_operating_hours,
@@ -943,19 +944,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
 
     if runtime.cop is not None:
         async def _record_cop(_now=None, read_at=None) -> None:
+            # A sample is the pair as it stood when the panel was read, and it
+            # is stamped with that moment, never with the clock: the timer
+            # fires every six hours whether or not the history page has been
+            # reached since, and a page that has stopped being reached (R5)
+            # leaves the pair standing in the data. Without a fresh reading of
+            # both counters there is no sample, and a moment the tracker has
+            # already kept is the same reading again, which it drops itself.
             out, consumed = current_totals(runtime)
+            if read_at is None:
+                read_at = counters_read_at(runtime)
             try:
                 commissioned = commissioning_date(runtime)
                 if commissioned is not None:
                     await runtime.cop.async_set_anchor(commissioned)  # type: ignore[union-attr]
-                await runtime.cop.async_record(out, consumed, now=read_at)  # type: ignore[union-attr]
+                if read_at is not None:
+                    await runtime.cop.async_record(out, consumed, now=read_at)  # type: ignore[union-attr]
             except Exception as err:  # noqa: BLE001 - a missed sample is not fatal
                 _LOGGER.debug("Could not write down the energy counters: %s", err)
 
         # The counters as they came back from the store, stamped with the
         # moment they were read rather than with now: a restart is not a
         # reading, and a sample dated today with yesterday's counters would
-        # pass for yesterday's in the daily figure.
+        # pass for yesterday's in the daily figure. Handed in as they are,
+        # however old: a pair read before the restart is a reading at its own
+        # moment, and the tracker keeps a moment once.
         await _record_cop(read_at=runtime.web.last_read(runtime.energy_out.key))  # type: ignore[union-attr]
         entry.async_on_unload(
             async_track_time_interval(hass, _record_cop, COP_SAMPLE_INTERVAL)
