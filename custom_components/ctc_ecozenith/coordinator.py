@@ -51,6 +51,18 @@ from .web_api import CtcWebClient, CtcWebError
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _entry_kwargs(config_entry: Any) -> dict[str, Any]:
+    """The config entry for the base class, said out loud where there is one.
+
+    Home Assistant otherwise takes it from a context variable that is set while
+    the entry is being set up, and has said for a while that it wants it passed
+    instead. Left out where there is none, as in the tests that build a
+    coordinator on its own, so the base class keeps its own default there.
+    """
+    return {} if config_entry is None else {"config_entry": config_entry}
+
+
 class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Poll the documented Modbus registers."""
 
@@ -60,12 +72,14 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         client: CtcModbusClient,
         interval: int,
         include_settings: bool = True,
+        config_entry: Any = None,
     ) -> None:
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN} modbus",
             update_interval=timedelta(seconds=interval),
+            **_entry_kwargs(config_entry),
         )
         self.client = client
         self.descriptions: tuple[ModbusSensor, ...] = (
@@ -206,12 +220,14 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         home_page: int | None = None,
         on_home_page_found: Any = None,
         stored: StoredHarvest | None = None,
+        config_entry: Any = None,
     ) -> None:
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN} display",
             update_interval=timedelta(seconds=interval),
+            **_entry_kwargs(config_entry),
         )
         self.client = client
         self.pages = pages

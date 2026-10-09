@@ -33,6 +33,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CtcConfigEntry
 from .keys import unique_id
+from .entity import async_switch_on_new_defaults
 from .transitions import EVENT_TYPES
 
 
@@ -43,7 +44,9 @@ async def async_setup_entry(
 ) -> None:
     runtime = entry.runtime_data
     if runtime.transitions is not None:
-        async_add_entities([CtcEvents(runtime)])
+        entities = [CtcEvents(runtime)]
+        async_switch_on_new_defaults(hass, entry, "event", entities)
+        async_add_entities(entities)
 
 
 class CtcEvents(CoordinatorEntity, EventEntity):

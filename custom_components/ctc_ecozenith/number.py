@@ -28,6 +28,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import CtcConfigEntry
 from .const import CONTROL_NUMBERS, ControlRegister
 from .keys import unique_id
+from .entity import async_switch_on_new_defaults
 from .modbus_api import CtcModbusError
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,9 +49,9 @@ async def async_setup_entry(
     runtime = entry.runtime_data
     if not runtime.control_enabled:
         return
-    async_add_entities(
-        CtcControlNumber(runtime, register) for register in CONTROL_NUMBERS
-    )
+    entities = [CtcControlNumber(runtime, register) for register in CONTROL_NUMBERS]
+    async_switch_on_new_defaults(hass, entry, "number", entities)
+    async_add_entities(entities)
 
 
 class CtcControlNumber(CoordinatorEntity, NumberEntity):

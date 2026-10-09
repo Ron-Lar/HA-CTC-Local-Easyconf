@@ -193,8 +193,10 @@ def test_the_catch_up_reads_the_known_screens_and_keeps_new_ones():
     source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
     catch_up = source.split("async def _async_catch_up")[1].split("\ndef ")[0]
     assert "IdentityScreens.from_dict(entry.options.get(CONF_IDENTITY_SCREENS))" in catch_up
-    assert "need_system=identity.needs_system_screen" in catch_up
-    assert "need_heatpump=identity.needs_heatpump_screen" in catch_up
+    # Both screens at every start since R21, a complete identity included, so a
+    # firmware update reaches the device; the sweep still runs once per run.
+    assert "async_read_identity(client, screens, sweep=sweep)" in catch_up
+    assert "if not identity.is_complete" not in catch_up
     assert "sweep=sweep" in catch_up and "_SWEPT" in catch_up
     assert "changed[CONF_IDENTITY_SCREENS]" in catch_up
     # The walk writes its screen into the same record.

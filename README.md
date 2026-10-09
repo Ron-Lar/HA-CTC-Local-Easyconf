@@ -263,7 +263,11 @@ went after every press, and gives up at the first surprise. The service menu,
 which holds a function test, a compressor quick start and reinstallation, is
 never opened. Switch it off under Configure if you would rather open that page
 yourself. What the walk finds goes straight into the device and its sensors;
-nothing is reloaded for it.
+nothing is reloaded for it. The screens the identity lives on, the system
+information screen and the heat pump's own, are read again at every start,
+which moves nothing, so a firmware update of the display shows on the device
+page without anyone asking; a field the display has not written since it
+restarted keeps the value it had.
 
 When something is left for you to do, it is said in Home Assistant's repairs
 view rather than only in the log: the page the coefficient of performance needs
@@ -277,7 +281,11 @@ row of every harvested display page, and the controls. Nothing is written to the
 heat pump by their existence alone, since a control mirrors the unit until
 somebody sets it, and the page leaves out what this installation has only ever
 reported as zero. Switch off what you do not want, per entity on the device page
-or, for control as a whole, under the integration's options.
+or, for control as a whole, under the integration's options. An installation
+from before 0.14.0, when part of this was created switched off, has those
+entities switched on at the first start of a newer version, with one line in
+the log, and Home Assistant reloads the entry once about thirty seconds later.
+Whatever you switched off yourself stays off.
 
 ## The CTC page
 

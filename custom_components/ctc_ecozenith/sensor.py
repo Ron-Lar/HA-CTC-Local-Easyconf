@@ -47,6 +47,7 @@ from .const import (
     device_class_for,
     identity_signal,
 )
+from .entity import async_switch_on_new_defaults
 from .keys import prefix_of, previous_keys, unique_id
 from .transitions import (
     MEAN_RUN_KEY,
@@ -106,6 +107,13 @@ async def async_setup_entry(
 ) -> None:
     """Create every sensor for this heat pump."""
     runtime = entry.runtime_data
+
+    def add(new: list[SensorEntity]) -> None:
+        # At set-up and for what turns up later alike: an entity an earlier
+        # version created switched off is switched on before it is added.
+        async_switch_on_new_defaults(hass, entry, "sensor", new)
+        async_add_entities(new)
+
     entities: list[SensorEntity] = [
         CtcModbusSensor(runtime, description)
         for description in runtime.modbus.descriptions
@@ -138,7 +146,7 @@ async def async_setup_entry(
                     "entities: %s",
                     ", ".join(due),
                 )
-                async_add_entities([CtcDisplaySensor(runtime, page.title, value) for page, value in new])
+                add([CtcDisplaySensor(runtime, page.title, value) for page, value in new])
 
             entry.async_on_unload(web.async_add_listener(_add_rows_that_left_a_number))
         entities.append(CtcHarvestSensor(runtime))
@@ -175,12 +183,12 @@ async def async_setup_entry(
     if runtime.alarms is not None:
         entities.append(CtcLastAlarmSensor(runtime))
 
-    async_add_entities(entities)
+    add(entities)
 
     @callback
     def _identity_filled_in() -> None:
         if new := identity_sensors():
-            async_add_entities(new)
+            add(new)
 
     entry.async_on_unload(async_dispatcher_connect(hass, signal, _identity_filled_in))
 

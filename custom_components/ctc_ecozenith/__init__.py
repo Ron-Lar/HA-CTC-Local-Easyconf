@@ -429,7 +429,7 @@ async def _async_catch_up(
     client: CtcWebClient,
     version: str,
 ) -> None:
-    """Read the menu again after an update, and fill in a missing identity.
+    """Read the menu again after an update, and read the identity again.
 
     Nothing here runs during set-up, so set-up never waits on the display and
     a restart never moves the panel. The menu re-read and the walk to the
@@ -439,13 +439,15 @@ async def _async_catch_up(
     pages the old one passed over, and pages nobody has switched off are
     harvested.
 
-    The identity is read here too, where it is still missing. The display
+    The identity is read here too, at every start, so a firmware update of
+    the display reaches the device page without anyone asking. The display
     only writes it into a screen once that screen has been shown on the
     panel, so a reading before that finds nothing and the gaps are filled
-    the first time someone opens the page; the reading itself moves nothing.
-    The two screens it lives on are kept in the options once found, and only
-    they are read while a field is missing; the sweep that finds them, over
-    the values of every screen in the map, runs once per run.
+    the first time someone opens the page; the reading itself moves nothing,
+    and a field it finds empty keeps the value it had. The two screens it
+    lives on are kept in the options once found and read on their own; the
+    sweep that finds them, over the values of every screen in the map, runs
+    once per run and only for a screen that is not known yet.
 
     A menu that could not be read is tried again a few minutes later in the same
     run, and said out loud once the tries are spent. A display that was busy for
@@ -481,17 +483,16 @@ async def _async_catch_up(
             identity = runtime.identity
             screens = IdentityScreens.from_dict(entry.options.get(CONF_IDENTITY_SCREENS))
             known_screens = screens.as_dict()
-            if not identity.is_complete:
-                sweep = entry.entry_id not in _SWEPT
-                _SWEPT.add(entry.entry_id)
-                found = await async_read_identity(
-                    client,
-                    screens,
-                    sweep=sweep,
-                    need_system=identity.needs_system_screen,
-                    need_heatpump=identity.needs_heatpump_screen,
-                )
-                identity = identity.merged_with(found)
+            # At every start, a complete identity as much as one with gaps
+            # (R21): the display's firmware gets updated, and a version read
+            # once and never again would stand on the device page for good.
+            # Static, so the panel stays where it is: the two known screens
+            # are one request each, and a screen not known yet is looked for
+            # by the sweep once per run and written down for the next start.
+            sweep = entry.entry_id not in _SWEPT
+            _SWEPT.add(entry.entry_id)
+            found = await async_read_identity(client, screens, sweep=sweep)
+            identity = identity.merged_with(found)
 
             if (
                 not identity.serial
@@ -939,6 +940,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         hass,
         modbus_client,
         int(options.get(CONF_FAST_INTERVAL, DEFAULT_FAST_INTERVAL)),
+        config_entry=entry,
     )
     try:
         await modbus.async_config_entry_first_refresh()
@@ -967,10 +969,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         int(options.get(CONF_LANGUAGE, LANG_SWEDISH)),
     )
 
-    # What the unit is, rather than what it is doing. Static, so it is read once
-    # and kept: the panel writes it into its own screens and never changes it.
-    # Where fields are still missing they are read in the background, by the
-    # catch-up task below, so that set-up itself never waits on the display.
+    # What the unit is, rather than what it is doing. Kept with the entry, so
+    # the device has it from the first moment: the panel writes it into its own
+    # screens and changes it only with a firmware update. It is read again in
+    # the background, by the catch-up task below, so that set-up itself never
+    # waits on the display.
     identity = Identity.from_dict(options.get(CONF_IDENTITY))
 
     model = entry.data.get("model", "CTC")
@@ -1081,6 +1084,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
             int(options.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)),
             restore_page=bool(options.get(CONF_RESTORE_PAGE, True)),
             stored=stored,
+            config_entry=entry,
         )
         runtime.web = web
         runtime.pages = pages

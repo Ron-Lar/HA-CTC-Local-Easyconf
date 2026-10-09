@@ -29,6 +29,7 @@ from .const import (
     SG_NORMAL_CODE,
 )
 from .keys import unique_id
+from .entity import async_switch_on_new_defaults
 
 
 @dataclass(frozen=True)
@@ -147,7 +148,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     runtime = entry.runtime_data
-    async_add_entities(CtcDerivedBinary(runtime, item) for item in DERIVED)
+    entities = [CtcDerivedBinary(runtime, item) for item in DERIVED]
+    async_switch_on_new_defaults(hass, entry, "binary_sensor", entities)
+    async_add_entities(entities)
 
 
 class CtcDerivedBinary(CoordinatorEntity, BinarySensorEntity):
