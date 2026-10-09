@@ -118,7 +118,10 @@ So the display is treated as a supplement, not the base:
   background: a newer parser understands rows and pages the older one passed
   over, and those are then read without anyone having to ask for it. A reading
   that lands while the panel is busy is tried again five minutes later, three
-  times in all, and the log says so when they are spent.
+  times in all, and the log says so when they are spent. A page whose screen
+  or caption did not answer during the reading is left out of it and the
+  reading counts as owed, since a row without its caption would come back
+  under another name; the stored menu stands until a reading is whole.
 - They are polled on a slow interval, thirty minutes by default.
 - A restart of Home Assistant costs the panel nothing. The last harvest is
   kept, values and the moment each was read, so the sensors come up with it,

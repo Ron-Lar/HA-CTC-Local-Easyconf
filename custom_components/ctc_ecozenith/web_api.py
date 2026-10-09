@@ -391,6 +391,12 @@ class CtcWebClient:
         #: difference per walk, which is how a walk that costs too much is seen.
         self.requests = 0
         self.taps = 0
+        #: How many captions the catalogue would not give up, counted where
+        #: async_text swallows the failure. Cumulative, like the two above;
+        #: the menu sweep reads it before and after a page, since a caption
+        #: that read as nothing renames the row it belonged to, and a page
+        #: read that way is not a reading of the page.
+        self.text_misses = 0
 
     @property
     def base_url(self) -> str:
@@ -481,6 +487,7 @@ class CtcWebClient:
             value = (await self._request(f"/txt/{lang}/{text_id}")).strip()
         except CtcWebError as err:
             _LOGGER.debug("Text %s in language %s was not answered: %s", text_id, lang, err)
+            self.text_misses += 1
             return ""
         self._text_cache[cache_key] = value
         return value
