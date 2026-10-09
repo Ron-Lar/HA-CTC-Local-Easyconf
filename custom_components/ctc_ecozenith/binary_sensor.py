@@ -21,6 +21,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CtcConfigEntry
+from .attribute_names import with_english
 from .const import (
     HP_ALARM_CODE,
     HP_BLOCKED_CODE,
@@ -216,4 +217,6 @@ class CtcDerivedBinary(CoordinatorEntity, BinarySensorEntity):
         log = getattr(self._runtime, "alarms", None)
         if self._item.episodes and log is not None:
             attributes["episoder"] = log.attributes()
-        return attributes or None
+            # The English twin with English keys inside, not a copy.
+            attributes["episodes"] = log.attributes(english=True)
+        return with_english(attributes) or None

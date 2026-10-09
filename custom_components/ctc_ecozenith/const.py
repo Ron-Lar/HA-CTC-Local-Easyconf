@@ -326,7 +326,8 @@ MODBUS_SENSORS: Final[tuple[ModbusSensor, ...]] = (
     ModbusSensor("outdoor_temp", 62000, "Utetemperatur", 0.1, "°C", _T),
     ModbusSensor("dhw_stop_temp", 62001, "Stopptemperatur varmvatten", 0.1, "°C", _T),
     # 62003 is documented as the hot water temperature but reads a constant 0 on
-    # an i550 Pro, where 62276 is the live one. Off by default.
+    # an i550 Pro, where 62276 is the live one. Created switched on like every
+    # reading since 0.14.0; the page leaves it out where it has only read zero.
     ModbusSensor("dhw_temp_raw", 62003, "Varmvattentemperatur (62003)", 0.1, "°C", _T),
     ModbusSensor("system_status", 62005, "Systemstatus", 1, None, None, None, enum=STATUS_SYSTEM, icon="mdi:heat-pump"),
     ModbusSensor("radiator_temp", 62006, "Radiatorvatten", 0.1, "°C", _T),

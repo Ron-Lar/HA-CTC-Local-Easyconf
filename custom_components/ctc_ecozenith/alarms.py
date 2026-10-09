@@ -26,6 +26,7 @@ import re
 from datetime import datetime
 from typing import Any, Iterable, Mapping
 
+from .attribute_names import episode_in_english
 from .const import ALARM_EPISODES, ALARM_TEXT_PREFIX, SlowPage
 from .web_api import CtcWebError
 
@@ -226,9 +227,13 @@ class AlarmLog:
         except Exception as err:  # noqa: BLE001 - a lost save costs the log, not the alarm
             _LOGGER.debug("Could not schedule saving the alarm log: %s", err)
 
-    def attributes(self) -> list[dict[str, Any]]:
-        """The episodes as an entity shows them, newest first, in the page's words."""
-        return [
+    def attributes(self, english: bool = False) -> list[dict[str, Any]]:
+        """The episodes as an entity shows them, newest first, in the page's words.
+
+        With ``english`` under the English keys that ``episodes`` carries beside
+        ``episoder`` (attribute_names.py), the same values either way.
+        """
+        shown = [
             {
                 "kod": episode["code"],
                 "text": episode["text"],
@@ -238,3 +243,6 @@ class AlarmLog:
             }
             for episode in self.episodes
         ]
+        if english:
+            return [episode_in_english(episode) for episode in shown]
+        return shown

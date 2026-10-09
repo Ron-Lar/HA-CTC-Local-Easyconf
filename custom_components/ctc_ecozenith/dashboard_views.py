@@ -76,9 +76,10 @@ UNAVAILABLE = "unavailable"
 
 #: The coefficient of performance is a figure with a story (sensor.py): its
 #: sensors stay available without a figure and write what it rests on and why
-#: it is missing as attributes, under these names today and perhaps the English
-#: ones one day, so the page asks for both. Such a value is drawn while it is
-#: merely unknown, with the reason under it, and goes only when the sensor is
+#: it is missing as attributes, under the Swedish names and their English twins
+#: (attribute_names.py), so the page asks for both and still finds the figure's
+#: story when the Swedish names go. Such a value is drawn while it is merely
+#: unknown, with the reason under it, and goes only when the sensor is
 #: unavailable.
 _COP_PREFIX = "cop_"
 _COP_SUB = ("underlag", "basis")

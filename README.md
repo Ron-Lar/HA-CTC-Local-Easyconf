@@ -57,7 +57,7 @@ per day of the span for the week and the month, twenty-one and ninety in all.
 What is not
 shown is a quotient outside 0.5 to 10, because that is not a performance figure
 but two counters that do not belong together. When a figure is missing the sensor
-says why in its attributes, under *skäl*: no sample old enough yet, too little
+says why in its attributes, under *reason*: no sample old enough yet, too little
 energy so far, a counter standing still although the unit has been running, or a
 quotient that cannot be right. The sensor stays available and empty rather than
 going unavailable, because an unavailable entity shows no attributes and the
@@ -103,7 +103,7 @@ for it, nothing is polled faster, and the catalogue is never enumerated. The
 sensor *Senaste larm* holds the latest alarm as the panel printed it, with the
 code, the text, when it began, when it went away and the outdoor temperature at
 the start as attributes, and the binary *Larm* carries the last ten episodes
-under *episoder*. A sensor alarm such as E017 leaves the heat pump running, so
+under *episodes*. A sensor alarm such as E017 leaves the heat pump running, so
 the binary, which reads the Modbus status, can be off while the sensor shows an
 alarm. Where the panel prints the alarm has been seen on one page of one model
 so far, the history page of an i550 Pro, and is to be confirmed the next time a
@@ -400,11 +400,11 @@ five minutes.
 
 What Home Assistant shows is what the controller holds. An override counts as
 in force only from a write that actually reached the unit, each control entity
-carries the attributes *senast skriven* and *gäller till*, and when no write has
+carries the attributes *last_written* and *valid_until*, and when no write has
 reached the unit for five minutes the override is released on this side too,
 with one line in the log, since the controller has forgotten it by then. A
 released override is not taken up again by itself when the unit answers again:
-the entity then shows the unit's own setting with *styrning aktiv: nej*, and
+the entity then shows the unit's own setting with *control_active: false*, and
 whoever set the override, a person or an energy manager, sets it anew. An
 energy manager that reads the entity should treat that combination as a lost
 command rather than as somebody's manual change.
@@ -415,6 +415,32 @@ frequent writing can destroy the controller. That is enforced in code, not left
 to convention: the Modbus client refuses any address outside the control
 registers before it even takes the connection, and the test suite checks that a
 write to 61500, 61503 or 62000 never reaches the wire.
+
+## Attribute names
+
+The attributes automations are most likely to read had Swedish names, like the
+entities. Each now has an English twin, and both are sent in this version with
+the same value, except where the table says otherwise. **The Swedish names will
+be removed in the next major version**, so templates, automations and energy
+managers that read them should move to the English names now.
+
+| Swedish name, until the next major version | English name | On |
+|---|---|---|
+| `skäl` | `reason` | the coefficient of performance sensors |
+| `underlag` | `basis` | the coefficient of performance sensors |
+| `kod` | `code` | a status sensor answering a code it has no label for, and *Senaste larm* |
+| `källa` | `source` | every display row |
+| `sida` | `page` | every display row |
+| `skärm` | `screen` | every display row |
+| `senast läst` | `read_at` | every display row |
+| `senast skriven` | `last_written` | the controls, while an override is in force |
+| `gäller till` | `valid_until` | the controls, while an override is in force |
+| `styrning aktiv`, `ja` or `nej` | `control_active`, `true` or `false` | the number controls |
+| `episoder`, each with `kod`, `text`, `start`, `slut`, `utetemperatur` | `episodes`, each with `code`, `text`, `start`, `end`, `outdoor_temperature` | the binary sensor *Larm* |
+
+Values that are text, such as a reason or what a figure rests on, stay in
+Swedish under both names, like the entity names and the explanations. The
+other attributes keep their Swedish names for now.
 
 ## Known limits
 
@@ -446,7 +472,7 @@ write to 61500, 61503 or 62000 never reaches the wire.
   already had and tries again in five minutes instead of thirty. Only after three
   failed harvests in a row are the display's readings called unavailable. A
   single page that cannot be reached costs that page alone: its readings keep
-  the moment they were last read, shown as the attribute *senast läst*, and go
+  the moment they were last read, shown as the attribute *read_at*, and go
   unavailable once that moment is three intervals old, while the other pages
   go on as usual.
 - **Absent hardware still answers.** The controller replies for ten heat pumps

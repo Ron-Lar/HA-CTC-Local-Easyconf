@@ -17,8 +17,24 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
-from .const import CONTROL_NUMBERS, CONTROL_SELECTS, MODBUS_SENSORS, MODBUS_SETTINGS
-from .cop import MIN_CONSUMPTION_KWH, MIN_CONSUMPTION_KWH_DAY, WINDOWS
+from .const import (
+    COP_WINDOW_DAYS,
+    CONTROL_NUMBERS,
+    CONTROL_SELECTS,
+    DEFAULT_FAST_INTERVAL,
+    DEFAULT_SLOW_INTERVAL,
+    HARVEST_SKIP_LIMIT,
+    MODBUS_SENSORS,
+    MODBUS_SETTINGS,
+)
+from .cop import (
+    DAY_MAX_HOURS,
+    DAY_MIN_HOURS,
+    MIN_CONSUMPTION_KWH,
+    MIN_CONSUMPTION_KWH_DAY,
+    WINDOWS,
+    YEAR_MAX_DAYS,
+)
 
 #: The floors the coefficient of performance figures are shown above, in the
 #: words of the explanations: the day's, a week's and a month's as the day's
@@ -30,13 +46,27 @@ _COP_FLOOR_WEEK = f"{MIN_CONSUMPTION_KWH_DAY * WINDOWS['week'][0]:.0f}"
 _COP_FLOOR_MONTH = f"{MIN_CONSUMPTION_KWH_DAY * WINDOWS['month'][0]:.0f}"
 _COP_FLOOR_LIFETIME = f"{MIN_CONSUMPTION_KWH:.0f}"
 
+#: The other numbers the explanations name, read off the code for the same
+#: reason: how old the samples behind the day, the week, the month and the
+#: year may be, how often Modbus is polled and the display harvested by
+#: default, and how many harvests in a row give way to somebody at the panel.
+#: tests/test_explanation_numbers.py holds the words that stay words, five
+#: minutes and ten alarms among them, to the constants they stand for.
+_DAY_HOURS = f"{DAY_MIN_HOURS} till {DAY_MAX_HOURS} timmar"
+_WEEK_DAYS = f"{WINDOWS['week'][0]} till {sum(WINDOWS['week'])} dygn"
+_MONTH_DAYS = f"{WINDOWS['month'][0]} till {sum(WINDOWS['month'])} dygn"
+_YEAR_DAYS = f"{COP_WINDOW_DAYS} till {YEAR_MAX_DAYS} dagar"
+_POLL_SECONDS = f"{DEFAULT_FAST_INTERVAL}:e sekund"
+_HARVEST_MINUTES = f"{DEFAULT_SLOW_INTERVAL // 60}:e minut"
+_SKIPS = {1: "ett varv", 2: "två varv", 3: "tre varv"}.get(HARVEST_SKIP_LIMIT, f"{HARVEST_SKIP_LIMIT} varv")
+
 #: The Modbus registers the integration reads, by key.
 MODBUS: dict[str, str] = {
     "outdoor_temp": "Utetemperaturen från pumpens utegivare. Värmekurvan räknar framledningens börvärde ur den.",
     "dhw_stop_temp": "Temperaturen där pumpen slutar ladda varmvatten, enligt CTC:s registerlista.",
     "dhw_temp_raw": (
         "Dokumenterad som varmvattentemperatur, men står på 0 på en i550 Pro, där Varmvatten "
-        "(register 62276) är den givare som lever. Avstängd som standard."
+        "(register 62276) är den givare som lever."
     ),
     "system_status": (
         "Vad styrenheten gör just nu. Värmepump övre: värmepumpen värmer tankens övre del, "
@@ -52,7 +82,7 @@ MODBUS: dict[str, str] = {
     "return_temp": "Temperaturen på vattnet som kommer tillbaka från värmesystemet.",
     "dhw_circulation": (
         "Varmvattencirkulation (VVC) enligt CTC:s registerlista. Innehållet är inte bekräftat på "
-        "en verklig anläggning, därför avstängd som standard."
+        "en verklig anläggning."
     ),
     "hp1_status": (
         "Värmepumpens eget läge: redo för start, startfördröjd, till värme, till varmvatten, "
@@ -170,8 +200,8 @@ _VOLATILE = (
     " Skrivs till ett flyktigt register som pumpen glömmer cirka fem minuter efter sista "
     "skrivningen, så Home Assistant skriver om det varje minut så länge styrningen gäller. "
     "Styrningen räknas som aktiv först när en skrivning har nått pumpen, attributen senast "
-    "skriven och gäller till säger när det var och hur länge pumpen håller värdet, och når "
-    "ingen skrivning fram på fem minuter släpps den."
+    "skriven och gäller till (last_written och valid_until) säger när det var och hur länge "
+    "pumpen håller värdet, och når ingen skrivning fram på fem minuter släpps den."
 )
 
 #: The control registers, by key.
@@ -209,8 +239,8 @@ DERIVED: dict[str, str] = {
     "alarm": (
         "Till när värmepumpens status är av på grund av larm. Larm i resten av anläggningen "
         "syns i pumpens meny och, där displayen hämtas, i Senaste larm. Attributet episoder "
-        "bär de tio senaste larm displayen har visat, med kod, start, slut och utetemperatur "
-        "när larmet började."
+        "(episodes) bär de tio senaste larm displayen har visat, med kod, start, slut och "
+        "utetemperatur när larmet började."
     ),
     "last_alarm": (
         "Det larm displayen visade senast, med E-kod och text så som panelen skriver dem, "
@@ -237,8 +267,8 @@ DERIVED: dict[str, str] = {
     ),
     "starts_today": (
         "Antal kompressorstarter sedan midnatt, räknade ur övergångarna i Värmepump status "
-        "var 30:e sekund. En avfrostning mitt i en körning räknas inte som ett stopp och en ny "
-        "start. Nollas vid midnatt och vid omstart av Home Assistant; attributet räknas sedan "
+        f"var {_POLL_SECONDS} som förval. En avfrostning mitt i en körning räknas inte som ett "
+        "stopp och en ny start. Nollas vid midnatt och vid omstart av Home Assistant; attributet räknas sedan "
         "säger från när. Många korta körningar är pendling som sliter på kompressorn."
     ),
     "last_run": (
@@ -275,23 +305,26 @@ DERIVED: dict[str, str] = {
     ),
     "cop_day": (
         "Värmefaktor senaste dygnet: avgiven värme delat med tillförd el, ur två avläsningar av "
-        f"energiräknarna 20 till 30 timmar isär. Visas när minst {_COP_FLOOR_DAY} kWh har förbrukats."
+        f"energiräknarna {_DAY_HOURS} isär. Visas när minst {_COP_FLOOR_DAY} kWh har förbrukats."
     ),
     "cop_week": (
-        "Värmefaktor senaste 7 dygnen, ur energiräknarna mot integrationens egen avläsning 7 till 9 "
-        f"dygn gammal. Visas när minst {_COP_FLOOR_DAY} kWh per dygn i underlaget har förbrukats, "
+        f"Värmefaktor senaste {WINDOWS['week'][0]} dygnen, ur energiräknarna mot integrationens egen "
+        f"avläsning {_WEEK_DAYS} gammal. Visas när minst {_COP_FLOOR_DAY} kWh per dygn i underlaget "
+        "har förbrukats, "
         f"alltså {_COP_FLOOR_WEEK} kWh på en vecka, och tidigast en vecka efter att integrationen "
         "sattes upp."
     ),
     "cop_month": (
-        "Värmefaktor senaste 30 dygnen, ur energiräknarna mot integrationens egen avläsning 30 till "
-        f"35 dygn gammal. Visas när minst {_COP_FLOOR_DAY} kWh per dygn i underlaget har förbrukats, "
+        f"Värmefaktor senaste {WINDOWS['month'][0]} dygnen, ur energiräknarna mot integrationens egen "
+        f"avläsning {_MONTH_DAYS} gammal. Visas när minst {_COP_FLOOR_DAY} kWh per dygn i underlaget "
+        "har förbrukats, "
         f"alltså {_COP_FLOOR_MONTH} kWh på en månad, och tidigast en månad efter att integrationen "
         "sattes upp."
     ),
     "cop_year": (
-        "Värmefaktor för ett rullande år, ur energiräknarna mot en egen avläsning 365 till 380 "
-        "dagar gammal. Visas först när integrationen har ett års egna avläsningar."
+        f"Värmefaktor för ett rullande år, ur energiräknarna mot en egen avläsning {_YEAR_DAYS} "
+        "gammal. Visas först när integrationen har ett års egna avläsningar, och när minst "
+        f"{_COP_FLOOR_LIFETIME} kWh har förbrukats under året."
     ),
     "cop_first_year": (
         "Värmefaktor för första året efter driftstarten. Driftstarten räknas ur hur länge pumpen "
@@ -307,8 +340,9 @@ DERIVED: dict[str, str] = {
 HARVEST: dict[str, str] = {
     "display_harvest": (
         "När displayens sidor senast lästes. Integrationen bläddrar till de valda sidorna "
-        "var 30:e minut som förval, hoppar över varvet om någon står vid panelen och försöker "
-        "om efter fem minuter när displayen inte svarar. Attributen säger hur många varv i rad "
+        f"var {_HARVEST_MINUTES} som förval, hoppar över varvet om någon står vid panelen, högst "
+        f"{_SKIPS} i rad, och försöker om efter fem minuter när displayen inte svarar. Attributen "
+        "säger hur många varv i rad "
         "som hoppats över eller misslyckats, när nästa försök görs, vilket skälet var och "
         "vilka sidor som lästes och missades senast."
     ),

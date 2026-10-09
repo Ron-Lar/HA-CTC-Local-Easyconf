@@ -28,6 +28,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import EntityCategory
 
 from . import CtcConfigEntry
+from .attribute_names import with_english
 from .catalogue import display_state_class, pages_from_storage
 from .cop import (
     WINDOWS,
@@ -277,9 +278,10 @@ class CtcModbusSensor(CoordinatorEntity, SensorEntity):
 
         Without it the number the controller actually answered with would be lost
         to the log, and that number is what a label is eventually written from.
+        Under ``kod`` and its English twin ``code`` (attribute_names.py).
         """
         code = getattr(self.coordinator, "unknown_codes", {}).get(self._description.key)
-        return {"kod": code} if code is not None else None
+        return with_english({"kod": code}) if code is not None else None
 
 
 class CtcDisplaySensor(CoordinatorEntity, SensorEntity):
@@ -339,7 +341,8 @@ class CtcDisplaySensor(CoordinatorEntity, SensorEntity):
         read_at = self.coordinator.last_read(self._value.key)
         if read_at is not None:
             attributes["senast läst"] = read_at.isoformat(timespec="seconds")
-        return attributes
+        # Each beside its English twin: source, page, screen, read_at.
+        return with_english(attributes)
 
 
 class CtcHarvestSensor(CoordinatorEntity, SensorEntity):
@@ -432,14 +435,16 @@ class CtcLastAlarmSensor(CoordinatorEntity, SensorEntity):
         latest = self._runtime.alarms.latest
         if latest is None:
             return None
-        return {
-            "kod": latest["code"],
-            "text": latest["text"],
-            "start": latest["start"],
-            "slut": latest["end"],
-            "utetemperatur vid start": latest["outdoor"],
-            "pågår": "ja" if latest["end"] is None else "nej",
-        }
+        return with_english(
+            {
+                "kod": latest["code"],
+                "text": latest["text"],
+                "start": latest["start"],
+                "slut": latest["end"],
+                "utetemperatur vid start": latest["outdoor"],
+                "pågår": "ja" if latest["end"] is None else "nej",
+            }
+        )
 
     @property
     def available(self) -> bool:
@@ -678,7 +683,8 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
         )
         if reason:
             attributes["skäl"] = reason
-        return attributes
+        # underlag and skäl beside their English twins, basis and reason.
+        return with_english(attributes)
 
     @property
     def available(self) -> bool:

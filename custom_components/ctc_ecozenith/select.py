@@ -10,6 +10,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CtcConfigEntry
+from .attribute_names import with_english
 from .const import CONTROL_SELECTS, ControlRegister
 from .keys import unique_id
 from .entity import async_switch_on_new_defaults
@@ -70,9 +71,10 @@ class CtcControlSelect(SelectEntity):
             "register": str(self._register.address),
             "not": "flyktigt register, nollställs av pumpen cirka fem minuter efter sista skrivningen",
         }
-        # When the controller last took the value, and until when it holds it.
+        # When the controller last took the value, and until when it holds it,
+        # beside the English twins last_written and valid_until.
         attributes.update(self._runtime.control.written_attributes(self._register.address))
-        return attributes
+        return with_english(attributes)
 
     async def async_select_option(self, option: str) -> None:
         if option == RELEASE:
