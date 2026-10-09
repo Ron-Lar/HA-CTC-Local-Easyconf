@@ -360,10 +360,14 @@ sent about your installation. The full list of fields and the reasoning:
 The suite in `tests/` runs without Home Assistant installed and is what CI
 runs: `pip install -r requirements-test.txt` and `python -m pytest -q`. It
 covers the protocol decoding, the menu reading, the dashboard layout and the
-report, all against captured fixtures from the two units; nothing in it opens
-a socket.
+report, all against captured fixtures from the two units. Nothing in it talks
+to a real heat pump or to anything outside the process: the one socket it opens
+is in `tests/test_pymodbus_surface.py`, where a scripted controller listens on
+loopback inside the test process so that the whole chain, from pymodbus's real
+surface down to the register words, can be driven end to end.
 
-`tests/test_homeassistant.py` is the exception. It drives the integration
+`tests/test_homeassistant.py` is the one that needs more than the test
+requirements. It drives the integration
 through a real Home Assistant core, from set-up to reload to the `number`
 service call that writes a control register, with both the Modbus client and
 the display replaced by stand-ins, and it checks the four things a unit test
