@@ -562,12 +562,19 @@ sent about your installation. The full list of fields and the reasoning:
 
 ## Reporting a problem
 
+When the display's menu cannot be read, the log says so once per start of Home
+Assistant, on warning, with the step the walk stopped at. A walk that read the
+menu says so on info, which Home Assistant leaves out of the log unless debug
+logging is switched on for the integration.
+
 Open an issue on GitHub; the form asks for the diagnostics file, which is what
 makes a report answerable. Download it under *Settings, Devices and services,
 CTC Local Easyconf*, the three dots next to the heat pump, *Download
 diagnostics*. It also works while the integration is still waiting for the heat
 pump to answer. It holds the stored menu and which pages are ticked and
-harvested, how many readings of the menu this run has spent, when each display
+harvested, how many readings of the menu this run has spent and how far the last
+one got (the home screen recognised, the operation data tile found, the menu
+entered, or what the display said when it stopped answering), when each display
 row was last read and why the last harvest gave way, the Modbus block plan and
 the blocks your model turned out not to have, codes the integration has no
 label for, which controls are in force, the energy samples behind the
