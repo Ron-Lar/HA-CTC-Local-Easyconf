@@ -94,5 +94,25 @@
       "title": "A newer version of CTC Local Easyconf is out",
       "description": "Version {latest} has been released; this is {installed}. Installed through HACS: update it there, under Settings, Devices and services, HACS. Installed by hand: replace custom_components/ctc_ecozenith with the new release and restart Home Assistant."
     }
+  },
+  "entity": {
+    "event": {
+      "events": {
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "kompressor_start": "Compressor start",
+              "kompressor_stopp": "Compressor stop",
+              "avfrostning_start": "Defrost start",
+              "avfrostning_slut": "Defrost end",
+              "larm": "Alarm",
+              "larm_borta": "Alarm cleared",
+              "smartgrid_andrad": "SmartGrid mode changed",
+              "systemstatus_andrad": "System status changed"
+            }
+          }
+        }
+      }
+    }
   }
 }

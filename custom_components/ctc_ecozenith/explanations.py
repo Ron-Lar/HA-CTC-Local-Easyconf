@@ -231,6 +231,13 @@ DERIVED: dict[str, str] = {
         "och när den avslutades står som attribut; längden saknas medan avfrostningen pågår. En "
         "avfrostning räknas som en del av kompressorns körning, inte som ett stopp."
     ),
+    "events": (
+        "Pumpens övergångar som händelser i loggboken och som utlösare för automationer: "
+        "kompressorstart och kompressorstopp, avfrostning start och slut, larm och larm borta, "
+        "ändrat SmartGrid-läge och ändrad systemstatus. Attributen bär koden före och efter, "
+        "deras etiketter, utetemperaturen och, för ett stopp eller ett avfrostningsslut, längden "
+        "i minuter. Första avläsningen efter en start av Home Assistant ger inga händelser."
+    ),
     "cop_day": (
         "Värmefaktor senaste dygnet: avgiven värme delat med tillförd el, ur två avläsningar av "
         "energiräknarna 20 till 30 timmar isär. Visas när minst 3 kWh har förbrukats."
@@ -422,6 +429,11 @@ def source(key: str, pages: list[Mapping[str, Any]] | None = None, interval: int
         return "Räknas fram ur övergångarna i Värmepump status, Modbus-register 62017"
     if key == "mean_run_24h":
         return "Räknas ur Modbus-register 62234 och displayens Antal starter /24 h"
+    if key == "events":
+        return (
+            "Räknas fram ur övergångarna i Värmepump status, Systemstatus och SmartGrid-läge, "
+            "Modbus-register 62017, 62005 och 62301"
+        )
     if key == "immersion_active":
         return "Räknas fram ur Elpatron övre och Elpatron nedre, Modbus-register 62168 och 62169"
     if key == "smartgrid_active":

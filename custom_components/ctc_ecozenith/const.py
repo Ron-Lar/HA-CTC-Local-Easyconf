@@ -126,7 +126,9 @@ HARVEST_PATIENCE: Final = 3
 #: somewhere by a restore that failed, does not stop the harvest for good.
 HARVEST_SKIP_LIMIT: Final = 2
 
-PLATFORMS: Final = ["sensor", "binary_sensor", "number", "select", "button"]
+#: The event platform carries the heat pump's transitions (event.py). It has
+#: been in Home Assistant since 2023.8, well inside hacs.json's floor.
+PLATFORMS: Final = ["sensor", "binary_sensor", "number", "select", "button", "event"]
 
 CONF_READ_TOTALS: Final = "read_totals"
 CONF_IDENTITY: Final = "identity"

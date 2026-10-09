@@ -94,5 +94,25 @@
       "title": "En nyare version av CTC Local Easyconf finns",
       "description": "Version {latest} är släppt, du kör {installed}. Installerad via HACS: uppdatera där, under Inställningar, Enheter och tjänster, HACS. Installerad för hand: byt ut custom_components/ctc_ecozenith mot den nya releasen och starta om Home Assistant."
     }
+  },
+  "entity": {
+    "event": {
+      "events": {
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "kompressor_start": "Kompressorstart",
+              "kompressor_stopp": "Kompressorstopp",
+              "avfrostning_start": "Avfrostning börjar",
+              "avfrostning_slut": "Avfrostning slut",
+              "larm": "Larm",
+              "larm_borta": "Larm borta",
+              "smartgrid_andrad": "SmartGrid-läge ändrat",
+              "systemstatus_andrad": "Systemstatus ändrad"
+            }
+          }
+        }
+      }
+    }
   }
 }

@@ -1,9 +1,10 @@
-"""The transition watch: starts, run length, defrosts and what changed when (R27, R31).
+"""The transition watch: starts, run length, defrosts and events (R27, R31, L9).
 
 Driven by hand with samples of status codes, the way the Modbus coordinator
 feeds it, without Home Assistant. The codes are the ones const.py pins to
 their labels: 3, 5 and 33 are heating, cooling and hot water, 4 is a defrost,
-7 is an alarm, 1 is ready to start.
+7 is an alarm, 1 is ready to start. The event entity itself needs a real core
+and is driven in test_homeassistant_transitions.py; its log and cursor are here.
 """
 
 from __future__ import annotations
@@ -307,6 +308,109 @@ def test_system_status_and_smartgrid_changes_carry_codes_and_labels(transitions,
     # compared with the last one that did.
     assert watch.observe(transitions.Sample(at(9, 3), hp_status=1)) == []
     assert watch.observe(transitions.Sample(at(9, 4), hp_status=1, system_status=12, sg_mode=2)) == []
+
+
+# ------------------------------------------------- the log and its cursor (L9)
+
+
+def test_the_log_numbers_the_transitions_and_a_cursor_reads_what_came_after(transitions, watch):
+    assert watch.seq == 0 and watch.since(0) == []
+    feed(transitions, watch, (at(9), 1), (at(10), 3), (at(10, 30), 4))
+    found = watch.since(0)
+    assert [t.kind for t in found] == ["kompressor_start", "avfrostning_start"]
+    assert [t.seq for t in found] == [1, 2]
+    assert watch.seq == 2
+    # A reader that has fired up to 2 is handed nothing until something new.
+    assert watch.since(2) == []
+    feed(transitions, watch, (at(10, 38), 7))
+    later = watch.since(2)
+    assert [t.kind for t in later] == ["avfrostning_slut", "kompressor_stopp", "larm"]
+    assert [t.seq for t in later] == [3, 4, 5]
+    # What observe() handed back is what the log holds, the same objects.
+    assert list(watch.log)[-3:] == later
+
+
+def test_the_log_is_bounded_and_a_reader_that_starts_late_gets_nothing_old(transitions):
+    short = transitions.TransitionWatch(keep=3)
+    feed(transitions, short, (at(9), 1), (at(9, 10), 3), (at(9, 20), 1), (at(9, 30), 3), (at(9, 40), 1))
+    assert short.seq == 4
+    assert [t.seq for t in short.since(0)] == [2, 3, 4]
+    # The event entity starts its cursor at the watch's number when it is made.
+    assert short.since(short.seq) == []
+    assert transitions.LOG_LENGTH >= 20
+
+
+def test_every_kind_the_watch_can_raise_is_an_event_type_and_the_list_is_the_roadmaps(
+    transitions, watch
+):
+    raised = set()
+    for moment, hp, system, sg in (
+        (at(9), 1, 0, 0),
+        (at(9, 10), 3, 0, 0),    # start
+        (at(9, 20), 4, 5, 2),    # defrost start, system status, smartgrid
+        (at(9, 30), 3, 5, 2),    # defrost end
+        (at(9, 40), 7, 5, 2),    # stop and alarm
+        (at(9, 50), 1, 5, 2),    # alarm cleared
+    ):
+        raised |= {
+            t.kind
+            for t in watch.observe(
+                transitions.Sample(moment, hp_status=hp, system_status=system, sg_mode=sg)
+            )
+        }
+    assert raised == set(transitions.EVENT_TYPES)
+    assert transitions.EVENT_TYPES == (
+        "kompressor_start", "kompressor_stopp", "avfrostning_start", "avfrostning_slut",
+        "larm", "larm_borta", "smartgrid_andrad", "systemstatus_andrad",
+    )
+
+
+def test_the_event_platform_is_set_up_and_every_event_type_has_its_texts(const):
+    import json
+    import pathlib
+
+    assert "event" in const.PLATFORMS
+    root = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "ctc_ecozenith"
+    transitions = load("transitions")
+    texts = {}
+    for name in ("strings.json", "translations/en.json", "translations/sv.json"):
+        data = json.loads((root / name).read_text(encoding="utf-8"))
+        states = data["entity"]["event"]["events"]["state_attributes"]["event_type"]["state"]
+        assert set(states) == set(transitions.EVENT_TYPES), name
+        assert all(states.values()), name
+        texts[name] = states
+    # strings.json is the English source, and the two must say the same.
+    assert texts["strings.json"] == texts["translations/en.json"]
+    for text in texts["translations/sv.json"].values():
+        assert "–" not in text and " - " not in text, text
+
+
+def test_the_event_entity_is_explained_sourced_and_listed_but_not_a_chip(
+    explanations, dashboard_views
+):
+    assert "loggboken" in explanations.explain("events")
+    source = explanations.source("events")
+    assert "62017" in source and "62005" in source and "62301" in source
+    assert "events" in dashboard_views._KNOWN_KEYS
+    assert "events" not in dashboard_views._STATUS_ROWS
+    assert "events" not in dashboard_views._STATUS_TILES
+
+
+def test_the_event_module_reads_the_watch_by_a_cursor_and_lists_the_types():
+    # The module needs Home Assistant's event platform, which the stand-ins do
+    # not carry; the wiring is checked under a real core in
+    # test_homeassistant_transitions.py. Here: what it is built from.
+    import pathlib
+
+    source = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "custom_components" / "ctc_ecozenith" / "event.py"
+    ).read_text(encoding="utf-8")
+    assert "_attr_event_types = list(EVENT_TYPES)" in source
+    assert "self._watch.since(self._fired)" in source
+    assert "self._fired = self._watch.seq" in source
+    assert '_attr_translation_key = "events"' in source
+    assert "stats" not in source, "inget till backenden"
 
 
 # ---------------------------------------------------- out of the coordinator
