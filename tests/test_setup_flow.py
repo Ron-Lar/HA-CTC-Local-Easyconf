@@ -150,8 +150,10 @@ def test_modbus_that_does_not_answer_has_a_step_of_its_own(name, menus):
         assert words in failed["description"]
     assert "{host}" in failed["description"]
     assert 'STEP_MODBUS_FAILED = "modbus_failed"' in FLOW
-    connect = _method("async_step_connect")
-    assert "STEP_MODBUS_FAILED" in connect and '"manual"' not in connect
+    # Where a Modbus failure goes is decided once the cause has a name (L12).
+    failed_step = _method("_async_modbus_failed")
+    assert "STEP_MODBUS_FAILED" in failed_step and '"manual"' not in failed_step
+    assert "return await self._async_modbus_failed()" in _method("async_step_connect")
 
 
 def test_addresses_already_set_up_are_left_out_of_the_list():

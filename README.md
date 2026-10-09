@@ -188,6 +188,19 @@ every form of them, on both models tested.
    have an entry are left out of the list. When the display answers and Modbus
    does not, a step of its own says where on the panel Modbus TCP is turned on,
    and takes the address again.
+   The controller takes one Modbus client at a time, and when another one
+   holds the place it accepts the connection and drops it at the first
+   request, which the Modbus library reports like a pump that is switched off.
+   So when Modbus fails, and only then, with the integration's own connection
+   closed and the controller's settle time waited out, the integration opens
+   the port once more with a plain socket and asks for one register. A
+   connection dropped like that gets a step of its own, **Modbus is taken**,
+   that names the usual culprits: a `modbus:` block in `configuration.yaml`
+   pointing at the same unit, a test tool, or a session that was never let go.
+   The same probe runs when an entry cannot read a register at start-up: the
+   entry's retry reason names the cause, and a taken place is also said in the
+   repairs view until the first reading that works. A verdict is reused for
+   ten minutes, so Home Assistant's retries do not knock twice as often.
    A typed address whose web interface does not answer at all, with Web
    switched off, an older display, or a firewall that lets 502 through and
    nothing else, is added on **Modbus alone** if Modbus answers. Such an entry

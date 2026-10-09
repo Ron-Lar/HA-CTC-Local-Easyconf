@@ -37,6 +37,10 @@
           "slave": "Modbus address"
         }
       },
+      "modbus_busy": {
+        "title": "Modbus is taken",
+        "description": "The heat pump at {host} accepts a connection on its Modbus port and drops it as soon as anything is asked. The controller takes one Modbus client at a time, and another one holds the place: usually a modbus: block in configuration.yaml pointing at the same unit, a test tool, or a connection that was never let go and that the controller still believes is there. Remove the other client, wait ten minutes, and try again."
+      },
       "slow": {
         "title": "Slow values from the display",
         "description": "Modbus is read continuously and handles all control. The display's web interface additionally carries values Modbus does not have, such as delivered heat.\n\nThe catch is that only the page the panel is showing stays fresh, so the integration has to walk there and back. The panel moves while it does. Tick the pages you want, or skip this step and run on Modbus alone.\n\nThe coefficient of performance needs the page with the stored or historical operation data, where delivered heat is counted.\n\n{count} pages were found on the {model}; the figure after each is how many values it holds.\n\nFrom the start, control of the heat pump, the walk to System information, the anonymous statistics and the check for new releases are switched on; all four are changed under Configure. What the statistics send: {privacy_url}",
@@ -54,6 +58,8 @@
     "error": {
       "not_a_ctc": "That address does not answer as a CTC display. Check the address. The display's web interface is turned on at the panel under Advanced, Define, Communication, Web = Yes; without it the heat pump is added on Modbus alone, and then Modbus has to answer.",
       "modbus_failed": "Modbus did not answer this time either.",
+      "modbus_transient": "Modbus did not answer a moment ago and answers now, so it was a passing hiccup. Try again.",
+      "modbus_busy": "The place is still taken.",
       "nothing_found": "The search found no CTC display. Type the display's address instead; a display on another network is not reached by the search."
     },
     "abort": {
@@ -118,9 +124,21 @@
       "title": "The serial number has not been read",
       "description": "The display writes the serial number and its own software version into the System information page only once that page has been shown on the panel. Open it once on the panel, or let the integration walk there itself under Configure."
     },
+    "modbus_busy": {
+      "title": "Another client holds the heat pump's Modbus connection",
+      "description": "The controller takes one Modbus client at a time. It accepts this integration's connection and drops it as soon as anything is asked, which is how it says that another client holds the place: a modbus: block in configuration.yaml pointing at the same unit, a test tool, or a session that was never let go. Remove the other client and wait ten minutes. The integration keeps trying by itself, and this notice goes at the first reading that works."
+    },
     "update_available": {
       "title": "A newer version of CTC Local Easyconf is out",
       "description": "Version {latest} has been released; this is {installed}. Installed through HACS: update it there, under Settings, Devices and services, HACS. Installed by hand: replace custom_components/ctc_ecozenith with the new release and restart Home Assistant."
+    }
+  },
+  "exceptions": {
+    "modbus_busy": {
+      "message": "Another client holds the heat pump's only Modbus connection; see the repairs view"
+    },
+    "modbus_closed": {
+      "message": "The heat pump does not accept a connection on its Modbus port: it is switched off or out of reach, the address is wrong, or Modbus TCP is off at the panel"
     }
   },
   "entity": {

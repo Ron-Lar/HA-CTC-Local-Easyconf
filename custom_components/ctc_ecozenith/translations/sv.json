@@ -37,6 +37,10 @@
           "slave": "Modbus-adress"
         }
       },
+      "modbus_busy": {
+        "title": "Modbus är upptaget",
+        "description": "Värmepumpen på {host} tar emot en anslutning på Modbus-porten och bryter den så fort något frågas. Styrenheten tar en Modbus-klient i taget, och en annan håller platsen: oftast ett modbus:-block i configuration.yaml som pekar på samma enhet, ett provverktyg, eller en anslutning som aldrig släpptes och som styrenheten fortfarande tror finns. Ta bort den andra klienten, vänta tio minuter och försök igen."
+      },
       "slow": {
         "title": "Långsamma värden från displayen",
         "description": "Modbus läses hela tiden och sköter all styrning. Displayens webbgränssnitt har dessutom värden som Modbus saknar, till exempel avgiven värme.\n\nFällan är att bara den sida panelen visar hålls färsk, så integrationen måste bläddra dit och tillbaka. Panelen rör sig då för den som står vid den. Kryssa i de sidor du vill hämta, eller hoppa över steget och kör enbart Modbus.\n\nVärmefaktorn kräver sidan med lagrad eller historisk driftinfo, där avgiven värme räknas.\n\n{count} sidor hittades i {model}; talet efter varje sida är hur många värden den har.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}",
@@ -54,6 +58,8 @@
     "error": {
       "not_a_ctc": "Adressen svarar inte som en CTC-display. Kontrollera adressen. Displayens webbgränssnitt slås på vid panelen under Avancerat, Definiera, Kommunikation, Web = Ja; utan det läggs värmepumpen till på enbart Modbus, och då måste Modbus svara.",
       "modbus_failed": "Modbus svarade inte den här gången heller.",
+      "modbus_transient": "Modbus svarade inte nyss men svarar nu, så det var en tillfällig störning. Försök igen.",
+      "modbus_busy": "Platsen är fortfarande upptagen.",
       "nothing_found": "Sökningen hittade ingen CTC-display. Skriv in displayens adress i stället; en display på ett annat nät nås inte av sökningen."
     },
     "abort": {
@@ -118,9 +124,21 @@
       "title": "Serienumret har inte lästs",
       "description": "Displayen skriver serienummer och sin egen programversion i sidan Systeminformation först när den sidan visats på panelen. Öppna den en gång på panelen, eller låt integrationen gå dit själv under Konfigurera."
     },
+    "modbus_busy": {
+      "title": "En annan klient håller värmepumpens Modbus-anslutning",
+      "description": "Styrenheten tar en Modbus-klient i taget. Den tar emot integrationens anslutning och bryter den så fort något frågas, vilket är hur den säger att en annan klient håller platsen: ett modbus:-block i configuration.yaml som pekar på samma enhet, ett provverktyg, eller en session som aldrig släpptes. Ta bort den andra klienten och vänta tio minuter. Integrationen fortsätter försöka själv, och meddelandet försvinner vid första avläsning som lyckas."
+    },
     "update_available": {
       "title": "En nyare version av CTC Local Easyconf finns",
       "description": "Version {latest} är släppt, du kör {installed}. Installerad via HACS: uppdatera där, under Inställningar, Enheter och tjänster, HACS. Installerad för hand: byt ut custom_components/ctc_ecozenith mot den nya releasen och starta om Home Assistant."
+    }
+  },
+  "exceptions": {
+    "modbus_busy": {
+      "message": "En annan klient håller värmepumpens enda Modbus-anslutning; se reparationsvyn"
+    },
+    "modbus_closed": {
+      "message": "Värmepumpen tar inte emot någon anslutning på Modbus-porten: den är avstängd eller utom räckhåll, adressen är fel, eller Modbus TCP är avslaget vid panelen"
     }
   },
   "entity": {
