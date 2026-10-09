@@ -182,7 +182,7 @@ def test_every_key_of_0_15_1_pairs_with_exactly_one_new_key(catalogue, page, key
     data = page(name)
     old = _old_page(catalogue, name, data, folded=False)
     new = _new_page(catalogue, name, data)
-    pairs = keys.pair_keys([old], [new])
+    pairs = keys.migrate_keys([old], [new])
     assert sorted(pairs) == sorted(keys_0_15_1[name]), "varje nyckel ur 0.15.1 får en ny"
     new_keys = {v.key for v in new.values}
     assert set(pairs.values()) <= new_keys
@@ -207,7 +207,7 @@ def test_the_menu_the_houses_carry_pairs_one_to_one(catalogue, page, name):
     data = page(name)
     old = _old_page(catalogue, name, data, folded=True)
     new = _new_page(catalogue, name, data)
-    pairs = keys.pair_keys([old], [new])
+    pairs = keys.migrate_keys([old], [new])
     assert len(pairs) == len(old.values) == len(new.values)
     assert sorted(pairs.values()) == sorted(v.key for v in new.values)
     old_by_key = {v.key: v for v in old.values}
@@ -252,7 +252,7 @@ def test_a_page_the_reading_did_not_have_keeps_what_it_has(catalogue, page):
     data = page("i255_118")
     old = _old_page(catalogue, "i255_118", data, folded=True)
     elsewhere = const.SlowPage(page=99, title="Annan", screens=[990], values=[])
-    assert keys.pair_keys([old], [elsewhere]) == {}
+    assert keys.migrate_keys([old], [elsewhere]) == {}
     assert keys.previous_keys(keys.with_previous_keys([old], [elsewhere])) == {}
     # And the old page, carried on as it was (a fold-in), pairs with itself.
     kept = keys.with_previous_keys([old], [old])
