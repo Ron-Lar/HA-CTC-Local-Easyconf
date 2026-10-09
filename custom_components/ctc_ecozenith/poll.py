@@ -50,8 +50,27 @@ class RoundResult:
     elapsed: float = 0.0
 
 
+def lead_with(blocks: Iterable[tuple[int, int]], address: int) -> list[tuple[int, int]]:
+    """The same blocks with the one holding ``address`` first, the rest in their order.
+
+    The plan is sorted by address, which puts the stored block that some models
+    lack ahead of the register every model answers. Asked for first, that
+    register tells a controller that answers nothing from a model that lacks a
+    block after one timeout instead of twelve, and the blocks that follow are
+    still given their chance and learnt in the usual way.
+    """
+    ordered = list(blocks)
+    for index, (start, count) in enumerate(ordered):
+        if start <= address < start + count:
+            return [ordered[index], *ordered[:index], *ordered[index + 1:]]
+    return ordered
+
+
 async def read_round(
-    client: Any, blocks: Iterable[tuple[int, int]], skip: Iterable[int] = ()
+    client: Any,
+    blocks: Iterable[tuple[int, int]],
+    skip: Iterable[int] = (),
+    probe: int | None = None,
 ) -> RoundResult:
     """Read every planned block except those in ``skip``.
 
@@ -59,6 +78,14 @@ async def read_round(
     also when not a single block answered in the whole round: whatever the
     socket believes then, the line is dead to us, so the client is let go and
     the next round starts over after the settle time.
+
+    ``probe`` names the one register every model answers. When the block that
+    holds it is silent while nothing has answered yet in this round, the line
+    is given up there and then rather than after a timeout for every block
+    left: a controller whose TCP side is up while its Modbus side says nothing
+    would otherwise cost two to four intervals before the entities went
+    unavailable. A silence from the probe block after another block answered
+    is only that block's, like any other.
     """
     started = time.monotonic()
     result = RoundResult()
@@ -79,6 +106,14 @@ async def read_round(
             raise
         except CtcModbusSilence as err:
             _LOGGER.debug("%s", err)
+            if probe is not None and not result.answered and start <= probe < start + count:
+                await client.async_close()
+                raise CtcModbusTransportError(
+                    f"register {probe}, which every model answers, did not answer and "
+                    "nothing else has in this round, so the connection is given up and "
+                    "the next round starts over",
+                    start,
+                ) from err
             (result.unanswered if err.line_up else result.dropped).append(start)
             continue
         except CtcModbusError as err:
