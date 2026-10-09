@@ -547,6 +547,25 @@ sent about your installation. The full list of fields and the reasoning:
 <https://stats.rnet.se/integritet>. The code that builds the report is
 `stats_extra.py`, and the client that sends it is `stats.py`.
 
+## Reporting a problem
+
+Open an issue on GitHub; the form asks for the diagnostics file, which is what
+makes a report answerable. Download it under *Settings, Devices and services,
+CTC Local Easyconf*, the three dots next to the heat pump, *Download
+diagnostics*. It also works while the integration is still waiting for the heat
+pump to answer. It holds the stored menu and which pages are ticked and
+harvested, how many readings of the menu this run has spent, when each display
+row was last read and why the last harvest gave way, the Modbus block plan and
+the blocks your model turned out not to have, codes the integration has no
+label for, which controls are in force, the energy samples behind the
+coefficient of performance, the latest transitions and the alarm log.
+
+Before you get it, the address, the MAC address, the entry's title, the device's
+link and identifiers are taken out, every IP address and MAC address in any
+text is replaced, and the serial number is cut down to its product and week
+groups wherever it is spelt, the display's host name included. The code is
+`diagnostics_data.py`; read the file through before you attach it all the same.
+
 ## Tests
 
 The suite in `tests/` runs without Home Assistant installed and is what CI

@@ -1,0 +1,60 @@
+name: Bug report
+description: Something is wrong with a value, an entity, the display pages or the setup
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        The diagnostics file is what makes a report answerable. It says how far
+        the integration got through the display's menu, which pages it reads and
+        when each row was last read, why the last harvest gave way, which Modbus
+        blocks your model does not have, and the counters behind the coefficient
+        of performance. Addresses, the MAC address and the sequence number of the
+        serial number are taken out before you get the file, and the serial
+        number is cut down to its product and week groups. Read it through before
+        you attach it all the same.
+  - type: input
+    id: model
+    attributes:
+      label: Indoor unit
+      placeholder: e.g. EcoZenith i255, i360, i550 Pro
+    validations:
+      required: true
+  - type: input
+    id: outdoor
+    attributes:
+      label: Outdoor unit, if any
+      placeholder: e.g. EcoAir 720M, EcoPart 412
+  - type: input
+    id: version
+    attributes:
+      label: Integration version
+      description: Settings, Devices and services, CTC Local Easyconf; or HACS.
+      placeholder: e.g. 0.18.0
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: >-
+        Settings, Devices and services, CTC Local Easyconf, the three dots next
+        to the heat pump, Download diagnostics. It works while the integration is
+        still waiting for the heat pump to answer as well. Drag the downloaded
+        file into this box, or paste its content.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log lines
+      description: >-
+        Settings, System, Logs, searched for ctc_ecozenith. Most of what the
+        integration says is on debug level; to see it, choose Enable debug
+        logging on the integration's page, reproduce the problem, then Disable
+        debug logging, which downloads the log.
+      render: text
