@@ -291,18 +291,18 @@ def test_controls_are_grouped_by_what_they_do_to_the_house(dashboard_views, pump
     pump["entities"]["release_control"] = "button.ctc_ecozenith_i255_slapp_all_styrning"
     pump["names"]["release_control"] = "Släpp all styrning"
     sections = _tab(dashboard_views, pump, "controls")
-    assert _headings(sections) == ["Värme", "Varmvatten", "Drift och el", "Släpp styrningen"]
+    # Three groups, no more: the button that lets go of everything is the last
+    # row of the power group, and its note went into its explanation (V5).
+    assert _headings(sections) == ["Värme", "Varmvatten", "Drift och el"]
     assert _keys(pump, _section(sections, "Värme")) == ["ctl_room_setpoint_1", "ctl_zone_mode_1"]
     assert _keys(pump, _section(sections, "Varmvatten")) == [
         "ctl_dhw_mode", "ctl_dhw_setpoint", "ctl_extra_dhw"
     ]
     assert _keys(pump, _section(sections, "Drift och el")) == [
-        "ctl_price_mode", "ctl_max_rps", "ctl_immersion_lower", "ctl_immersion_upper"
+        "ctl_price_mode", "ctl_max_rps", "ctl_immersion_lower", "ctl_immersion_upper",
+        "release_control",
     ]
-    release = _section(sections, "Släpp styrningen")
-    assert _keys(pump, release) == ["release_control"]
-    note = release["cards"][-1]
-    assert note["type"] == "markdown" and "fem minuter" in note["content"]
+    assert not [c for s in sections for c in s["cards"] if c["type"] == "markdown"]
 
 
 def test_a_control_says_what_it_is_and_is_never_hidden(dashboard_views, pumps):
@@ -800,14 +800,18 @@ def test_the_button_is_a_control_of_its_own_with_a_word_on_it(dashboard_views, p
     pump = pumps["vsh"]
     pump["entities"]["release_control"] = "button.ctc_ecozenith_i255_slapp_all_styrning"
     pump["names"]["release_control"] = "Släpp all styrning"
-    release = _section(_tab(dashboard_views, pump, "controls"), "Släpp styrningen")
-    (card,) = _cards(release)
+    power = _section(_tab(dashboard_views, pump, "controls"), "Drift och el")
+    (card,) = _cards(power)
     assert card["type"] == CONTROLS and card["press"] == "Utför"
-    (_kind, item, entity_id) = _items(release)[0]
+    (_kind, item, entity_id) = _items(power)[-1]
     assert entity_id.startswith("button.")
+    assert item["name"] == "Släpp all styrning"
+    # The note that said why it is there is now its own explanation (V5): the
+    # five minute rule, and that a mode has a release of its own while a
+    # number has not.
     assert item["explanation"].startswith("Släpper all styrning")
-    # And the note that says why it is there.
-    assert release["cards"][-1]["type"] == "markdown"
+    assert "fem minuter" in item["explanation"] and "Släpp styrningen" in item["explanation"]
+    assert "release" not in dashboard_views.TEXT["sv"] and "control_note" not in dashboard_views.TEXT["sv"]
 
 
 def test_the_address_of_the_web_interface(const):

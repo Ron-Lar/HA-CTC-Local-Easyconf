@@ -180,7 +180,9 @@ CONTROL: dict[str, str] = {
     "ctl_immersion_upper": "Begränsar hur mycket effekt den övre elpatronen får ge. Utan styrning visas pumpens egen inställning." + _VOLATILE,
     "release_control": (
         "Släpper all styrning från Home Assistant på en gång. Inget skrivs: Home Assistant slutar "
-        "skriva, och pumpen går tillbaka till sina egna inställningar inom cirka fem minuter."
+        "skriva, och pumpen går tillbaka till sina egna inställningar inom cirka fem minuter, "
+        "eftersom den glömmer en styrning som inte skrivs om. Ett enskilt läge släpps med valet "
+        "Släpp styrningen i sin lista; ett tal har ingen sådan plats, därför finns knappen."
     ),
 }
 
