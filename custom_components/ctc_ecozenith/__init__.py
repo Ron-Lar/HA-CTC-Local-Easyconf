@@ -113,7 +113,7 @@ from .seen import (
 )
 from .seen_history import async_seed_from_statistics
 from .stats import async_setup_stats, async_stop_stats
-from .stats_extra import ErrorCounter, build_extra
+from .stats_extra import ErrorCounter, build_extra, entry_stem
 from .transitions import TransitionWatch, find_starts_per_day, sample_of
 from .web_api import CtcWebClient, CtcWebError
 
@@ -721,6 +721,9 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
         "menu_home": _MENU_OUTCOME.get(entry.entry_id, {}).get("home_found"),
         "menu_root": _MENU_OUTCOME.get(entry.entry_id, {}).get("root_entered"),
     }
+    # The settings file stem, which the report sends as family_<stem> only for
+    # a model it reports as "other" (roadmap R19).
+    stem = entry_stem(entry.data)
     if runtime is None:
         # Set-up has not finished. The model is the one thing the config
         # knows; a read failure is recorded so a controller that never
@@ -731,6 +734,7 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
             control_enabled=False,
             page_count=0,
             read_failures=1,
+            settings_stem=stem,
             **menu,
         )
     # Recognising a counter and reading it are different things, so the report
@@ -762,6 +766,7 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
         cop_implausible=fault == "implausible",
         heat_total_kwh=heat if fault else None,
         consumption_total_kwh=consumed if fault else None,
+        settings_stem=stem,
         **menu,
         **cop_for_report(runtime),
     )

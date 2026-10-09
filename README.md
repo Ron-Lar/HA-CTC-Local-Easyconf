@@ -511,6 +511,14 @@ built, and its coefficient of performance over the last day, over a rolling
 year, over the machine's first year and over its lifetime. The figures over a
 week and a month are not sent.
 
+An indoor unit the integration does not know yet is reported as "other", which
+says nothing about what turned up. For those alone the report adds a flag
+named after the family code in the name of the display's settings file, such
+as `family_ezi3xx`, so a new kind of controller is seen when its first owner
+installs the integration rather than when somebody files an issue. The code is
+sent only when it is two to sixteen lowercase letters and digits and nothing
+else; a known model sends no such flag.
+
 The flags and the numbers the report can carry are two closed lists next to
 the code that builds it, `FEATURE_KEYS` and `METRIC_KEYS` in `stats_extra.py`,
 and a test builds the report with everything set and fails the moment it grows
