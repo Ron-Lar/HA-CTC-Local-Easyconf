@@ -154,6 +154,36 @@ class SeenValues:
             self._on_new()
         return len(new_keys), len(new_numeric)
 
+    def rename(self, moves: Mapping[str, str]) -> bool:
+        """Carry what was seen under a display row's old key over to its new one.
+
+        A row's key follows its place on the page since roadmap L2, and the
+        first reading of the menu after that gives every row a new key; the
+        record of what it has had must follow, or the CTC page would leave
+        out a row that is zero right now as one that has never been anything
+        else, and a row that reads the marker would wait for its entity again.
+        Both sets, in memory; returns whether anything moved, and the caller
+        writes it down. Run at every set-up while a moved row says where it
+        came from, so a key an older copy of the store brings back moves again.
+        """
+        changed = False
+        for old, new in moves.items():
+            for record in (self.keys, self.numeric):
+                if old in record:
+                    record.discard(old)
+                    record.add(new)
+                    changed = True
+        return changed
+
+    async def async_save(self) -> None:
+        """Write the record down now, rather than after the usual delay."""
+        try:
+            await self._store.async_save(
+                {"keys": sorted(self.keys), "numeric": sorted(self.numeric)}
+            )
+        except Exception as err:  # noqa: BLE001 - the delayed save writes it later anyway
+            _LOGGER.debug("Could not write the seen values down: %s", err)
+
     def _save(self) -> None:
         try:
             self._store.async_delay_save(

@@ -70,7 +70,16 @@ from .discovery import (
     async_probe_web,
     settings_stem,
 )
-from .keys import MOVED, NEW, Known, match_discovery, moved_data, moved_title
+from .keys import (
+    MOVED,
+    NEW,
+    Known,
+    match_discovery,
+    moved_data,
+    moved_title,
+    union_by_page,
+    with_previous_keys,
+)
 from .modbus_api import CtcModbusClient, CtcModbusError
 from .modbus_probe import ANSWERED, BUSY, SILENT, async_classify
 from .web_api import CtcWebClient, CtcWebError
@@ -924,12 +933,16 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         # An interrupted sweep is offered for what it found, beside the stored
         # pages it did not reach, and is not fresh: nothing disappears and the
         # version is not stamped. See catalogue.menu_after_rescan.
-        self._pages, self._fresh = menu_after_rescan(
-            pages_from_storage(self._entry.options.get(CONF_MENU)),
-            pages_from_storage(self._entry.options.get(CONF_SLOW_PAGES)),
-            reading.pages,
-            reading.complete,
+        stored_menu = pages_from_storage(self._entry.options.get(CONF_MENU))
+        stored_selection = pages_from_storage(self._entry.options.get(CONF_SLOW_PAGES))
+        pages, self._fresh = menu_after_rescan(
+            stored_menu, stored_selection, reading.pages, reading.complete
         )
+        # Each row carries the key it had where that was another, so the
+        # set-up the save brings moves its entity and stored values over
+        # (roadmap L2). A page read whole is paired like the background's
+        # reading; a stored page the reading did not reach pairs with itself.
+        self._pages = with_previous_keys(union_by_page(stored_menu, stored_selection), pages)
         self._found = bool(reading.pages)
         self._root = reading.root
 

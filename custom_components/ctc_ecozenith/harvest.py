@@ -95,6 +95,34 @@ class StoredHarvest:
             moments.append(self.harvested_at)
         return max(moments) if moments else None
 
+    def renamed(self, moves: Mapping[str, str]) -> "StoredHarvest":
+        """The same harvest with each display row under the key it has now (roadmap L2).
+
+        A row's key follows its place on the page, and the first reading of
+        the menu after that change gives every row a new key: the value and
+        the moment it was read move with it, so the sensors come up with the
+        last harvest after the reload as after any other. Where both the old
+        and the new key are there, an older copy of the store written back
+        after the move, the later reading wins.
+        """
+        values: dict[str, float] = {}
+        read_at: dict[str, datetime] = {}
+        for key, value in self.values.items():
+            target = moves.get(key, key)
+            moment = self.read_at.get(key)
+            known = read_at.get(target)
+            if target in values and (moment is None or (known is not None and known >= moment)):
+                continue
+            values[target] = value
+            if moment is not None:
+                read_at[target] = moment
+        return StoredHarvest(
+            values=values,
+            read_at=read_at,
+            harvested_at=self.harvested_at,
+            consumption=self.consumption,
+        )
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "values": {key: value for key, value in self.values.items()},
@@ -219,6 +247,15 @@ class HarvestMemory:
             self._pending = None
             return False
         self._remembered_at = harvested_at
+        return True
+
+    async def async_save(self, stored: StoredHarvest) -> bool:
+        """Write a harvest down now, as it is: what set-up does after moving its keys."""
+        try:
+            await self._store.async_save(stored.as_dict())
+        except Exception as err:  # noqa: BLE001 - the next harvest writes it anyway
+            _LOGGER.debug("Could not write the harvest down: %s", err)
+            return False
         return True
 
     async def async_flush(self) -> bool:

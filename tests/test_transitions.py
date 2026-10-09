@@ -611,11 +611,11 @@ def _harvested(catalogue, data, page_number):
     return Page()
 
 
-@pytest.mark.parametrize("name", ["i255_128", "i550_136"])
-def test_the_starts_per_day_row_is_found_on_both_history_pages(transitions, catalogue, page, name):
+@pytest.mark.parametrize("name, key", [("i255_128", "p30_s128_v23"), ("i550_136", "p30_s136_v26")])
+def test_the_starts_per_day_row_is_found_on_both_history_pages(transitions, catalogue, page, name, key):
     found = transitions.find_starts_per_day([_harvested(catalogue, page(name), 30)])
     assert found is not None
-    assert found.key == "p30_antal_starter_24"
+    assert found.key == key
     assert found.label == "Antal starter /24"
     assert found.unit is None
 

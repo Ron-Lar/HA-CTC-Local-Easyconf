@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .const import PERIOD_MARKERS, SENTINELS, SlowPage, SlowValue
+from .keys import row_key
 from .web_api import CtcWebClient, CtcWebError, Widget, tap_target
 
 _LOGGER = logging.getLogger(__name__)
@@ -161,24 +162,6 @@ def _clean_label(label: str) -> str:
     base = _CLOCK_SUFFIX.sub("", base)
     base = _PERIOD_UNIT.sub(r"\1", base)
     cleaned = _LABEL_UNIT.sub("", base).strip(" ()") or base
-    return f"{cleaned}{suffix.group(0)}" if suffix else cleaned
-
-
-#: What a row's key has been built from since the first release: the row name
-#: as the panel wrote it, less one trailing unit. Frozen on purpose. The key is
-#: the entity's identity, sensor.py builds unique_id from it, and every key that
-#: moves leaves an entity behind in the registry with a twin beside it. So the
-#: name is free to improve in _clean_label, "Drift /24 h:m" reads "Drift /24",
-#: while the key stays what every installation already carries, until keys are
-#: built from the row's place on the page instead (roadmap L2).
-_KEY_UNIT = re.compile(r"[( ](kWh|l/min|ppm|°C|kW|rps|bar|min|%|A|V|h)\)?\s*$")
-
-
-def _key_label(label: str) -> str:
-    """The name a row's key is made of, built the way the first release built it."""
-    suffix = _POSITION_SUFFIX.search(label.strip())
-    base = _base_label(label)
-    cleaned = _KEY_UNIT.sub("", base).strip(" ()") or base
     return f"{cleaned}{suffix.group(0)}" if suffix else cleaned
 
 
@@ -375,12 +358,6 @@ def _pair_labels(widgets: list[Widget]) -> dict[int, str]:
     return pairing
 
 
-def _slug(text: str, fallback: str) -> str:
-    cleaned = re.sub(r"[^a-z0-9]+", "_", text.lower().replace("å", "a").replace("ä", "a").replace("ö", "o"))
-    cleaned = cleaned.strip("_")
-    return cleaned or fallback
-
-
 async def async_page_title(client: CtcWebClient, screens: list[int]) -> str:
     """Return a human title for a page.
 
@@ -454,7 +431,9 @@ class PageValues:
 
     A screen whose widgets could not be read leaves its rows out, and a
     caption the catalogue would not give up (web_api.async_text answers ""
-    for it) leaves its row named "Värde N" under a key the row never had. Both
+    for it) leaves its row named "Värde N": the key, which follows the row's
+    place (keys.row_key), stays, but a row found by its name, the delivered
+    heat counter among them, is not found under that one. Both
     are silent in ``values``: the list is as true as it goes and says nothing
     about what is missing. So the reading says it beside the values, and a
     page that was not read whole is not taken for the page.
@@ -507,13 +486,15 @@ async def async_read_page_values(
         for raw_label, fmt, indices, index in _join_clock_rows(readings):
             unit = _unit(fmt, raw_label)
             label = _clean_label(raw_label)
-            # The key from the row's own name, never from the cleaned one: the
-            # name may get better, the key is what the entity is known by.
-            base = _slug(_key_label(raw_label), f"s{screen}_w{index}")
-            key = f"p{page}_{base}"
+            # The key from where the row stands, never from its name: the name
+            # may get better, and a caption the display would not give up
+            # leaves the name "Värde N" for a round, but the key is what the
+            # entity is known by and stays (keys.row_key, roadmap L2).
+            base = row_key(page, screen, indices[0])
+            key = base
             suffix = 2
             while key in seen:
-                key = f"p{page}_{base}_{suffix}"
+                key = f"{base}_{suffix}"
                 suffix += 1
             seen.add(key)
             found.append(
@@ -554,9 +535,11 @@ class MenuReading:
     give up, which renames the row it belonged to (see :class:`PageValues`).
     Such a page is left out of ``pages`` and makes the reading incomplete,
     for the same reason an unreached page does: written in place of the
-    stored page it would take a row's entity with it, VSH's delivered heat
-    counter among the rows that have read that way, and the registry tidy-up
-    would then remove that row's entry as one the parser no longer builds.
+    stored page it would give a row a name it does not have. Before the keys
+    followed the row's place (roadmap L2) that also took the row's entity
+    with it, VSH's delivered heat counter among the rows that have read that
+    way; now the entity stays, but the counter is found by its name, so the
+    coefficient of performance would still lose it until the next reading.
     """
 
     pages: list[SlowPage] = field(default_factory=list)
@@ -1043,6 +1026,9 @@ def pages_to_storage(pages: list[SlowPage]) -> list[dict[str, Any]]:
                     "vars": list(value.var_indices),
                     "unit": value.unit,
                     "scale": value.scale,
+                    # Only where the row has moved: a release that does not
+                    # know the field reads past it (roadmap L2).
+                    **({"previous_key": value.previous_key} if value.previous_key else {}),
                 }
                 for value in page.values
             ],
@@ -1073,6 +1059,11 @@ def pages_from_storage(stored: list[dict[str, Any]] | None) -> list[SlowPage]:
                         var_indices=[int(i) for i in raw.get("vars", [])],
                         unit=raw.get("unit"),
                         scale=float(raw.get("scale", 1.0)),
+                        previous_key=(
+                            raw["previous_key"]
+                            if isinstance(raw.get("previous_key"), str) and raw["previous_key"]
+                            else None
+                        ),
                     )
                 )
             pages.append(page)
