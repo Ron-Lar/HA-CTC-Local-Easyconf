@@ -80,9 +80,15 @@ def test_the_background_adopts_the_identity_instead_of_writing_it_for_a_reload()
     ):
         assert told in adopt, told
         assert adopt.index(told) < adopt.index("async_update_entry("), f"{told} före skrivningen"
+    # One rule for the listener and for the task that writes from the inside.
+    rule = source.split("def _takes_a_reload")[1].split("\nasync def ")[0]
+    assert "only_identity_differs(runtime.applied_options, options)" in rule
+    assert "dict(entry.data) != runtime.applied_data" in rule, "ett värdbyte laddar fortfarande om"
     reload = source.split("async def _async_reload")[1].split("\nasync def ")[0]
-    assert "only_identity_differs(runtime.applied_options, entry.options)" in reload
-    assert "dict(entry.data) == runtime.applied_data" in reload, "ett värdbyte laddar fortfarande om"
+    assert "_takes_a_reload(entry, runtime, entry.options)" in reload
+    assert "_takes_a_reload(entry, runtime, options)" in catch_up, (
+        "bakgrundsuppgiften avgör med lyssnarens regel om dess skrivning laddar om"
+    )
 
 
 def test_the_identity_sensors_read_live_and_follow_the_signal():
