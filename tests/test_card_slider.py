@@ -178,14 +178,46 @@ def test_a_refused_write_puts_the_slider_back_to_unset():
 
 
 def test_a_taken_write_shows_the_value_once_the_pump_reports_it():
+    # The state comes as number.py publishes it, a float written "40.0"; the
+    # range input writes it back as "40", and the row stops looking busy.
     assert _play("""
       t.drag("40"); t.release();
       await t.accept();
-      t.state("40", {"styrning aktiv": "ja"});
+      t.state("40.0", {"styrning aktiv": "ja"});
     """, "number.dhw", "unknown", DHW) == {
-        "unset": "0", "pending": "0", "value": "40", "text": "40 °C", "why": False,
+        "unset": "0", "pending": "0", "value": "40", "text": "40.0 °C", "why": False,
         "placeholder": "", "calls": [40],
     }
+
+
+def test_the_pumps_own_value_is_what_ends_the_busy_mark_not_the_timer():
+    # F7.2: a taken write leaves the row busy until the pump reports the value,
+    # not for the six seconds of the timer. A state that still carries the old
+    # value keeps it busy; the written value, as "40.0", ends it. The slider
+    # keeps the focus after a drag in Chrome and in the app, so it is held.
+    assert _play("""
+      t.control.focus();
+      t.drag("40"); t.release();
+      await t.accept();
+      t.state("55.0");
+      const old = t.result();
+      if (old.pending !== "1") throw new Error("the old value ended the busy mark: " + JSON.stringify(old));
+      t.state("40.0", {"styrning aktiv": "ja"});
+    """, "number.dhw", "55", DHW)["pending"] == "0"
+
+
+def test_the_stub_writes_a_range_value_back_the_way_a_browser_does():
+    # What F7.2 turns on: a browser's range input keeps "40.0" as "40" (a
+    # number input keeps "40.0"), and holds the middle of its range for a
+    # value that is no number, such as "unavailable".
+    assert _play("""
+      t.control.value = "40.0";
+      const shortest = t.control.value;
+      t.control.value = "unavailable";
+      const middle = t.control.value;
+      if (shortest !== "40" || middle !== "47.5") throw new Error(JSON.stringify({shortest, middle}));
+      t.state("55");
+    """, "number.dhw", "unknown", DHW)["value"] == "55"
 
 
 def test_a_slider_with_a_value_is_drawn_as_before():
@@ -214,7 +246,8 @@ def test_an_unknown_field_is_empty_with_the_word_as_its_placeholder():
 
 def test_the_top_speed_reads_no_limit_for_the_pumps_own_zero_and_zero_for_a_written_one():
     mirrored = _play("", "number.rps", "0.0", RPS, zero_means="no_limit")
-    assert (mirrored["text"], mirrored["unset"], mirrored["value"]) == ("ingen gräns", "0", "0.0")
+    # The range input writes the state's "0.0" back as "0", as a browser does.
+    assert (mirrored["text"], mirrored["unset"], mirrored["value"]) == ("ingen gräns", "0", "0")
     written = _play(
         "t.state('0.0', {'styrning aktiv': 'ja'});", "number.rps", "0.0", RPS, zero_means="no_limit"
     )

@@ -662,8 +662,14 @@
               ? (attributes.min !== undefined ? attributes.min : 0)
               : stateObj.state;
             reading.textContent = this._text(item, stateObj);
-            if (String(slider.value) === String(stateObj.state)) container.dataset.pending = "0";
           }
+          // The pump reports what the slider shows: the write has landed, and
+          // the row stops looking busy now rather than when the timer runs out.
+          // Asked whoever is holding the slider, since a range input keeps the
+          // focus after a drag, and asked of the numbers: Home Assistant writes
+          // a float as "40.0" and a range input serializes it back as "40".
+          // unknown and unavailable are NaN and never equal.
+          if (Number(slider.value) === Number(stateObj.state)) container.dataset.pending = "0";
           mark(unset);
           slider.disabled = stateObj.state === "unavailable";
         };
