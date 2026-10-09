@@ -648,14 +648,19 @@
           mark(false);
           reading.textContent = withUnit(slider.value, attributes.unit_of_measurement);
         });
-        const update = () => {
+        /** Keep the slider current. `force` puts the pump's value in even while
+         *  the user holds the slider: a range input keeps the focus after a
+         *  drag, and a refused write must not leave the dragged value beside
+         *  a knob the unset style has hidden. Taking the focus instead would
+         *  pull it from a keyboard user in the middle of adjusting. */
+        const update = (force = false) => {
           const stateObj = this._state(entityId);
           if (!stateObj) return;
           const unset = stateObj.state === "unknown";
           // A write on its way from an unset slider: the knob stays where the
           // user put it until the pump's value arrives or the refusal lets go.
           if (unset && container.dataset.pending === "1") return;
-          if (!holding(slider)) {
+          if (force || !holding(slider)) {
             // Unset, the knob is parked at the bottom of the range, hidden by
             // the style, rather than left in the middle by the browser.
             slider.value = unset
@@ -674,9 +679,10 @@
           slider.disabled = stateObj.state === "unavailable";
         };
         // A refused write goes straight back to what the pump says, unset
-        // included, rather than waiting for the next state to come round.
+        // included, rather than waiting for the next state to come round, and
+        // whether or not the slider still has the focus from the drag.
         slider.addEventListener("change", () => {
-          send(slider.value).then((taken) => { if (!taken) update(); });
+          send(slider.value).then((taken) => { if (!taken) update(true); });
         });
         container.append(slider, reading, why);
         return update;
