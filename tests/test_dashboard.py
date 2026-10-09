@@ -128,6 +128,33 @@ def test_the_overview_says_what_the_pump_is_doing_right_now(dashboard_views, pum
     assert all("hide_unavailable" not in item for _k, item, _e in _items(status))
 
 
+def test_boolean_chips_are_there_only_while_on_and_in_the_colour_of_what_they_mean(
+    dashboard_views, pumps
+):
+    """R36: a raised alarm reads from the door, and a row of "Av" is not there to read."""
+    pump = pumps["vsh"]
+    status = _tab(dashboard_views, pump, "overview")[0]
+    by_key = {key: item for key, (_k, item, _e) in zip(_keys(pump, status), _items(status))}
+    # The theme's colours, by name: the card turns "error" into --error-color.
+    assert {key: item.get("color") for key, item in by_key.items() if "on_state" in item} == {
+        "alarm": "error",
+        "blocked": "warning",
+        "smartgrid_active": "warning",
+        "defrosting": "info",
+        "compressor_running": "success",
+        "immersion_active": "success",
+    }
+    assert all(item["on_state"] == "on" for item in by_key.values() if "on_state" in item)
+    # The enum chips stay as they are and say what they read, whatever it is.
+    for key in ("system_status", "hp1_status", "hs1_status", "sg_mode"):
+        assert "on_state" not in by_key[key] and "color" not in by_key[key]
+    # Every boolean on the line is coloured; the colours are the theme's four.
+    assert dashboard_views._CHIP_COLOURS.keys() == {
+        key for key, item in by_key.items() if item["entity"].startswith("binary_sensor.")
+    }
+    assert set(dashboard_views._CHIP_COLOURS.values()) == {"error", "warning", "info", "success"}
+
+
 def test_the_overview_carries_the_controls_worth_reaching_for(dashboard_views, pumps):
     pump = pumps["vsh"]
     quick = _section(_tab(dashboard_views, pump, "overview"), "Snabbstyrning")

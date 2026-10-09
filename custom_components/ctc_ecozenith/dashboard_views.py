@@ -109,6 +109,21 @@ _STATUS_ROWS = (
 #: row in the full list, not a chip: the chips are states, and the logbook is
 #: where the events are read.
 _EVENT_ROWS = ("events",)
+#: The boolean chips: each is on the line only while it is on, in the colour of
+#: what it means, so a raised alarm reads from the door and a row of "Av" is not
+#: there to read. The colour is the name of one of Home Assistant's theme
+#: colours, which the card turns into --<name>-color; the enum chips stay grey
+#: and say what they read whatever it is.
+_CHIP_COLOURS = {
+    "alarm": "error",
+    "blocked": "warning",
+    "smartgrid_active": "warning",
+    "defrosting": "info",
+    "compressor_running": "success",
+    "immersion_active": "success",
+}
+#: What a binary sensor reads while it is on.
+_ON = "on"
 
 #: The overview's key figures: how warm it is around the circuit, how hard the
 #: compressor is working and what comes out of it.
@@ -482,8 +497,22 @@ class _Builder:
             card["visibility"] = _any_of([_shown_when_available(i["entity"]) for i in items])
 
     def chips(self, keys: Iterable[str]) -> dict[str, Any] | None:
-        """What the pump is doing right now, as a line of chips."""
-        return self._card(CHIPS_CARD, "items", self._items(keys, hideable=False))
+        """What the pump is doing right now, as a line of chips.
+
+        An enum chip is always there and says what it reads, an unavailable pump
+        included. A boolean chip is there only while it is on, in the colour of
+        what it means.
+        """
+        items: list[dict[str, Any]] = []
+        for key in keys:
+            item = self.item(key, hideable=False)
+            if item is None:
+                continue
+            if key in _CHIP_COLOURS:
+                item["on_state"] = _ON
+                item["color"] = _CHIP_COLOURS[key]
+            items.append(item)
+        return self._card(CHIPS_CARD, "items", items)
 
     def readings(self, keys: Iterable[str], learnt: bool = True) -> dict[str, Any] | None:
         """The key figures, each a small name over a large number."""
