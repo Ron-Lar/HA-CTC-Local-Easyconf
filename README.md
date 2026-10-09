@@ -32,10 +32,12 @@ on older display software, so that page has to be among the harvested ones. The
 energy consumed comes from the display's own counter where it has one. The older
 software has none, and there it comes from Modbus register 62341 instead, which
 holds the same number: 9166 kWh against the display's 9166.0 on an i255. It is
-read at the moment the display is, so the two always form a pair. A register
-that answers zero still counts as answered: the sensors exist from the start,
-and say in their attributes that the counter stands at zero, which is how a
-controller that never writes it is told from one that is simply new.
+read at the moment the display is, so the two always form a pair. The sensors
+exist from the start, whatever Modbus has said so far, and their attributes say
+what is going on: a register that answers zero is a counter standing at zero,
+which is how a controller that never writes it is told from one that is simply
+new, and a register that has not answered at all is said to be missing, rather
+than the sensors never appearing because one block was silent in the first poll.
 
 A figure is shown as soon as it rests on something: ten kilowatt hours of
 consumption for the lifetime and yearly ones, three for a single day, which is
@@ -293,9 +295,11 @@ use, whether control is enabled, how many display pages are harvested and how
 many register reads failed. It also says whether a coefficient of performance
 is possible and, if not, why: whether the history page is harvested, whether
 the delivered heat counter was recognised on it, whether the energy consumed
-comes from the display or from Modbus (for Modbus, whether register 62341
-answered at all, whatever it answered), whether each of those two counters
-actually handed over a number at the last read, and which of three things is in
+comes from the display or from Modbus (for Modbus, whether register 62341 has
+answered at all since Home Assistant started, judged on the raw words so that
+CTC's marker for a counter that is not fitted still counts as an answer),
+whether each of those two counters actually handed over a number at the last
+read, and which of three things is in
 the way, too little energy counted so far, a counter standing still although
 the unit has been running, or a quotient no heat pump could produce. Yes or no
 each time, never which page or what is on it.

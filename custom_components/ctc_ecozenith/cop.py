@@ -21,9 +21,15 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Collection
 
-from .const import COP_HISTORY_DAYS, COP_WINDOW_DAYS, PERIOD_MARKERS, SENTINELS
+from .const import (
+    COP_HISTORY_DAYS,
+    COP_WINDOW_DAYS,
+    MODBUS_SENSORS,
+    PERIOD_MARKERS,
+    SENTINELS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -154,15 +160,21 @@ def cop_reason(
     energy_out: float | None,
     energy_in: float | None,
     hours: float | None = None,
+    modbus_answered: bool = True,
 ) -> str | None:
     """Why a figure is missing, in words the owner can act on or dismiss.
 
     An empty sensor that says nothing is the thing people ask about, so it says
     which of the reasons it is: no sample yet, too little energy so far, a
-    counter standing still, or two counters that do not add up.
+    counter standing still, or two counters that do not add up. Where the
+    consumed side comes from Modbus, ``modbus_answered`` says whether register
+    62341 has answered at all, so a model that lacks it is told so instead of
+    waiting forever for a reading.
     """
     if value is not None:
         return None
+    if energy_in is None and not modbus_answered:
+        return "registret 62341 har inte svarat, så tillförd energi saknas"
     if basis == "first_year" and not energy_in:
         return "första året är inte fullt ännu"
     if energy_out is None or energy_in is None:
@@ -430,20 +442,28 @@ def find_energy_totals(pages: list[Any]) -> tuple[Any | None, Any | None]:
 
 #: Modbus register 62341, the energy the compressor has consumed, in kWh.
 MODBUS_CONSUMPTION_KEY = "compressor_kwh"
+MODBUS_CONSUMPTION_ADDRESS = next(
+    d.address for d in MODBUS_SENSORS if d.key == MODBUS_CONSUMPTION_KEY
+)
 
 
-def modbus_consumption_answered(data: dict[str, Any] | None) -> bool:
-    """Whether the controller answered for register 62341 at all.
+def modbus_consumption_answered(answered: Collection[int] | None) -> bool:
+    """Whether the controller has answered for register 62341 at all.
 
-    The coordinator only puts a key into its data when the block holding the
-    register was read, so the key being there says the register answered,
-    whatever it answered with. That is a different question from whether the
-    answer is a number worth dividing by, which :func:`modbus_consumption`
-    settles, and the two are kept apart on purpose: a register that answers
-    zero is fitted and can be found to be stuck, while one that never answers
-    has nothing to say about the machine.
+    Judged on the raw addresses the coordinator keeps in ``answered``, never on
+    its decoded data. A key is left out of the data both when the block was
+    silent this round and when the pair decoded to CTC's marker for a counter
+    that is not fitted, so read off the data, a register that answered with the
+    marker and a block that was quiet once would both pass for a register the
+    model lacks. The set is cumulative over the run: answered means answered at
+    least once since Home Assistant started, and a block the model lacks never
+    joins it. Whether the answer is a number worth dividing by is a different
+    question, which :func:`modbus_consumption` settles, and the two are kept
+    apart on purpose: a register that answers zero is fitted and can be found
+    to be stuck, while one that never answers has nothing to say about the
+    machine.
     """
-    return MODBUS_CONSUMPTION_KEY in (data or {})
+    return MODBUS_CONSUMPTION_ADDRESS in (answered or ())
 
 
 def modbus_consumption(data: dict[str, Any] | None) -> float | None:
