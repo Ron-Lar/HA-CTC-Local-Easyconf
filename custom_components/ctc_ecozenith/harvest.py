@@ -160,6 +160,9 @@ class HarvestMemory:
     def __init__(self, store: Any) -> None:
         self._store = store
         self._remembered_at: datetime | None = None
+        #: The last harvest handed to the store with its delay, until the
+        #: store has written it; what :meth:`async_flush` writes out early.
+        self._pending: dict[str, Any] | None = None
 
     async def async_load(self) -> StoredHarvest | None:
         try:
@@ -197,10 +200,39 @@ class HarvestMemory:
             consumption=consumption,
         )
         payload = harvest.as_dict()
+
+        def _payload() -> dict[str, Any]:
+            # Called by the store when it writes: nothing is waiting after that.
+            if self._pending is payload:
+                self._pending = None
+            return payload
+
+        self._pending = payload
         try:
-            self._store.async_delay_save(lambda: payload, SAVE_DELAY_SECONDS)
+            self._store.async_delay_save(_payload, SAVE_DELAY_SECONDS)
         except Exception as err:  # noqa: BLE001 - a lost save only costs one walk at the next start
             _LOGGER.debug("Could not schedule saving the harvest: %s", err)
+            self._pending = None
             return False
         self._remembered_at = harvested_at
+        return True
+
+    async def async_flush(self) -> bool:
+        """Write a harvest that is still waiting out its delay down now. True when one was.
+
+        The delay is for the common case, where nothing hurries. A reload
+        does: the entry it brings reads the store at set-up, and a harvest
+        that ran a moment before the reload would otherwise be ten seconds
+        short of being there, which costs the panel a whole walk more. The
+        store cancels the delayed write when it is given the data outright.
+        """
+        payload = self._pending
+        if payload is None:
+            return False
+        self._pending = None
+        try:
+            await self._store.async_save(payload)
+        except Exception as err:  # noqa: BLE001 - the delayed write is lost with it, nothing else
+            _LOGGER.debug("Could not write the harvest down: %s", err)
+            return False
         return True

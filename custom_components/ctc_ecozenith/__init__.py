@@ -435,11 +435,21 @@ async def _async_catch_up(
                 # new pages are picked up. The reload cancels this task and
                 # starts it over, and the attempts already spent are
                 # remembered, so a menu that is still owed is tried again
-                # there rather than endlessly. Written with the panel free:
-                # the reload cancels the entry's tasks, the harvest among
-                # them, and a harvest cut short mid-walk would leave the
-                # panel on whatever page it had reached.
+                # there rather than endlessly. Written under the panel lock,
+                # which the harvest holds while it walks: the reload cancels
+                # the entry's tasks, the harvest among them, and a harvest
+                # cut short mid-walk would leave the panel on whatever page
+                # it had reached. The lock is fair, so a harvest that queued
+                # on it while the menu was read, the first one after an
+                # update is one, has walked by the time this gets it.
                 async with client.panel:
+                    # That harvest's store is written out now rather than
+                    # after its delay: the set-up the reload brings reads it,
+                    # and finding it owes the next harvest an interval later
+                    # instead of walking the panel again at once.
+                    memory = getattr(runtime, "harvest_memory", None)
+                    if memory is not None:
+                        await memory.async_flush()
                     hass.config_entries.async_update_entry(entry, options=options)
                 return
             # The screens alone: written in place like the identity. The
@@ -627,6 +637,10 @@ class CtcRuntime:
     #: from the options from walking the same physical panel at once.
     web_client: CtcWebClient
     web: CtcWebCoordinator | None = None
+    #: Where the last harvest is written down for the next start. On the
+    #: runtime so that a write of the options that reloads the entry can have
+    #: it written out first; see _async_catch_up.
+    harvest_memory: HarvestMemory | None = None
     pages: list[SlowPage] = field(default_factory=list)
     control_enabled: bool = False
     identity: Identity = field(default_factory=Identity)
@@ -782,6 +796,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
             Store(hass, HARVEST_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_display")
         )
         stored = await memory.async_load()
+        runtime.harvest_memory = memory
         # The operation data root, which every route starts from: between two
         # pages the harvester steps back to it rather than going home for
         # each. From the menu where it was stored with it, else from the page
