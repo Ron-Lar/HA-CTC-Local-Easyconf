@@ -39,10 +39,15 @@ jobs:
         # The adapter is run against the floor the manifest allows, the version
         # Home Assistant's own modbus integration ships, and whatever PyPI has
         # today. The last leg is deliberately unpinned, past the manifest's own
-        # cap, so the weekly run meets a new major before a user does; it may
-        # not block a push over something the manifest already keeps out.
+        # cap, so the weekly run meets a new major before a user does. It may
+        # not block a push or a pull request over something the manifest
+        # already keeps out, but it must be allowed to fail the scheduled run:
+        # a job that may fail leaves the run green, and GitHub notifies nobody
+        # about a green run, so the early warning would otherwise be seen only
+        # by someone who happens to open the Actions tab. A red Monday run is
+        # the warning, and it goes to whoever last touched this file.
         pymodbus: ["3.6.9", "3.13.1", "latest"]
-    continue-on-error: ${{ matrix.pymodbus == 'latest' }}
+    continue-on-error: ${{ matrix.pymodbus == 'latest' && github.event_name != 'schedule' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
