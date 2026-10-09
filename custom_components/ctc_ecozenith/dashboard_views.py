@@ -163,9 +163,13 @@ _QUICK_CONTROLS = ("ctl_room_setpoint_1", "ctl_dhw_mode", "ctl_extra_dhw", "ctl_
 _CONTROL_GROUPS = (
     ("heating", "mdi:radiator", ("ctl_room_setpoint_1", "ctl_zone_mode_1")),
     ("hot_water", "mdi:water-boiler", ("ctl_dhw_mode", "ctl_dhw_setpoint", "ctl_extra_dhw")),
+    # The button that lets go of every override stands last among the power
+    # controls, with the five minute rule in its own explanation, rather than
+    # in a column of its own beside a note: the room it stood in is for what is
+    # being overridden right now (R49).
     ("power", "mdi:flash",
-     ("ctl_price_mode", "ctl_max_rps", "ctl_immersion_lower", "ctl_immersion_upper")),
-    ("release", "mdi:hand-back-left-outline", ("release_control",)),
+     ("ctl_price_mode", "ctl_max_rps", "ctl_immersion_lower", "ctl_immersion_upper",
+      "release_control")),
 )
 
 # The readings, in sections: (id, icon, keys).
@@ -279,7 +283,6 @@ TEXT = {
         "energy": "Energi och värmefaktor",
         "heating": "Värme",
         "power": "Drift och el",
-        "release": "Släpp styrningen",
         "control": "Styrning",
         "compressor": "Kompressor och köldkrets",
         "cycles": "Starter, körningar och avfrostningar",
@@ -296,11 +299,6 @@ TEXT = {
         "filter": "Sök bland värdena",
         "empty": "Inget värde matchar sökningen.",
         "press": "Utför",
-        "control_note": (
-            "Styrningen skrivs till CTC:s flyktiga register, och pumpen glömmer bort den "
-            "ungefär fem minuter efter den sista skrivningen. Ett läge släpps med "
-            "*Släpp styrningen*, och alla överstyrningar på en gång med knappen här."
-        ),
         "control_off": (
             "Styrning är avstängd. Slå på **Tillåt styrning av värmepumpen** i "
             "[integrationens inställningar](/config/integrations/integration/ctc_ecozenith), "
@@ -336,7 +334,6 @@ TEXT = {
         "energy": "Energy and COP",
         "heating": "Heating",
         "power": "Operation and power",
-        "release": "Release control",
         "control": "Control",
         "compressor": "Compressor and refrigerant circuit",
         "cycles": "Starts, runs and defrosts",
@@ -353,11 +350,6 @@ TEXT = {
         "filter": "Search the values",
         "empty": "No value matches the search.",
         "press": "Run",
-        "control_note": (
-            "Control is written to CTC's volatile registers, and the pump forgets it about "
-            "five minutes after the last write. A mode is released with *Release control*, "
-            "and every override at once with the button here."
-        ),
         "control_off": (
             "Control is switched off. Turn on **Allow controlling the heat pump** in "
             "[the integration's settings](/config/integrations/integration/ctc_ecozenith) "
@@ -721,12 +713,10 @@ def controls_sections(
 ) -> list[dict[str, Any]]:
     """Everything writable, grouped by what it does to the house."""
     build = _Builder(pump, text, ha_version)
-    sections: list[dict[str, Any] | None] = []
-    for group, icon, keys in _CONTROL_GROUPS:
-        cards: list[dict[str, Any] | None] = [build.controls(keys)]
-        if group == "release" and any(cards):
-            cards.append(_note(text["control_note"]))
-        sections.append(_section(_heading(text[group], icon), cards))
+    sections = [
+        _section(_heading(text[group], icon), [build.controls(keys)])
+        for group, icon, keys in _CONTROL_GROUPS
+    ]
     found = [section for section in sections if section]
     if found:
         return found
