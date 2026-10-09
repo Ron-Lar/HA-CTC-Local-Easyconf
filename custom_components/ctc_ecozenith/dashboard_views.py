@@ -322,6 +322,12 @@ TEXT = {
         "failed": "Sidan kunde inte byggas. Detaljerna står i Home Assistants logg.",
         "more_info": "Mer info",
         "explain": "Förklaring",
+        # The cards' own words for a binary state, by device class and plainly,
+        # so a Swedish page never says "Not running" (state_words).
+        "state_on": "Till",
+        "state_off": "Av",
+        "state_problem_on": "Larm",
+        "state_problem_off": "OK",
     },
     "en": {
         "overview": "Overview",
@@ -374,8 +380,29 @@ TEXT = {
         "failed": "The page could not be built. The details are in Home Assistant's log.",
         "more_info": "More info",
         "explain": "Explanation",
+        "state_on": "On",
+        "state_off": "Off",
+        "state_problem_on": "Alarm",
+        "state_problem_off": "OK",
     },
 }
+
+#: What the words for states are called in TEXT.
+_STATE_PREFIX = "state_"
+
+
+def state_words(text: Mapping[str, str]) -> dict[str, str]:
+    """The page's own words for states, as the cards take them under "states".
+
+    Every TEXT entry that starts with state_, without the prefix: "on", "off"
+    and a pair per device class that has its own words ("problem_on"). The
+    cards look a binary state up by device class first and then plainly, and
+    leave a state the table has no word for to Home Assistant.
+    """
+    return {
+        key[len(_STATE_PREFIX):]: value
+        for key, value in text.items() if key.startswith(_STATE_PREFIX)
+    }
 
 
 def language(lang: str | None) -> str:
@@ -553,6 +580,7 @@ class _Builder:
             field: items,
             "more_info": self.text["more_info"],
             "explain": self.text["explain"],
+            "states": state_words(self.text),
             # A section can be several columns wide, and a card of values fills it.
             "grid_options": {"columns": "full"},
         }

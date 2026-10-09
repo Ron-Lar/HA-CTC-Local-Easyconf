@@ -107,9 +107,9 @@ def test_node_gets_the_helpers_and_nothing_is_left_as_a_global():
     assert _run(
         "console.log(JSON.stringify({keys: Object.keys(c).sort(), steps: c.SLIDER_STEPS,"
         " leaked: [typeof globalThis.widgetFor, typeof globalThis.parseFieldValue,"
-        " typeof globalThis.SLIDER_STEPS]}))"
+        " typeof globalThis.ownWord, typeof globalThis.SLIDER_STEPS]}))"
     ) == {
-        "keys": ["SLIDER_STEPS", "parseFieldValue", "widgetFor"],
+        "keys": ["SLIDER_STEPS", "ownWord", "parseFieldValue", "widgetFor"],
         "steps": 130,
-        "leaked": ["undefined"] * 3,
+        "leaked": ["undefined"] * 4,
     }
