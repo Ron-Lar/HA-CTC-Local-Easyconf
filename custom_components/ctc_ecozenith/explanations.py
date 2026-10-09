@@ -268,7 +268,10 @@ DERIVED: dict[str, str] = {
         "kompressorstart och kompressorstopp, avfrostning start och slut, larm och larm borta, "
         "ändrat SmartGrid-läge och ändrad systemstatus. Attributen bär koden före och efter, "
         "deras etiketter, utetemperaturen och, för ett stopp eller ett avfrostningsslut, längden "
-        "i minuter. Första avläsningen efter en start av Home Assistant ger inga händelser."
+        "i minuter. Första avläsningen efter en start av Home Assistant ger inga händelser. "
+        "Entiteten står kvar när Modbus tappas: dess tillstånd är ögonblicket för den senaste "
+        "händelsen, som en tappad lina inte gör osann, och Modbus-sensorerna själva visar att "
+        "linan är borta. En automation ser den därför aldrig gå via otillgänglig och tillbaka."
     ),
     "cop_day": (
         "Värmefaktor senaste dygnet: avgiven värme delat med tillförd el, ur två avläsningar av "
