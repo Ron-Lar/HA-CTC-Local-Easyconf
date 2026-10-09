@@ -28,6 +28,7 @@ from . import dashboard
 from .catalogue import (
     async_discover_pages,
     menu_is_due,
+    menu_root,
     menu_wait,
     merge_menu,
     pages_from_storage,
@@ -50,7 +51,9 @@ from .const import (
     CONF_ENABLE_CONTROL,
     CONF_FAST_INTERVAL,
     CONF_IDENTITY,
+    CONF_IDENTITY_SCREENS,
     CONF_MENU,
+    CONF_MENU_ROOT,
     CONF_MENU_VERSION,
     CONF_LANGUAGE,
     CONF_MODBUS_PORT,
@@ -76,7 +79,12 @@ from .const import (
 )
 from .coordinator import CtcControlManager, CtcModbusCoordinator, CtcWebCoordinator
 from .harvest import STORAGE_VERSION as HARVEST_STORAGE_VERSION, HarvestMemory
-from .identity import Identity, async_read_identity, async_read_identity_via_panel
+from .identity import (
+    Identity,
+    IdentityScreens,
+    async_read_identity,
+    async_read_identity_via_panel,
+)
 from .modbus_api import CtcModbusClient, hold_library_quiet
 from .updates import async_latest_release, newer
 from .seen import SeenValues
@@ -101,11 +109,12 @@ _FAILURES: dict[str, ErrorCounter] = {}
 #: reload, and only while the identity is still missing.
 _WALKED: set[str] = set()
 
-#: Entries whose display has been read for the identity in this run, without
-#: moving the panel. Once per run rather than at every reload: the reading
-#: asks the display for the values of every screen in its map, and a reload
-#: follows the very write that a reading causes.
-_IDENTITY_READ: set[str] = set()
+#: Entries whose display has been swept for the identity's screens in this
+#: run. The sweep asks the display for the values of every screen in its map,
+#: 154 on an i255, so it runs once per run and not at every reload, which is
+#: what follows the very write of what it found. The two screens it finds are
+#: kept in the options and read on their own from then on.
+_SWEPT: set[str] = set()
 
 #: Attempts spent on each entry's menu in this run. Counted rather than flagged,
 #: and kept across reloads, because writing the options reloads the entry: a flag
@@ -212,8 +221,9 @@ async def _async_catch_up(
     only writes it into a screen once that screen has been shown on the
     panel, so a reading before that finds nothing and the gaps are filled
     the first time someone opens the page; the reading itself moves nothing.
-    Once per run rather than at every reload, since a reload is what the
-    write of a found identity causes.
+    The two screens it lives on are kept in the options once found, and only
+    they are read while a field is missing; the sweep that finds them, over
+    the values of every screen in the map, runs once per run.
 
     A menu that could not be read is tried again a few minutes later in the same
     run, and said out loud once the tries are spent. A display that was busy for
@@ -242,9 +252,19 @@ async def _async_catch_up(
                 changed.update(await _async_reread_menu(client, entry, version))
 
             identity = runtime.identity
-            if not identity.is_complete and entry.entry_id not in _IDENTITY_READ:
-                _IDENTITY_READ.add(entry.entry_id)
-                identity = identity.merged_with(await async_read_identity(client))
+            screens = IdentityScreens.from_dict(entry.options.get(CONF_IDENTITY_SCREENS))
+            known_screens = screens.as_dict()
+            if not identity.is_complete:
+                sweep = entry.entry_id not in _SWEPT
+                _SWEPT.add(entry.entry_id)
+                found = await async_read_identity(
+                    client,
+                    screens,
+                    sweep=sweep,
+                    need_system=identity.needs_system_screen,
+                    need_heatpump=identity.needs_heatpump_screen,
+                )
+                identity = identity.merged_with(found)
 
             if (
                 not identity.serial
@@ -259,10 +279,13 @@ async def _async_catch_up(
                         # Not in the options form: the press behind it has never
                         # been tried on a real panel, see const.CONF_TRY_QUICK_MENU.
                         quick_menu=bool(entry.options.get(CONF_TRY_QUICK_MENU, False)),
+                        screens=screens,
                     )
                 identity = identity.merged_with(found)
             if identity.as_dict() != runtime.identity.as_dict():
                 changed[CONF_IDENTITY] = identity.as_dict()
+            if screens.as_dict() != known_screens:
+                changed[CONF_IDENTITY_SCREENS] = screens.as_dict()
         except Exception as err:  # noqa: BLE001 - catching up must never break the entry
             _LOGGER.debug("Could not catch up with the display: %s", err)
 
@@ -342,11 +365,14 @@ async def _async_reread_menu(
         reading.pages,
     )
     chosen = set(selected)
-    return {
+    changed = {
         CONF_MENU: pages_to_storage(menu),
         CONF_SLOW_PAGES: pages_to_storage([page for page in menu if page.page in chosen]),
         CONF_MENU_VERSION: version,
     }
+    if reading.root is not None:
+        changed[CONF_MENU_ROOT] = reading.root
+    return changed
 
 
 def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, Any]:
@@ -572,6 +598,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
             Store(hass, HARVEST_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_display")
         )
         stored = await memory.async_load()
+        # The operation data root, which every route starts from: between two
+        # pages the harvester steps back to it rather than going home for
+        # each. From the menu where it was stored with it, else from the page
+        # with the empty route, else learnt the first time the tile is pressed.
+        stored_root = options.get(CONF_MENU_ROOT)
+        web_client.root = (
+            int(stored_root)
+            if isinstance(stored_root, int) and not isinstance(stored_root, bool)
+            else menu_root(pages_from_storage(options.get(CONF_MENU)) or pages)
+        )
         web = CtcWebCoordinator(
             hass,
             web_client,

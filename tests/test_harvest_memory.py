@@ -287,11 +287,11 @@ def test_removing_the_entry_takes_all_three_stores_with_it():
     assert remove.count(".async_remove()") == 3
 
 
-def test_the_identity_is_read_in_the_background_once_per_run():
+def test_the_identity_is_read_in_the_background_and_swept_once_per_run():
     source = _source("__init__.py")
     catch_up = source.split("async def _async_catch_up")[1].split("\ndef ")[0]
-    assert "async_read_identity(client)" in catch_up
-    assert "_IDENTITY_READ" in catch_up
+    assert "await async_read_identity(" in catch_up
+    assert "_SWEPT" in catch_up
     # And the options are written with the panel free, so the reload that
     # follows cuts no harvest short.
     writing = catch_up.split("if changed:")[1]

@@ -75,6 +75,13 @@ So the display is treated as a supplement, not the base:
   walks a few seconds after start. The serial number and the firmware versions
   are read in the background too, never during set-up.
 - The panel is put back where it was afterwards.
+- A walk asks the display for as little as it can. The operation data tile on
+  the home screen is looked up once, between two pages the panel steps back to
+  the operation data menu and replays the route from there instead of going
+  home for each, and the serial number and firmware versions are read from
+  the two screens they live on once those are known, rather than from every
+  screen in the map. The log says on debug what each walk cost in requests
+  and presses.
 - If the panel is not where the integration left it, somebody is standing at it,
   and that cycle is skipped.
 - Reading the menu again from Configure takes the same turn at the panel as

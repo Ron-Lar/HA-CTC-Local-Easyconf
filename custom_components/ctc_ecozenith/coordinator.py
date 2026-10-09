@@ -335,6 +335,7 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         read: list[int] = []
         missed: list[int] = []
         last_error: CtcWebError | None = None
+        cost_before = self._cost()
         try:
             for page in self.pages:
                 try:
@@ -349,6 +350,7 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         finally:
             await self._async_leave(restore_to)
         self.pages_read, self.pages_missed = read, missed
+        self._say_cost(cost_before, read, missed)
 
         if not read:
             why = f": {last_error}" if last_error is not None else ""
@@ -363,6 +365,27 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed("no value could be read from the display")
         self.last_harvest = utcnow()
         return data
+
+    def _cost(self) -> tuple[int, int]:
+        """The client's request and tap counters, where it keeps them."""
+        return int(getattr(self.client, "requests", 0)), int(getattr(self.client, "taps", 0))
+
+    def _say_cost(self, before: tuple[int, int], read: list[int], missed: list[int]) -> None:
+        """One debug line per walk: what it read and what it cost the display.
+
+        The display's web server drops connections above a handful in flight
+        and shares them with whoever stands at the panel, so a walk that costs
+        hundreds of requests is a walk that fails for them; this is how that
+        is seen in a log rather than guessed from timeouts.
+        """
+        requests, taps = self._cost()
+        _LOGGER.debug(
+            "Harvest read pages %s and missed %s at a cost of %s requests and %s taps",
+            read,
+            missed,
+            requests - before[0],
+            taps - before[1],
+        )
 
     async def _async_origin(self) -> int:
         """Where the panel stands as the harvest begins."""
