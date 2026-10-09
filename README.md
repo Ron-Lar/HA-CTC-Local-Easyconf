@@ -38,6 +38,12 @@ what is going on: a register that answers zero is a counter standing at zero,
 which is how a controller that never writes it is told from one that is simply
 new, and a register that has not answered at all is said to be missing, rather
 than the sensors never appearing because one block was silent in the first poll.
+Each sensor stands on its own span and never borrows another's: the lifetime
+figure is not relabelled as a year, the yearly sensor says how many of its 365
+days of samples it has and from when, the first year is carried by the
+commissioning day alone and says when that day is unknown, and when the display
+goes quiet the figures that rest on stored samples stay available and say since
+when it has been quiet, while the daily figure goes with the display.
 
 A figure is shown as soon as it rests on something: ten kilowatt hours of
 consumption for the lifetime and yearly ones, three for a single day, which is

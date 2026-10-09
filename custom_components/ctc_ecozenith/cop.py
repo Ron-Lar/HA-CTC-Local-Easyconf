@@ -11,9 +11,12 @@ page but no consumed energy at all.
 Dividing those two gives the figure for the whole life of the machine, which
 flatters or punishes it for years nobody is asking about. A yearly figure needs
 the difference across a window, so one sample a day is kept and the oldest one
-inside the window is used as the starting point. Until a year of samples exists
-the lifetime figure is reported instead, and which of the two it is, is stated
-rather than hidden.
+inside the window is used as the starting point. Each span stands on its own:
+the lifetime figure is never dressed up as a year, and until a year of samples
+exists the yearly figure says how far the samples have come instead of showing
+nothing. The commissioning day, worked out from the powered-on hours, serves
+the first year alone: the counters stood at zero that day, so a sample from
+about a year later holds the whole first year.
 """
 
 from __future__ import annotations
@@ -76,11 +79,17 @@ class CopResult:
     """A coefficient of performance and how it was arrived at."""
 
     value: float | None
-    #: "year" once a full window is available, "lifetime" before that.
+    #: The span the figure stands on: "day", "year", "first_year" or
+    #: "lifetime". Every method of the tracker answers under the span it was
+    #: asked for, so a figure never wears another span's name.
     basis: str
     days: int
     energy_out: float | None = None
     energy_in: float | None = None
+    #: What the tracker alone can say about an empty figure: how far its
+    #: samples have come towards the window, or that the start is unknown.
+    #: The counters' own reasons are :func:`cop_reason`'s business.
+    reason: str | None = None
 
     def as_attributes(self) -> dict[str, Any]:
         basis = {
@@ -115,13 +124,6 @@ def _ratio(out: float, consumed: float, floor: float = MIN_CONSUMPTION_KWH) -> f
     return None if implausible(value) else value
 
 
-def lifetime_ratio(out: float | None, consumed: float | None) -> float | None:
-    """The figure over the whole life, or nothing when the counters cannot carry one."""
-    if out is None or consumed is None:
-        return None
-    return _ratio(out, consumed)
-
-
 def powered_on_hours(runtime: Any) -> float | None:
     """The hours the unit says it has been switched on, if the page is harvested."""
     if getattr(runtime, "web", None) is None or not getattr(runtime, "operating_hours", None):
@@ -135,7 +137,10 @@ def powered_on_hours(runtime: Any) -> float | None:
 
 
 def counter_fault(
-    out: float | None, consumed: float | None, hours: float | None
+    out: float | None,
+    consumed: float | None,
+    hours: float | None,
+    floor: float = MIN_CONSUMPTION_KWH,
 ) -> str | None:
     """Which fault the two counters show, or None when they merely need time.
 
@@ -144,12 +149,18 @@ def counter_fault(
     counters are never written. ``implausible`` is two numbers whose quotient no
     heat pump could produce, so they are not the pair they are taken for. A new
     machine that has simply not counted far enough yet is neither.
+
+    The quotient is judged only above the same floor :func:`_ratio` divides
+    above. Below it the divisor is a kilowatt hour or two of whole-number
+    rounding, and 11 against 1 is a quotient of nothing rather than a quotient
+    of eleven: calling it a fault sent the two totals to the statistics
+    backend for a machine that had merely started counting.
     """
     if out is None or consumed is None:
         return None
     if hours is not None and hours >= RUNNING_HOURS and (out <= 0 or consumed <= 0):
         return "stuck"
-    if consumed > 0 and implausible(round(out / consumed, 2)):
+    if consumed >= floor and implausible(round(out / consumed, 2)):
         return "implausible"
     return None
 
@@ -194,7 +205,7 @@ def cop_reason(
         # it. Above the floor a pair no heat pump could produce is still said so.
         if energy_in < floor:
             return too_little
-        fault = counter_fault(energy_out, energy_in, None)
+        fault = counter_fault(energy_out, energy_in, None, floor)
     else:
         fault = counter_fault(energy_out, energy_in, hours)
     if fault == "stuck":
@@ -204,6 +215,68 @@ def cop_reason(
     if energy_in < floor:
         return too_little
     return None
+
+
+#: The attribute T1a's web coordinator may carry for the moment of the last
+#: successful harvest. Read with a default, so the code is the same before and
+#: after the two tracks are merged: without it the newest read_at serves, which
+#: is the same moment, since read_at is only ever written by a read that worked.
+LAST_HARVEST_ATTRIBUTE = "last_harvest_at"
+
+
+def display_silence(web: Any) -> str | None:
+    """Why the display's figures are old: the reason text, or None while it answers.
+
+    After three failed harvests in a row the web coordinator reports failure
+    and the display sensors go unavailable. The figures that rest on stored
+    samples stay available instead, and this is what they say about it.
+    """
+    if web is None or getattr(web, "last_update_success", True):
+        return None
+    moment = getattr(web, LAST_HARVEST_ATTRIBUTE, None)
+    if not isinstance(moment, datetime):
+        stamps = [
+            stamp for stamp in (getattr(web, "read_at", None) or {}).values()
+            if isinstance(stamp, datetime)
+        ]
+        moment = max(stamps, default=None)
+    if moment is None:
+        return "displayen har inte svarat sedan Home Assistant startade"
+    return f"displayen har inte svarat sedan {moment.isoformat(timespec='seconds')}"
+
+
+def reason_for(
+    result: CopResult,
+    out: float | None,
+    consumed: float | None,
+    hours: float | None = None,
+    modbus_answered: bool = True,
+    display: str | None = None,
+) -> str | None:
+    """Why the sensor for ``result`` shows nothing, the nearest cause first.
+
+    A display that has gone quiet comes before everything, because every
+    other answer would be read off counters that are no longer being read; the
+    first year is the exception, since its figure is stored and the display
+    cannot age it. Then a Modbus register that never answered, then the
+    tracker's own account of its samples, then whether the counters have been
+    read at all, and last the counters' pair itself.
+    """
+    if display is not None and result.basis != "first_year":
+        return display
+    if consumed is None and not modbus_answered:
+        return "registret 62341 har inte svarat, så tillförd energi saknas"
+    if result.value is not None:
+        return None
+    if result.reason is not None:
+        return result.reason
+    if out is None or consumed is None:
+        if result.basis == "first_year":
+            return "första året är inte fullt ännu"
+        return "räknarna har inte lästs"
+    return cop_reason(
+        None, result.basis, result.energy_out, result.energy_in, hours, modbus_answered
+    )
 
 
 class CopTracker:
@@ -318,9 +391,16 @@ class CopTracker:
                 return
 
     def result_first_year(self) -> CopResult:
-        """The machine's first year, or nothing until it has had one."""
+        """The machine's first year, or nothing until it has had one.
+
+        Without the commissioning day there will never be one: it is worked
+        out from the display's powered-on hours, and a page without that row,
+        as the i550 Pro's history page is, leaves the start unknown. Said so,
+        rather than promising a year that is not coming.
+        """
         if self._first_year is None:
-            return CopResult(None, "first_year", 0)
+            reason = "driftstarten är okänd" if self._anchor is None else None
+            return CopResult(None, "first_year", 0, reason=reason)
         out, consumed, span = self._first_year
         return CopResult(_ratio(out, consumed), "first_year", int(span), round(out, 1), round(consumed, 1))
 
@@ -341,7 +421,9 @@ class CopTracker:
             r for r in self._recent if oldest_allowed <= _parse(r[0]) <= newest_allowed
         ]
         if not window:
-            return CopResult(None, "day", 0)
+            return CopResult(
+                None, "day", 0, reason="väntar på ett prov som är 20 till 30 timmar gammalt"
+            )
         stamp, base_out, base_in = max(window, key=lambda r: _parse(r[0]))
         delta_out = energy_out - base_out
         delta_in = energy_in - base_in
@@ -359,37 +441,99 @@ class CopTracker:
             round(delta_in, 1),
         )
 
-    def result(
+    def _window(
+        self,
+        energy_out: float,
+        energy_in: float,
+        basis: str,
+        days: int,
+        tolerance: int,
+        floor: float,
+        now: date,
+    ) -> CopResult:
+        """The figure across a window, from the newest sample at least ``days`` old.
+
+        The base sample may lie up to ``tolerance`` days further back, so a gap
+        of a day or two in the samples does not cost the figure; beyond that
+        the span would no longer be what the name says. Without a sample in
+        that band the result says how far the samples have come, or that a gap
+        in them covers the band, which is the tracker's own knowledge. What
+        the counters themselves have to say is left to :func:`cop_reason`.
+        """
+        window_start = (now - timedelta(days=days)).isoformat()
+        earliest = (now - timedelta(days=days + tolerance)).isoformat()
+        older = sorted(d for d in self._samples if earliest <= d <= window_start)
+        if older:
+            base_out, base_in = self._samples[older[-1]]
+            span = (now - date.fromisoformat(older[-1])).days
+            delta_out = energy_out - base_out
+            delta_in = energy_in - base_in
+            if delta_out < 0 or delta_in < 0:
+                # A counter that went backwards means the unit was replaced or
+                # reset. No quotient across that is honest.
+                return CopResult(
+                    None, basis, span,
+                    reason=f"räknarna har gått bakåt sedan {older[-1]}, enheten är bytt eller nollställd",
+                )
+            return CopResult(
+                _ratio(delta_out, delta_in, floor), basis, span,
+                round(delta_out, 1), round(delta_in, 1),
+            )
+        if not self._samples:
+            return CopResult(None, basis, 0, reason=f"0 av {days} dygn samlade, inget prov sparat ännu")
+        oldest = min(self._samples)
+        collected = (now - date.fromisoformat(oldest)).days
+        if collected > days + tolerance:
+            return CopResult(
+                None, basis, days,
+                reason=f"inget sparat prov är {days} till {days + tolerance} dygn gammalt",
+            )
+        collected = max(0, min(collected, days))
+        return CopResult(
+            None, basis, collected,
+            reason=f"{collected} av {days} dygn samlade, äldsta provet {oldest}",
+        )
+
+    def result_year(
         self,
         energy_out: float | None,
         energy_in: float | None,
         today: date | None = None,
     ) -> CopResult:
-        """Work out the rolling figure, falling back to the lifetime one."""
+        """The rolling year, or how far the samples have come towards one.
+
+        Only the tracker's own samples count. The commissioning day is not
+        one of them here: it made the first anniversary look like a rolling
+        year for the fifteen days the anchor lay inside the band, after which
+        the figure vanished until the samples had reached a year of their own.
+        The first year carries that figure instead, for good.
+        """
+        if energy_out is None or energy_in is None:
+            return CopResult(None, "year", 0)
+        now = today or date.today()
+        return self._window(
+            energy_out, energy_in, "year",
+            COP_WINDOW_DAYS, YEAR_MAX_DAYS - COP_WINDOW_DAYS, MIN_CONSUMPTION_KWH, now,
+        )
+
+    def result_lifetime(
+        self,
+        energy_out: float | None,
+        energy_in: float | None,
+        today: date | None = None,
+    ) -> CopResult:
+        """The figure over everything the counters have counted.
+
+        The one span that needs no waiting, and the one that must never be
+        reported as anything else. The days it covers are counted from the
+        commissioning day where that is known, since the counters started from
+        zero then, and otherwise from the oldest sample the tracker holds.
+        """
         if energy_out is None or energy_in is None:
             return CopResult(None, "lifetime", 0)
-
         now = today or date.today()
-        window_start = (now - timedelta(days=COP_WINDOW_DAYS)).isoformat()
-        earliest = (now - timedelta(days=YEAR_MAX_DAYS)).isoformat()
-        candidates = dict(self._samples)
-        if self._anchor is not None:
-            candidates.setdefault(self._anchor, [0.0, 0.0])
-        older = sorted(d for d in candidates if earliest <= d <= window_start)
-        if older:
-            base_out, base_in = candidates[older[-1]]
-            span = (now - date.fromisoformat(older[-1])).days
-            delta_out = energy_out - base_out
-            delta_in = energy_in - base_in
-            # A counter that went backwards means the unit was replaced or reset;
-            # the lifetime figure is the only honest answer then.
-            if delta_out >= 0 and delta_in >= 0:
-                value = _ratio(delta_out, delta_in)
-                if value is not None:
-                    return CopResult(value, "year", span, round(delta_out, 1), round(delta_in, 1))
-
-        oldest = min(self._samples) if self._samples else None
-        span = (now - date.fromisoformat(oldest)).days if oldest else 0
+        since = self._anchor or (min(self._samples) if self._samples else None)
+        span = max(0, (now - date.fromisoformat(since)).days) if since else 0
         return CopResult(
             _ratio(energy_out, energy_in),
             "lifetime",
@@ -397,6 +541,22 @@ class CopTracker:
             round(energy_out, 1),
             round(energy_in, 1),
         )
+
+    def result(
+        self,
+        energy_out: float | None,
+        energy_in: float | None,
+        today: date | None = None,
+    ) -> CopResult:
+        """The rolling year where there is one, otherwise the lifetime figure.
+
+        For callers that want one number whatever its span, with the span
+        stated in ``basis``. The sensors ask for each span by name instead.
+        """
+        year = self.result_year(energy_out, energy_in, today)
+        if year.value is not None:
+            return year
+        return self.result_lifetime(energy_out, energy_in, today)
 
 
 #: The older name of the delivered heat counter. The display's text catalogue
@@ -597,8 +757,7 @@ def cop_for_report(runtime: Any) -> dict[str, float | None]:
     if tracker is None:
         return figures
     out, consumed = current_totals(runtime)
-    yearly = tracker.result(out, consumed)
-    figures["cop_year"] = yearly.value if yearly.basis == "year" else None
+    figures["cop_year"] = tracker.result_year(out, consumed).value
     figures["cop_day"] = tracker.result_day(out, consumed).value
     figures["cop_first_year"] = tracker.result_first_year().value
     if out is not None and consumed is not None and consumed >= MIN_CONSUMPTION_KWH:

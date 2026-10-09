@@ -157,6 +157,29 @@ def install() -> bool:
 
     select.SelectEntity = SelectEntity
 
+    sensor = _module("homeassistant.components.sensor")
+
+    class SensorDeviceClass(enum.Enum):
+        TEMPERATURE = "temperature"
+        POWER = "power"
+        ENERGY = "energy"
+        CURRENT = "current"
+        VOLTAGE = "voltage"
+        PRESSURE = "pressure"
+        DURATION = "duration"
+        ENUM = "enum"
+
+    class SensorStateClass(enum.Enum):
+        MEASUREMENT = "measurement"
+        TOTAL_INCREASING = "total_increasing"
+
+    class SensorEntity:
+        pass
+
+    sensor.SensorDeviceClass = SensorDeviceClass
+    sensor.SensorStateClass = SensorStateClass
+    sensor.SensorEntity = SensorEntity
+
     const = _module("homeassistant.const")
 
     class EntityCategory(enum.Enum):
@@ -171,11 +194,32 @@ def install() -> bool:
 
     class UnitOfTime(enum.Enum):
         HOURS = "h"
+        MINUTES = "min"
+
+    class UnitOfElectricCurrent(enum.Enum):
+        AMPERE = "A"
+
+    class UnitOfElectricPotential(enum.Enum):
+        VOLT = "V"
+
+    class UnitOfEnergy(enum.Enum):
+        KILO_WATT_HOUR = "kWh"
+
+    class UnitOfPressure(enum.Enum):
+        BAR = "bar"
+
+    class UnitOfVolumeFlowRate(enum.Enum):
+        LITERS_PER_MINUTE = "L/min"
 
     const.EntityCategory = EntityCategory
     const.UnitOfPower = UnitOfPower
     const.UnitOfTemperature = UnitOfTemperature
     const.UnitOfTime = UnitOfTime
+    const.UnitOfElectricCurrent = UnitOfElectricCurrent
+    const.UnitOfElectricPotential = UnitOfElectricPotential
+    const.UnitOfEnergy = UnitOfEnergy
+    const.UnitOfPressure = UnitOfPressure
+    const.UnitOfVolumeFlowRate = UnitOfVolumeFlowRate
     return True
 
 
