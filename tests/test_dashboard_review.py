@@ -118,3 +118,71 @@ def test_the_word_for_a_raised_alarm_is_not_the_binarys_name(dashboard_views, pu
             assert words["problem_on"].casefold() != pump["names"]["alarm"].casefold()
     assert dashboard_views.TEXT["sv"]["state_problem_on"] == "Utlöst"
     assert dashboard_views.TEXT["en"]["state_problem_on"] == "Raised"
+
+
+# ------------------------------------ F6.5: a row whose unknown is nothing yet
+
+NOTHING_YET = {
+    "last_alarm": ("sensor.ctc_ecozenith_i255_senaste_larm", "Senaste larm"),
+    "events": ("event.ctc_ecozenith_i255_handelser", "Händelser"),
+    "last_start": ("sensor.ctc_ecozenith_i255_senaste_start", "Senaste start"),
+    "last_run": ("sensor.ctc_ecozenith_i255_senaste_korning", "Senaste körning"),
+    "last_defrost": ("sensor.ctc_ecozenith_i255_senaste_avfrostning", "Senaste avfrostning"),
+}
+
+
+def _with_nothing_yet(pump):
+    """The fixture predates these entities; a running i255 has all five."""
+    for key, (entity_id, name) in NOTHING_YET.items():
+        pump["entities"][key] = entity_id
+        pump["names"][key] = name
+    return pump
+
+
+def _every_item(config):
+    for view in config["views"]:
+        for section in view["sections"]:
+            for card in section["cards"][1:]:
+                for item in card.get("items", card.get("rows", [])):
+                    if "entity" in item:
+                        yield view["path"], item
+
+
+def test_a_row_whose_unknown_means_nothing_yet_carries_the_word_for_it(dashboard_views, pumps):
+    """The last alarm before a panel has shown one, the events before the first
+    transition, the timestamps before a start or a defrost: "Okänd" in the full
+    list for months, the look the list was rid of when the button left it."""
+    pump = _with_nothing_yet(pumps["vsh"])
+    by_entity = {entity_id: key for key, entity_id in pump["entities"].items()}
+    for lang in ("sv", "en"):
+        pump["language"] = lang
+        config = dashboard_views.build_dashboard([pump], lang, NEW_HA)
+        words = dashboard_views.state_words(dashboard_views.TEXT[lang])
+        marked = {
+            (path, by_entity[item["entity"]]): item["unknown_means"]
+            for path, item in _every_item(config) if "unknown_means" in item
+        }
+        # In the full list, each of the five, and the word it points at is in
+        # the table every card gets.
+        assert {key: word for (path, key), word in marked.items() if path == "values"} == {
+            "last_alarm": "none_alarm", "events": "none_event", "last_start": "none_start",
+            "last_run": "none_run", "last_defrost": "none_defrost",
+        }
+        assert all(words[word] for word in marked.values())
+        # Nothing else carries it, on any tab.
+        assert {key for _path, key in marked} == set(NOTHING_YET)
+        # The list still hides nothing: the row stays, with the word on it.
+        rows = [item for path, item in _every_item(config) if path == "values"]
+        assert all("hide_unavailable" not in item for item in rows)
+
+
+def test_the_words_for_nothing_yet_read_beside_the_names(dashboard_views):
+    sv = dashboard_views.state_words(dashboard_views.TEXT["sv"])
+    en = dashboard_views.state_words(dashboard_views.TEXT["en"])
+    assert [sv[w] for w in dashboard_views._NONE_YET.values()] == [
+        "inget larm ännu", "ingen händelse ännu", "ingen start ännu",
+        "ingen körning ännu", "ingen avfrostning ännu",
+    ]
+    assert [en[w] for w in dashboard_views._NONE_YET.values()] == [
+        "no alarm yet", "no event yet", "no start yet", "no run yet", "no defrost yet",
+    ]

@@ -350,6 +350,14 @@ TEXT = {
             "Home Assistant har skrivit ett."
         ),
         "state_no_limit": "ingen gräns",
+        # A value unknown because nothing has happened yet, in the words of
+        # what has not happened (_NONE_YET): the full list shows the row
+        # whatever it reads, and "Okänd" there looks like a value gone missing.
+        "state_none_alarm": "inget larm ännu",
+        "state_none_event": "ingen händelse ännu",
+        "state_none_start": "ingen start ännu",
+        "state_none_run": "ingen körning ännu",
+        "state_none_defrost": "ingen avfrostning ännu",
     },
     "en": {
         "overview": "Overview",
@@ -412,6 +420,11 @@ TEXT = {
             "until Home Assistant has written one."
         ),
         "state_no_limit": "no limit",
+        "state_none_alarm": "no alarm yet",
+        "state_none_event": "no event yet",
+        "state_none_start": "no start yet",
+        "state_none_run": "no run yet",
+        "state_none_defrost": "no defrost yet",
     },
 }
 
@@ -422,6 +435,22 @@ TEXT = {
 #: a 0 somebody wrote through the control. Whether the immersion heater limits
 #: mean the same by 0 is an open question, and they are left as they read.
 _NO_LIMIT_AT_ZERO = frozenset({"ctl_max_rps", "set_max_rps_1"})
+
+#: Keys whose unknown means that nothing has happened yet, not that a value is
+#: missing: the last alarm until a panel has shown one, the events until the
+#: first transition, the cycle timestamps until a start or a defrost has been
+#: seen while Home Assistant ran (the last defrost all summer). The full list
+#: shows every row whatever it reads, and these would read "Okänd" there for
+#: months, the look the list was rid of when the button left it. The card
+#: writes the word the page gives instead (state_none_*), the way it writes
+#: "ej satt" for a control without a value; the other tabs hide the row.
+_NONE_YET = {
+    "last_alarm": "none_alarm",
+    "events": "none_event",
+    "last_start": "none_start",
+    "last_run": "none_run",
+    "last_defrost": "none_defrost",
+}
 
 #: What the words for states are called in TEXT.
 _STATE_PREFIX = "state_"
@@ -594,6 +623,8 @@ class _Builder:
         item.update(self.explanation(real))
         if real in _NO_LIMIT_AT_ZERO:
             item["zero_means"] = "no_limit"
+        if real in _NONE_YET:
+            item["unknown_means"] = _NONE_YET[real]
         if real.startswith(_COP_PREFIX):
             # The figure says what it rests on and, while it has none, why: the
             # card draws the one or the other in small text under it.
