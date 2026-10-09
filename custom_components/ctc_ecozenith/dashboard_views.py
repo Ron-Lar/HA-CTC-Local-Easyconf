@@ -72,6 +72,22 @@ GRAPH_DAYS = 30
 #: until it has: a register that holds a sentinel, a display page that has not
 #: been reached yet, a coefficient of performance with too little history.
 HIDDEN_STATES = ["unavailable", "unknown"]
+UNAVAILABLE = "unavailable"
+
+#: The coefficient of performance is a figure with a story (sensor.py): its
+#: sensors stay available without a figure and write what it rests on and why
+#: it is missing as attributes, under these names today and perhaps the English
+#: ones one day, so the page asks for both. Such a value is drawn while it is
+#: merely unknown, with the reason under it, and goes only when the sensor is
+#: unavailable.
+_COP_PREFIX = "cop_"
+_COP_SUB = ("underlag", "basis")
+_COP_REASON = ("skäl", "reason")
+
+
+def _hidden_states(key: str) -> list[str]:
+    """The states in which a value has nothing to show and its card hides it."""
+    return [UNAVAILABLE] if key.startswith(_COP_PREFIX) else list(HIDDEN_STATES)
 
 #: For an entity this layout does not know yet, from a newer integration.
 UNKNOWN_EXPLANATION = "Ett värde från integrationen som sidan ännu inte har någon egen förklaring för."
@@ -334,8 +350,14 @@ def _heading(text: str, icon: str) -> dict[str, Any]:
     return {"type": "heading", "heading": text, "heading_style": "title", "icon": icon}
 
 
-def _shown_when_available(entity_id: str) -> dict[str, Any]:
-    return {"condition": "state", "entity": entity_id, "state_not": list(HIDDEN_STATES)}
+def _shown_when_available(entity_id: str, states: list[str] | None = None) -> dict[str, Any]:
+    return {"condition": "state", "entity": entity_id,
+            "state_not": list(HIDDEN_STATES) if states is None else list(states)}
+
+
+def _states_of(item: Mapping[str, Any]) -> list[str]:
+    """The states that hide a built item: what its own flag says."""
+    return [UNAVAILABLE] if item.get("show_reason") else list(HIDDEN_STATES)
 
 
 def _any_of(conditions: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -470,7 +492,15 @@ class _Builder:
             name = self._under_a_control_heading(name)
         item: dict[str, Any] = {"entity": entity_id, "name": name}
         item.update(self.explanation(real))
-        if hideable:
+        if real.startswith(_COP_PREFIX):
+            # The figure says what it rests on and, while it has none, why: the
+            # card draws the one or the other in small text under it.
+            item["sub"] = list(_COP_SUB)
+            item["reason"] = list(_COP_REASON)
+            if hideable:
+                # Gone only with the sensor: unknown is when it has something to say.
+                item["show_reason"] = True
+        elif hideable:
             # The card leaves the value out itself while it has nothing to show.
             item["hide_unavailable"] = True
         return item
@@ -494,7 +524,9 @@ class _Builder:
     def _hide_when_empty(card: dict[str, Any] | None, items: list[dict[str, Any]]) -> None:
         """A card whose every value is hidden would be an empty frame."""
         if card is not None:
-            card["visibility"] = _any_of([_shown_when_available(i["entity"]) for i in items])
+            card["visibility"] = _any_of(
+                [_shown_when_available(i["entity"], _states_of(i)) for i in items]
+            )
 
     def chips(self, keys: Iterable[str]) -> dict[str, Any] | None:
         """What the pump is doing right now, as a line of chips.
@@ -550,6 +582,7 @@ class _Builder:
         value is a chip on one tab and a line here.
         """
         entities = []
+        shown: list[dict[str, Any]] = []
         for key in keys:
             entity_id = self.entity_id(key)
             real = self.roles.get(key, key)
@@ -557,6 +590,7 @@ class _Builder:
                 continue
             name = self.labels.get(real) or self.names.get(real)
             entities.append({"entity": entity_id, "name": str(name)} if name else entity_id)
+            shown.append(_shown_when_available(entity_id, _hidden_states(real)))
         if not entities:
             return None
         card: dict[str, Any] = {"grid_options": {"columns": "full"}}
@@ -574,9 +608,7 @@ class _Builder:
                 "stat_types": [kind],
                 "entities": [e["entity"] if isinstance(e, dict) else e for e in entities],
             })
-        card["visibility"] = _any_of([
-            _shown_when_available(e["entity"] if isinstance(e, dict) else e) for e in entities
-        ])
+        card["visibility"] = _any_of(shown)
         return card
 
 
