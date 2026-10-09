@@ -95,6 +95,12 @@ def is_lifetime_counter(label: str | None) -> bool:
     return text.startswith(_HOUR_COUNTERS + _START_COUNTERS) and not _is_period(text)
 
 
+def _is_period_count(label: str | None) -> bool:
+    """True for starts counted over a window, "Antal starter /24"."""
+    text = _base_label(label or "").casefold()
+    return text.startswith(_START_COUNTERS) and _is_period(text)
+
+
 def is_clock_format(fmt: str | None) -> bool:
     """True when a row is printed as hours and minutes, "%02d:%02d"."""
     return bool(fmt) and _CLOCK_FORMAT.match(fmt) is not None
@@ -175,15 +181,17 @@ def display_state_class(unit: str | None, label: str | None) -> str | None:
     "total_increasing", and a period fits no state class at all, so it gets
     none. Operating hours and compressor starts since commissioning are
     counters as well, with or without a unit. Every other reading with a unit
-    is a measurement, and one without a unit is left alone: a firmware version
-    is a number too.
+    is a measurement, and one without a unit is left alone, a firmware version
+    is a number too, except starts per day: a count that rises and falls with
+    the weather, worth its daily statistics (R38) although it has no unit, and
+    one that had them already, from the days the "/24 h" lent it an h.
     """
     if unit == "kWh":
         return None if _is_period(label or "") else "total_increasing"
     if is_lifetime_counter(label):
         return "total_increasing"
     if not unit:
-        return None
+        return "measurement" if _is_period_count(label) else None
     return "measurement"
 
 
