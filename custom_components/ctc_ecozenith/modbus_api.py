@@ -101,10 +101,12 @@ def client_options() -> dict[str, Any]:
     asking three more times costs thirty seconds and tells nothing new.
     ``reconnect_delay=0``: the library must never reconnect on its own, since an
     abandoned client knocking on the controller's single slot is exactly what
-    keeps the live one out. Before pymodbus 3.9 the library also closes the
-    connection after a silent request; from 3.9 it keeps it up and only gives
-    up after several silences in a row. Both are handled: a client found
-    closed is let go and replaced, with the settle time in between.
+    keeps the live one out. Before pymodbus 3.8 the library also closes the
+    connection after a silent request (3.6.9, the floor, does; 3.8.6 does
+    not); from 3.8 it keeps it up and only gives up after several silences in
+    a row. Both are handled: a client found closed is let go and replaced,
+    with the settle time in between, and the poll round holds the silence
+    against the register either way.
     """
     return {"timeout": REQUEST_TIMEOUT, "retries": 0, "reconnect_delay": 0}
 
@@ -123,9 +125,10 @@ class CtcModbusSilence(CtcModbusError):
 
     This is how the controller says a register does not exist on this model, so
     the connection is kept. ``line_up`` is False when the library found the
-    line gone by the time the timeout ran out, which older pymodbus does after
-    any silence and every version does when the peer resets under a request;
-    the client has then already been let go, and the next request starts over.
+    line gone by the time the timeout ran out, which pymodbus before 3.8 does
+    after any silence and every version does when the peer resets under a
+    request; the client has then already been let go, and the next request
+    starts over.
     """
 
     def __init__(self, message: str, address: int | None = None, line_up: bool = True) -> None:

@@ -39,8 +39,12 @@ class RoundResult:
     answered: list[int] = field(default_factory=list)
     #: Starts of the blocks that did not, with the line still up afterwards.
     unanswered: list[int] = field(default_factory=list)
-    #: Starts of the blocks whose silence took the line with it. Not held
-    #: against the block: that was the connection, not the register.
+    #: Starts of the blocks whose silence took the line with it. Kept apart
+    #: because the next block pays for a new connection, but held against the
+    #: block like any other silence: pymodbus before 3.8 closes the line after
+    #: every silent request, so on that library a block the model lacks would
+    #: otherwise never be learnt and would cost a timeout, a settle and a new
+    #: connection every round for ever.
     dropped: list[int] = field(default_factory=list)
     #: Seconds the round took.
     elapsed: float = 0.0
@@ -102,9 +106,12 @@ class MissingBlocks:
 
     A block joins the set after MISSING_PATIENCE rounds in a row without an
     answer while other blocks did answer: silence from one block with the rest
-    talking is the register, silence from all of them is the line. A block that
-    answers again is forgiven on the spot. Nothing is stored, so a restart gives
-    every block a fresh chance.
+    talking is the register, silence from all of them is the line. Whether the
+    library closed the connection after the silence makes no difference to the
+    block, since older pymodbus does that after every silence; the rest having
+    answered in the same round is what tells the register from the line. A
+    block that answers again is forgiven on the spot. Nothing is stored, so a
+    restart gives every block a fresh chance.
     """
 
     def __init__(self, patience: int = MISSING_PATIENCE) -> None:
@@ -119,7 +126,7 @@ class MissingBlocks:
         for start in result.answered:
             self._streak.pop(start, None)
         learnt: list[int] = []
-        for start in result.unanswered:
+        for start in (*result.unanswered, *result.dropped):
             self._streak[start] = self._streak.get(start, 0) + 1
             if self._streak[start] >= self.patience and start not in self.missing:
                 self.missing.add(start)
