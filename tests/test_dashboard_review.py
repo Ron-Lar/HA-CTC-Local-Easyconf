@@ -85,3 +85,22 @@ def test_every_line_a_heading_promises_is_one_of_its_graphs_keys(dashboard_views
     }
     for graph_id, key in dashboard_views._GRAPH_REQUIRES.items():
         assert key in graphs[graph_id]
+
+
+# ------------------------------------------------------ F6.2: no SmartGrid band
+
+
+def test_the_pumps_day_has_no_smartgrid_band_on_either_pump(dashboard_views, pumps):
+    """The mode's state is a label, "Normal" on a pump that never uses it, and
+    a label is never zero: the rule for a reading only ever zero could not tell
+    such a pump from one that does, and the band lay flat on both houses."""
+    graphs = {graph_id: keys for graph_id, _kind, keys in dashboard_views._GRAPHS}
+    assert "sg_mode" not in graphs["graph_pump"]
+    for pump in pumps.values():
+        sections = _tab(dashboard_views, pump, "overview")
+        bands = _graph_entities(_section(sections, PUMP))
+        assert pump["entities"]["sg_mode"] not in bands
+        assert len(bands) == 3
+        # The mode is still read, as a chip, and so is SmartGrid active.
+        chips = {item["entity"] for item in _section(sections, pump["name"])["cards"][1]["items"]}
+        assert {pump["entities"]["sg_mode"], pump["entities"]["smartgrid_active"]} <= chips

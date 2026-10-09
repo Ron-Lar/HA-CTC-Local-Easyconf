@@ -262,16 +262,17 @@ def test_the_overview_shows_what_the_pump_did_when(dashboard_views, pumps):
     # The registers themselves, not the binaries derived from hp1_status,
     # which would be four bands of the same register.
     assert [by_entity[e["entity"]] for e in card["entities"]] == [
-        "hp1_status", "system_status", "immersion_active", "sg_mode",
+        "hp1_status", "system_status", "immersion_active",
     ]
     assert [e["name"] for e in card["entities"]] == [
-        "Värmepump status", "Systemstatus", "Elpatron aktiv", "SmartGrid-läge",
+        "Värmepump status", "Systemstatus", "Elpatron aktiv",
     ]
-    # SmartGrid is a band only where the installation has used it.
-    pump["unused"] = ["sg_mode"]
-    graph = _section(_tab(dashboard_views, pump, "overview"), "Pumpen det senaste dygnet")
+    # No SmartGrid band: its state is a label, never zero, so the rule for a
+    # reading only ever zero could not tell a pump that never uses it from one
+    # that does, and the band lay flat as "Normal" on both. The mode is a chip.
     assert pump["entities"]["sg_mode"] not in json.dumps(graph)
-    assert len(graph["cards"][1]["entities"]) == 3
+    chips = _section(sections, pump["name"])["cards"][1]
+    assert pump["entities"]["sg_mode"] in {item["entity"] for item in chips["items"]}
 
 
 def test_a_graph_is_left_out_when_the_pump_has_none_of_its_readings(dashboard_views, pumps):
