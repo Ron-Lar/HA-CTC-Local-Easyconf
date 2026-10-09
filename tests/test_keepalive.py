@@ -136,10 +136,9 @@ class Clock:
 
 
 @pytest.fixture()
-def manager(modbus_api):
-    ha_stub.install()
+def manager(modbus_api, monkeypatch):
+    ha_stub.record_timers(monkeypatch)
     coordinator = load("coordinator")
-    ha_stub.tracked.clear()
     client = FakeClient(modbus_api.CtcModbusError)
     clock = Clock()
     manager = coordinator.CtcControlManager(hass=object(), client=client, clock=clock)

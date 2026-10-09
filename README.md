@@ -375,13 +375,26 @@ cannot: that a failed set-up closes its one Modbus socket, that a reload never
 has two clients open at once, that a setpoint reaches the right register as the
 right raw value and keeps being written until it is released, and that the menu
 is tried three times in total across reloads, not three times per reload. It
-needs `pytest-homeassistant-custom-component` and skips itself, with a note,
-when that is missing or when pytest-asyncio is not in auto mode:
+needs `pytest-homeassistant-custom-component`, which pins one Home Assistant
+release and everything that release depends on, so it belongs in a virtual
+environment of its own rather than beside the ordinary suite's requirements.
+It skips itself, with a note, where the plugin is missing:
 
 ```sh
 pip install pytest-homeassistant-custom-component
-python -m pytest -o asyncio_mode=auto tests/test_homeassistant.py
+python -m pytest -q tests/test_homeassistant.py
 ```
+
+The whole suite runs in that environment too, with the same `python -m pytest
+-q`. Two things make that so. The plugin's own autouse fixtures are async and
+need pytest-asyncio in auto mode, or every test in the session errors at
+set-up; `tests/conftest.py` switches the mode on wherever pytest-asyncio is
+loaded, so there is nothing to pass by hand. And `tests/ha_stub.py`, which
+stands in for Home Assistant when it is not installed, steps aside when it is:
+the modules then load against the real classes, the keepalive tests record the
+real timer helper instead of the stand-in's, and only the four tests that
+build a coordinator directly skip themselves, since a real core's coordinator
+wants a running instance behind it.
 
 ## Roadmap
 

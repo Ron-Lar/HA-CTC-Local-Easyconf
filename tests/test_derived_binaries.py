@@ -118,7 +118,7 @@ def test_the_immersion_heater_is_judged_from_whichever_heater_answers(binary_sen
 
 @pytest.fixture()
 def modbus_coordinator(modbus_api):
-    ha_stub.install()
+    ha_stub.skip_unless_stubbed()
     coordinator = load("coordinator")
     client = modbus_api.CtcModbusClient("192.0.2.55")
     return coordinator.CtcModbusCoordinator(hass=object(), client=client, interval=30)
