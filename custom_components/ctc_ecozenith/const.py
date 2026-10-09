@@ -372,20 +372,22 @@ CONTROL_SELECTS: Final[tuple[ControlRegister, ...]] = (
 
 # Virtual digital inputs. Bit 0 to 7 map to "BMS Di 0" to "BMS Di 7" which are
 # assigned to functions such as SmartGrid A and B in the unit's own
-# "Definiera / Fjärrstyrning" menu.
+# "Definiera / Fjärrstyrning" menu. Nothing writes this register: no entity,
+# service or manager uses it, and it has never been tried against a unit, so
+# it is not among the addresses the write path lets through. The day a
+# function needs it, it comes in with its own entity and its own test.
 CONTROL_VDI_REGISTER: Final = 1100
 VDI_COUNT: Final = 8
 
-#: Every address the integration may ever write. Derived from the tables above
-#: rather than typed out, so a new ControlRegister is let through by itself and
-#: nothing else ever is: the Modbus client refuses any other address before it
-#: takes the connection. The 61500 block lives in EEPROM with a limited number
-#: of write cycles, and a write that lands there by mistake cannot be undone, so
-#: the promise that it is never written is kept here and proved by the tests
-#: instead of resting on convention.
+#: Every address the integration may ever write: exactly the control tables
+#: above, derived rather than typed out, so a new ControlRegister is let
+#: through by itself and nothing else ever is: the Modbus client refuses any
+#: other address before it takes the connection. The 61500 block lives in
+#: EEPROM with a limited number of write cycles, and a write that lands there
+#: by mistake cannot be undone, so the promise that it is never written is kept
+#: here and proved by the tests instead of resting on convention.
 CONTROL_ADDRESSES: Final[frozenset[int]] = frozenset(
-    {register.address for register in CONTROL_NUMBERS + CONTROL_SELECTS}
-    | {CONTROL_VDI_REGISTER}
+    register.address for register in CONTROL_NUMBERS + CONTROL_SELECTS
 )
 
 # How often the volatile control registers are refreshed. CTC requires at least

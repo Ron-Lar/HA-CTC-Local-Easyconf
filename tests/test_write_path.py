@@ -64,13 +64,16 @@ def _client(modbus_api):
 
 
 def test_every_writable_address_is_in_the_thousand_block(const):
-    """The set is derived from the control tables, and all of them sit in 1000 to 1100."""
+    """The set is exactly the control tables, and all of them sit below 1100."""
     assert const.CONTROL_ADDRESSES, "nothing would be writable at all"
     for address in const.CONTROL_ADDRESSES:
-        assert 1000 <= address <= 1100, address
-    for register in const.CONTROL_NUMBERS + const.CONTROL_SELECTS:
-        assert register.address in const.CONTROL_ADDRESSES, register.key
-    assert const.CONTROL_VDI_REGISTER in const.CONTROL_ADDRESSES
+        assert 1000 <= address < 1100, address
+    assert const.CONTROL_ADDRESSES == {
+        register.address for register in const.CONTROL_NUMBERS + const.CONTROL_SELECTS
+    }
+    # The virtual inputs register has no entity, no service and no proof against
+    # a unit, so nothing may write it until it comes with all three.
+    assert const.CONTROL_VDI_REGISTER not in const.CONTROL_ADDRESSES
     # And none of what is read: the stored settings and the readings.
     for description in const.MODBUS_SENSORS + const.MODBUS_SETTINGS:
         assert description.address not in const.CONTROL_ADDRESSES, description.key
