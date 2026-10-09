@@ -29,6 +29,8 @@ PAGE = TESTS / "card_page.js"
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 
 #: What dashboard_views.state_words gives a Swedish page, and an English one.
+#: The word for a raised alarm is one that reads right beside the chip's
+#: name "Larm" (F7.3): "Utlöst" and "Raised", not the name over again.
 SV = {
     "on": "Till", "off": "Av", "problem_on": "Utlöst", "problem_off": "OK",
     "unset": "ej satt", "unset_note": "Pumpen lämnar inte ut sitt eget värde här.",
@@ -211,15 +213,45 @@ def test_the_status_line_reads_in_one_language(card_name, field):
     assert _shown(card_name, field, EN) == ["On", "Off", "OK", "Off", "HA:Redo för start"]
 
 
-def test_an_alarm_is_a_word_of_its_own():
-    # And not the chip's own name over again: the binary is called Larm.
+def _alarm_chip(words: dict) -> dict:
+    """The alarm chip, named "Larm" as the registry has it, with the words given.
+
+    Comes back as what the chip reads: its label, its value, and whether the
+    value is drawn at all.
+    """
     states = dict(STATES, **{"binary_sensor.alarm": _binary("on", "problem")})
+    return _node(f"""
+      const card = page.mountCard(CARD, "ctc-ecozenith-chips",
+        {{items: [{{entity: "binary_sensor.alarm", name: "Larm"}}], states: {json.dumps(words)}}},
+        {json.dumps(states)});
+      const value = page.all(card, (e) => e.className === "value")[0];
+      const label = page.all(card, (e) => e.className === "label")[0];
+      console.log(JSON.stringify({{label: label.textContent, value: value.textContent, drawn: !value.hidden}}));
+    """)
+
+
+def test_an_alarm_is_a_word_of_its_own_beside_the_name():
+    # F7.3: the chip is the name and then the page's word, and the two must
+    # read as one line: "Larm Utlöst", on an English page "Larm Raised".
+    assert _alarm_chip(SV) == {"label": "Larm", "value": "Utlöst", "drawn": True}
+    assert _alarm_chip(EN) == {"label": "Larm", "value": "Raised", "drawn": True}
+
+
+def test_a_word_that_is_the_name_over_again_is_not_written_twice():
+    # A page whose word for the raised alarm is "Larm", as the one before
+    # F7.3 was, or a browser still holding it: the chip reads "Larm" once,
+    # in red, rather than "Larm Larm". The case does not count as different.
+    assert _alarm_chip(dict(SV, problem_on="Larm")) == {"label": "Larm", "value": "", "drawn": False}
+    assert _alarm_chip(dict(SV, problem_on="larm")) == {"label": "Larm", "value": "", "drawn": False}
+    # The quiet alarm's "OK" is another word and is drawn as before.
+    states = dict(STATES)
     assert _node(f"""
       const card = page.mountCard(CARD, "ctc-ecozenith-chips",
         {{items: [{{entity: "binary_sensor.alarm", name: "Larm"}}], states: {json.dumps(SV)}}},
         {json.dumps(states)});
-      console.log(JSON.stringify(page.all(card, (e) => e.className === "value")[0].textContent));
-    """) == "Utlöst"
+      const value = page.all(card, (e) => e.className === "value")[0];
+      console.log(JSON.stringify([value.textContent, !value.hidden]));
+    """) == ["OK", True]
 
 
 def test_a_page_without_the_table_reads_as_it_did():

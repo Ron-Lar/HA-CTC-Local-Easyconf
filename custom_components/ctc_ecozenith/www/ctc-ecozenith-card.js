@@ -396,7 +396,15 @@
         const off = row.item.on_state !== undefined
           && (!stateObj || stateObj.state !== String(row.item.on_state));
         row.chip.hidden = off || this._missing(row.item);
-        row.value.textContent = this._text(row.item, stateObj);
+        // The chip is its name and then the page's word for the state. A
+        // word that is the name over again is not written twice: an alarm
+        // chip named "Larm" whose word for on is "Larm" reads "Larm" once,
+        // the name being the message and the colour the state.
+        const text = String(this._text(row.item, stateObj));
+        const label = String(row.item.name || row.item.entity);
+        const repeat = text.toLowerCase() === label.toLowerCase();
+        row.value.textContent = repeat ? "" : text;
+        row.value.hidden = repeat || text === "";
       }
     }
   }
