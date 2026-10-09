@@ -18,6 +18,17 @@ import re
 from typing import Any, Mapping
 
 from .const import CONTROL_NUMBERS, CONTROL_SELECTS, MODBUS_SENSORS, MODBUS_SETTINGS
+from .cop import MIN_CONSUMPTION_KWH, MIN_CONSUMPTION_KWH_DAY, WINDOWS
+
+#: The floors the coefficient of performance figures are shown above, in the
+#: words of the explanations: the day's, a week's and a month's as the day's
+#: times the days, and the lifetime's. Read off cop.py so the text and the
+#: rule cannot part ways again, as they did when the lifetime floor went from
+#: fifty to ten and the explanation went on saying fifty.
+_COP_FLOOR_DAY = f"{MIN_CONSUMPTION_KWH_DAY:.0f}"
+_COP_FLOOR_WEEK = f"{MIN_CONSUMPTION_KWH_DAY * WINDOWS['week'][0]:.0f}"
+_COP_FLOOR_MONTH = f"{MIN_CONSUMPTION_KWH_DAY * WINDOWS['month'][0]:.0f}"
+_COP_FLOOR_LIFETIME = f"{MIN_CONSUMPTION_KWH:.0f}"
 
 #: The Modbus registers the integration reads, by key.
 MODBUS: dict[str, str] = {
@@ -261,17 +272,19 @@ DERIVED: dict[str, str] = {
     ),
     "cop_day": (
         "Värmefaktor senaste dygnet: avgiven värme delat med tillförd el, ur två avläsningar av "
-        "energiräknarna 20 till 30 timmar isär. Visas när minst 3 kWh har förbrukats."
+        f"energiräknarna 20 till 30 timmar isär. Visas när minst {_COP_FLOOR_DAY} kWh har förbrukats."
     ),
     "cop_week": (
         "Värmefaktor senaste 7 dygnen, ur energiräknarna mot integrationens egen avläsning 7 till 9 "
-        "dygn gammal. Visas när minst 3 kWh per dygn i underlaget har förbrukats, alltså 21 kWh på "
-        "en vecka, och tidigast en vecka efter att integrationen sattes upp."
+        f"dygn gammal. Visas när minst {_COP_FLOOR_DAY} kWh per dygn i underlaget har förbrukats, "
+        f"alltså {_COP_FLOOR_WEEK} kWh på en vecka, och tidigast en vecka efter att integrationen "
+        "sattes upp."
     ),
     "cop_month": (
         "Värmefaktor senaste 30 dygnen, ur energiräknarna mot integrationens egen avläsning 30 till "
-        "35 dygn gammal. Visas när minst 3 kWh per dygn i underlaget har förbrukats, alltså 90 kWh "
-        "på en månad, och tidigast en månad efter att integrationen sattes upp."
+        f"35 dygn gammal. Visas när minst {_COP_FLOOR_DAY} kWh per dygn i underlaget har förbrukats, "
+        f"alltså {_COP_FLOOR_MONTH} kWh på en månad, och tidigast en månad efter att integrationen "
+        "sattes upp."
     ),
     "cop_year": (
         "Värmefaktor för ett rullande år, ur energiräknarna mot en egen avläsning 365 till 380 "
@@ -283,7 +296,7 @@ DERIVED: dict[str, str] = {
     ),
     "cop_lifetime": (
         "Värmefaktor över hela livslängden: all avgiven värme delat med all tillförd el sedan "
-        "driftstarten. Visas när minst 50 kWh har förbrukats."
+        f"driftstarten. Visas när minst {_COP_FLOOR_LIFETIME} kWh har förbrukats."
     ),
 }
 
