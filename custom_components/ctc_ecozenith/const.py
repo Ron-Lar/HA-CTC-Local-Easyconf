@@ -28,6 +28,10 @@ DEFAULT_SLAVE: Final = 1
 
 CONF_MODBUS_PORT: Final = "modbus_port"
 CONF_WEB_PORT: Final = "web_port"
+#: What an entry's device and entities are known by, in its data: the address
+#: it was created with, kept when the address moves. An entry from before it
+#: existed reads its address instead, see keys.device_key.
+CONF_DEVICE_KEY: Final = "device_key"
 CONF_SLAVE: Final = "slave"
 #: Entry data: False for a heat pump set up on Modbus alone, because its
 #: display's web interface did not answer when the address was typed in

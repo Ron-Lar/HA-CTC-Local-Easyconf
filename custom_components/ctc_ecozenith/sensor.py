@@ -41,13 +41,13 @@ from .cop import (
 )
 from .const import (
     CONF_MENU,
-    DOMAIN,
     STATUS_UNKNOWN,
     ModbusSensor,
     SlowValue,
     device_class_for,
     identity_signal,
 )
+from .keys import prefix_of, unique_id
 from .transitions import (
     MEAN_RUN_KEY,
     MEAN_RUN_NAME,
@@ -199,8 +199,7 @@ def _async_remove_vanished_rows(hass: HomeAssistant, entry: CtcConfigEntry, runt
     from homeassistant.helpers import entity_registry as er
 
     menu = pages_from_storage(entry.options.get(CONF_MENU)) + list(runtime.pages)
-    host = next(iter(runtime.device["identifiers"]))[1]
-    prefix = f"{DOMAIN}_{host}_"
+    prefix = prefix_of(runtime.device)
     registry = er.async_get(hass)
     entries = {
         item.unique_id[len(prefix):]: item
@@ -226,8 +225,7 @@ class CtcModbusSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, runtime, description: ModbusSensor) -> None:
         super().__init__(runtime.modbus)
         self._description = description
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_{description.key}"
+        self._attr_unique_id = unique_id(runtime.device, description.key)
         self._attr_name = description.name
         self._attr_device_info = runtime.device
         self._attr_entity_registry_enabled_default = description.enabled_default
@@ -286,8 +284,7 @@ class CtcDisplaySensor(CoordinatorEntity, SensorEntity):
     def __init__(self, runtime, page_title: str, value: SlowValue) -> None:
         super().__init__(runtime.web)
         self._value = value
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_{value.key}"
+        self._attr_unique_id = unique_id(runtime.device, value.key)
         self._attr_name = f"{page_title}: {value.label}" if page_title else value.label
         self._attr_device_info = runtime.device
         unit = value.unit
@@ -359,8 +356,7 @@ class CtcHarvestSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(self, runtime) -> None:
         super().__init__(runtime.web)
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_display_harvest"
+        self._attr_unique_id = unique_id(runtime.device, "display_harvest")
         self._attr_device_info = runtime.device
 
     @property
@@ -412,8 +408,7 @@ class CtcLastAlarmSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, runtime) -> None:
         super().__init__(runtime.web)
         self._runtime = runtime
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_last_alarm"
+        self._attr_unique_id = unique_id(runtime.device, "last_alarm")
         self._attr_name = "Senaste larm"
         self._attr_device_info = runtime.device
 
@@ -466,8 +461,7 @@ class CtcIdentitySensor(SensorEntity):
     _attr_should_poll = False
 
     def __init__(self, runtime, key: str, name: str, read, icon: str, signal: str) -> None:
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_{key}"
+        self._attr_unique_id = unique_id(runtime.device, key)
         self._attr_name = name
         self._attr_icon = icon
         self._attr_device_info = runtime.device
@@ -499,8 +493,7 @@ class CtcTransitionSensor(CoordinatorEntity, SensorEntity):
         super().__init__(runtime.modbus)
         self._watch = runtime.transitions
         self._item = item
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_{item.key}"
+        self._attr_unique_id = unique_id(runtime.device, item.key)
         self._attr_name = item.name
         self._attr_device_info = runtime.device
         self._attr_icon = item.icon
@@ -553,8 +546,7 @@ class CtcMeanRunSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, runtime) -> None:
         super().__init__(runtime.modbus)
         self._runtime = runtime
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_{MEAN_RUN_KEY}"
+        self._attr_unique_id = unique_id(runtime.device, MEAN_RUN_KEY)
         self._attr_name = MEAN_RUN_NAME
         self._attr_device_info = runtime.device
 
@@ -613,8 +605,7 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
         super().__init__(runtime.web)
         self._runtime = runtime
         self._span = span
-        host = next(iter(runtime.device["identifiers"]))[1]
-        self._attr_unique_id = f"{DOMAIN}_{host}_cop_{span}"
+        self._attr_unique_id = unique_id(runtime.device, f"cop_{span}")
         self._attr_name = self.NAMES[span]
         self._attr_device_info = runtime.device
 

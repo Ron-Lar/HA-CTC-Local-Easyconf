@@ -19,6 +19,7 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .catalogue import (
@@ -32,11 +33,13 @@ from .catalogue import (
 )
 from .const import (
     CONF_CHECK_UPDATES,
+    CONF_DEVICE_KEY,
     CONF_DISPLAY,
     CONF_ENABLE_CONTROL,
     CONF_SEND_STATISTICS,
     CONF_SETTINGS_STEM,
     CONF_FAST_INTERVAL,
+    CONF_IDENTITY,
     CONF_LANGUAGE,
     CONF_MODBUS_PORT,
     CONF_RESTORE_PAGE,
@@ -67,6 +70,7 @@ from .discovery import (
     async_probe_web,
     settings_stem,
 )
+from .keys import MOVED, NEW, Known, match_discovery, moved_data, moved_title
 from .modbus_api import CtcModbusClient, CtcModbusError
 from .modbus_probe import ANSWERED, BUSY, SILENT, async_classify
 from .web_api import CtcWebClient, CtcWebError
@@ -296,6 +300,9 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Check that Modbus answers before going any further."""
         assert self._host is not None
+        # An entry that has moved here keeps the unique_id of the address it
+        # was created with, so the address itself is asked about as well.
+        self._async_abort_entries_match({CONF_HOST: self._host})
         await self.async_set_unique_id(f"{DOMAIN}_{self._host}")
         self._abort_if_unique_id_configured()
 
@@ -374,9 +381,14 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         The settings file's stem is kept on its own (roadmap R19), so the daily
         report can say which family turned up without parsing the file name;
         an entry on Modbus alone has no settings file and no stem.
+
+        The key its device and entities are known by is the address the entry
+        is created with, the same value every entry before it was known by, and
+        it stays when the DHCP flow later moves the address (keys.py, R20).
         """
         data: dict[str, Any] = {
             CONF_HOST: self._host,
+            CONF_DEVICE_KEY: self._host,
             CONF_MODBUS_PORT: self._modbus_port,
             CONF_WEB_PORT: self._web_port,
             CONF_SLAVE: self._slave,
@@ -497,10 +509,36 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # -------------------------------------------------------------- discovery
 
     async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult:
-        """Offer setup when a device with CTC's MAC prefix appears."""
+        """Offer setup when a device with CTC's MAC prefix appears.
+
+        A unit that is already set up is recognised by the MAC its display
+        gave on the system information page, and when it turns up at another
+        address its entry moves there: the address in the data changes, the
+        device key stays, so the device and every entity keep their history
+        (roadmap R20). A unit whose MAC has never been read is recognised by
+        its address alone. Only what is neither is offered as new.
+        """
         host = discovery_info.ip
+        verdict, entry_id = match_discovery(
+            (
+                Known(
+                    entry.entry_id,
+                    entry.data.get(CONF_HOST),
+                    (entry.options.get(CONF_IDENTITY) or {}).get("mac"),
+                )
+                for entry in self._async_current_entries(include_ignore=False)
+            ),
+            host,
+            format_mac(discovery_info.macaddress),
+        )
+        if verdict == MOVED and entry_id is not None:
+            self._async_move_entry(entry_id, host)
+        if verdict != NEW:
+            return self.async_abort(reason="already_configured")
+        # No updates here: an entry known by this address that has moved away
+        # is not the unit at it now, and its address must not be taken back.
         await self.async_set_unique_id(f"{DOMAIN}_{host}")
-        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+        self._abort_if_unique_id_configured()
 
         session = async_get_clientsession(self.hass)
         display = await async_probe_host(session, host, DEFAULT_WEB_PORT)
@@ -515,6 +553,35 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # The card of a discovered unit reads strings.json's flow_title, "{name}".
         self.context["title_placeholders"] = {"name": display.label}
         return await self.async_step_confirm()
+
+    @callback
+    def _async_move_entry(self, entry_id: str, host: str) -> None:
+        """Point a configured unit's entry at the address it turned up at.
+
+        The device key is pinned in the same write (keys.moved_data), so an
+        entry from before it existed goes on being known by its old address.
+        A loaded entry is reloaded by its own update listener, which takes
+        any change of the data for one; an entry waiting to be set up again
+        has no listener, so it is asked to try at once rather than at the end
+        of its back-off, against an address that no longer answers.
+        """
+        entry = self.hass.config_entries.async_get_entry(entry_id)
+        if entry is None:
+            return
+        old = str(entry.data.get(CONF_HOST, ""))
+        _LOGGER.info(
+            "The heat pump of %s answered DHCP from %s instead of %s; the entry follows it there",
+            entry.title,
+            host,
+            old,
+        )
+        self.hass.config_entries.async_update_entry(
+            entry,
+            data=moved_data(entry.data, host),
+            title=moved_title(entry.title, old, host),
+        )
+        if entry.state is config_entries.ConfigEntryState.SETUP_RETRY:
+            self.hass.config_entries.async_schedule_reload(entry.entry_id)
 
     async def async_step_confirm(
         self, user_input: dict[str, Any] | None = None

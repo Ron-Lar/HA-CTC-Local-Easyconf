@@ -93,6 +93,7 @@ from .identity import (
     async_read_identity_via_panel,
     only_identity_differs,
 )
+from .keys import device_key, mac_address, unique_prefix
 from .modbus_api import CtcModbusClient, hold_library_quiet
 from .modbus_probe import BUSY, CLOSED, async_classify_cached
 from .updates import async_latest_release, check_is_due, newer
@@ -349,11 +350,24 @@ def _async_adopt_identity(
     # The runtime's own DeviceInfo as well, so an entity added from now on,
     # an identity sensor among them, carries the same device details.
     runtime.device.update(known)
+    mac = mac_address(merged.mac)
+    connections = {(dr.CONNECTION_NETWORK_MAC, mac)} if mac is not None else set()
+    if connections:
+        runtime.device["connections"] = connections
     registry = dr.async_get(hass)
     identifier = next(iter(runtime.device["identifiers"]))
     for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
         if identifier in device.identifiers:
             registry.async_update_device(device.id, **known)
+            if connections and not connections <= device.connections:
+                # The MAC on the device card, for the DHCP flow to know the
+                # unit by. A Home Assistant before devices were kept per
+                # config entry refuses a MAC another integration's device
+                # already has; the card goes without it then, nothing else.
+                try:
+                    registry.async_update_device(device.id, merge_connections=connections)
+                except Exception as err:  # noqa: BLE001 - the MAC is a convenience
+                    _LOGGER.debug("Could not put the MAC on the device: %s", err)
     async_dispatcher_send(hass, identity_signal(entry.entry_id))
     _async_review_issues(hass, entry, runtime)
     hass.config_entries.async_update_entry(
@@ -834,8 +848,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     identity = Identity.from_dict(options.get(CONF_IDENTITY))
 
     model = entry.data.get("model", "CTC")
+    # What the device and every entity are known by: the address the entry was
+    # created with, kept when the address moves (keys.py, roadmap R20).
+    key = device_key(entry.data)
     device = DeviceInfo(
-        identifiers={(DOMAIN, host)},
+        identifiers={(DOMAIN, key)},
         manufacturer="CTC / Enertech",
         model=f"{model} + {identity.heatpump_model}" if identity.heatpump_model else model,
         # The device name becomes the prefix of every entity id, so it stays
@@ -847,6 +864,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         # No link to a web interface that did not answer at set-up (R11).
         configuration_url=web_interface_url(host, web_port) if has_display(entry.data) else None,
     )
+    if (mac := mac_address(identity.mac)) is not None:
+        # The display's MAC on the device card, and what the DHCP flow
+        # recognises the unit by when it turns up at another address.
+        device["connections"] = {(dr.CONNECTION_NETWORK_MAC, mac)}
 
     runtime = CtcRuntime(
         modbus=modbus,
@@ -1010,7 +1031,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         from homeassistant.helpers.start import async_at_started
 
         async def _seed(_hass: HomeAssistant) -> None:
-            await async_seed_from_statistics(hass, entry.entry_id, f"{DOMAIN}_{host}_", seen)
+            await async_seed_from_statistics(hass, entry.entry_id, unique_prefix(key), seen)
 
         entry.async_on_unload(async_at_started(hass, _seed))
 
