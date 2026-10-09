@@ -237,6 +237,15 @@ _GRAPHS = (
 #: show, so the tab adds something rather than opening with the same picture.
 _OVERVIEW_GRAPHS = ("graph_temps", "graph_pump")
 _PERFORMANCE_GRAPHS = ("graph_flow", "graph_compressor", "graph_energy", "graph_runtime", "graph_cop")
+#: The line a graph's heading promises, where it has one: without it, because
+#: the installation lacks the entity or has only ever read it as zero, the
+#: graph is left out rather than drawn under a heading that promises more. The
+#: flow graph without its setpoint is two of the overview's five lines over
+#: again, the very picture the performance tab is there not to repeat (a unit
+#: whose heating circuit is switched off reads the setpoint as a flat 0), and
+#: the compressor graph without the compressor's speed is a line of degree
+#: minutes under the compressor's name.
+_GRAPH_REQUIRES = {"graph_flow": "hs1_flow_setpoint", "graph_compressor": "hp1_rps"}
 _GRAPH_ICONS = {"graph_pump": "mdi:chart-timeline", "history": "mdi:chart-line"}
 
 
@@ -667,8 +676,13 @@ class _Builder:
         """A graph of what this installation has of the keys, or None.
 
         Graphs read what the sections show, so they claim nothing: the same
-        value is a chip on one tab and a line here.
+        value is a chip on one tab and a line here. A graph whose heading
+        promises a line this installation has not got is left out whole
+        (_GRAPH_REQUIRES), rather than drawn as what is left of it.
         """
+        required = _GRAPH_REQUIRES.get(graph_id)
+        if required and (not self.entity_id(required) or required in self.unused):
+            return None
         entities = []
         shown: list[dict[str, Any]] = []
         for key in keys:
