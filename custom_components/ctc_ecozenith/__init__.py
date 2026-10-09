@@ -75,6 +75,7 @@ from .const import (
     web_interface_url,
 )
 from .coordinator import CtcControlManager, CtcModbusCoordinator, CtcWebCoordinator
+from .harvest import STORAGE_VERSION as HARVEST_STORAGE_VERSION, HarvestMemory
 from .identity import Identity, async_read_identity, async_read_identity_via_panel
 from .modbus_api import CtcModbusClient, hold_library_quiet
 from .updates import async_latest_release, newer
@@ -99,6 +100,12 @@ _FAILURES: dict[str, ErrorCounter] = {}
 #: run. The walk moves the display, so it is attempted once, not at every
 #: reload, and only while the identity is still missing.
 _WALKED: set[str] = set()
+
+#: Entries whose display has been read for the identity in this run, without
+#: moving the panel. Once per run rather than at every reload: the reading
+#: asks the display for the values of every screen in its map, and a reload
+#: follows the very write that a reading causes.
+_IDENTITY_READ: set[str] = set()
 
 #: Attempts spent on each entry's menu in this run. Counted rather than flagged,
 #: and kept across reloads, because writing the options reloads the entry: a flag
@@ -193,11 +200,20 @@ async def _async_catch_up(
 ) -> None:
     """Read the menu again after an update, and fill in a missing identity.
 
-    Both move the physical panel, so neither runs during set-up and neither runs
-    while the harvester is walking: the panel lock keeps them apart. A new
-    version reads the whole menu again, because a newer parser can make sense of
-    rows and pages the old one passed over, and pages nobody has switched off
-    are harvested.
+    Nothing here runs during set-up, so set-up never waits on the display and
+    a restart never moves the panel. The menu re-read and the walk to the
+    system information page both move the panel, and neither runs while the
+    harvester is walking: the panel lock keeps them apart. A new version reads
+    the whole menu again, because a newer parser can make sense of rows and
+    pages the old one passed over, and pages nobody has switched off are
+    harvested.
+
+    The identity is read here too, where it is still missing. The display
+    only writes it into a screen once that screen has been shown on the
+    panel, so a reading before that finds nothing and the gaps are filled
+    the first time someone opens the page; the reading itself moves nothing.
+    Once per run rather than at every reload, since a reload is what the
+    write of a found identity causes.
 
     A menu that could not be read is tried again a few minutes later in the same
     run, and said out loud once the tries are spent. A display that was busy for
@@ -225,8 +241,13 @@ async def _async_catch_up(
                 _MENU_LAST[entry.entry_id] = hass.loop.time()
                 changed.update(await _async_reread_menu(client, entry, version))
 
+            identity = runtime.identity
+            if not identity.is_complete and entry.entry_id not in _IDENTITY_READ:
+                _IDENTITY_READ.add(entry.entry_id)
+                identity = identity.merged_with(await async_read_identity(client))
+
             if (
-                not runtime.identity.serial
+                not identity.serial
                 and entry.options.get(CONF_VISIT_SYSTEM_INFO, True)
                 and entry.entry_id not in _WALKED
             ):
@@ -239,9 +260,9 @@ async def _async_catch_up(
                         # been tried on a real panel, see const.CONF_TRY_QUICK_MENU.
                         quick_menu=bool(entry.options.get(CONF_TRY_QUICK_MENU, False)),
                     )
-                merged = runtime.identity.merged_with(found)
-                if merged.as_dict() != runtime.identity.as_dict():
-                    changed[CONF_IDENTITY] = merged.as_dict()
+                identity = identity.merged_with(found)
+            if identity.as_dict() != runtime.identity.as_dict():
+                changed[CONF_IDENTITY] = identity.as_dict()
         except Exception as err:  # noqa: BLE001 - catching up must never break the entry
             _LOGGER.debug("Could not catch up with the display: %s", err)
 
@@ -250,9 +271,13 @@ async def _async_catch_up(
             # and the new identity are picked up. The reload cancels this task and
             # starts it over, and the attempts already spent are remembered, so a
             # menu that is still owed is tried again there rather than endlessly.
-            hass.config_entries.async_update_entry(
-                entry, options={**entry.options, **changed}
-            )
+            # Written with the panel free: the reload cancels the entry's tasks,
+            # the harvest among them, and a harvest cut short mid-walk would
+            # leave the panel on whatever page it had reached.
+            async with client.panel:
+                hass.config_entries.async_update_entry(
+                    entry, options={**entry.options, **changed}
+                )
             return
         if not _menu_is_due(entry, version):
             return
@@ -497,24 +522,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
 
     # What the unit is, rather than what it is doing. Static, so it is read once
     # and kept: the panel writes it into its own screens and never changes it.
+    # Where fields are still missing they are read in the background, by the
+    # catch-up task below, so that set-up itself never waits on the display.
     identity = Identity.from_dict(options.get(CONF_IDENTITY))
-    # The display only writes these values into a screen once that screen has
-    # been shown on the panel. Until then they read as empty, so a unit whose
-    # system information page nobody has opened reports no firmware at all.
-    # Reading again at every start, and only ever filling gaps, means the
-    # values turn up by themselves the first time someone opens the page.
-    if not identity.is_complete:
-        try:
-            found = await async_read_identity(web_client)
-        except Exception as err:  # noqa: BLE001 - identity is nice to have
-            _LOGGER.debug("Could not read the unit's identity: %s", err)
-            found = Identity()
-        merged = identity.merged_with(found)
-        if merged.as_dict() != identity.as_dict():
-            identity = merged
-            hass.config_entries.async_update_entry(
-                entry, options={**options, CONF_IDENTITY: identity.as_dict()}
-            )
 
     model = entry.data.get("model", "CTC")
     device = DeviceInfo(
@@ -552,16 +562,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
 
     pages = pages_from_storage(options.get(CONF_SLOW_PAGES, []))
     if pages:
+        # The last harvest before the restart, values and moments alike. The
+        # coordinator comes up with it, so the sensors show what was read
+        # before, as old as it is, and the first harvest is owed one interval
+        # after the last one: a restart moves the panel not at all. Nothing is
+        # harvested in set-up, not even without a store; then the first harvest
+        # follows a few seconds after the platforms are up.
+        memory = HarvestMemory(
+            Store(hass, HARVEST_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_display")
+        )
+        stored = await memory.async_load()
         web = CtcWebCoordinator(
             hass,
             web_client,
             pages,
             int(options.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)),
             restore_page=bool(options.get(CONF_RESTORE_PAGE, True)),
+            stored=stored,
         )
-        # A failure here must not take the whole entry down: Modbus is the base
-        # and the display is a supplement.
-        await web.async_refresh()
         runtime.web = web
         runtime.pages = pages
         runtime.energy_out, runtime.energy_in = find_energy_totals(pages)
@@ -578,12 +596,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
             # a pair that read CTC's marker, used to cost the sensors for good,
             # until somebody reloaded the entry. Registered before the
             # platforms, so the sensors that listen to the same coordinator
-            # see the new pairing when they update.
+            # see the new pairing when they update. The pair written down
+            # before the restart comes back as a pair, see the store above.
             snapshot = ConsumptionSnapshot()
             heat_key = runtime.energy_out.key
+            if stored is not None:
+                snapshot.seed(web.last_read(heat_key), stored.consumption)
 
             def _take_consumption() -> None:
-                snapshot.update(web.read_at.get(heat_key), modbus.data)
+                snapshot.update(web.last_read(heat_key), modbus.data)
 
             _take_consumption()
             entry.async_on_unload(web.async_add_listener(_take_consumption))
@@ -595,6 +616,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
                 Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_cop")
             )
             await runtime.cop.async_load()
+
+        def _remember() -> None:
+            # After every refresh, written only when a harvest actually ran;
+            # after the consumption listener, so the pair goes in together.
+            paired = runtime.consumption_snapshot
+            memory.remember(
+                web.data,
+                web.read_at,
+                web.last_harvest,
+                paired.value if paired is not None else None,
+            )
+
+        entry.async_on_unload(web.async_add_listener(_remember))
 
     # What this installation actually has, learnt from what it reports: CTC
     # answers with a clean zero for hardware and registers it does not use.
@@ -645,17 +679,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     )
 
     if runtime.cop is not None:
-        async def _record_cop(_now=None) -> None:
+        async def _record_cop(_now=None, read_at=None) -> None:
             out, consumed = current_totals(runtime)
             try:
                 commissioned = commissioning_date(runtime)
                 if commissioned is not None:
                     await runtime.cop.async_set_anchor(commissioned)  # type: ignore[union-attr]
-                await runtime.cop.async_record(out, consumed)  # type: ignore[union-attr]
+                await runtime.cop.async_record(out, consumed, now=read_at)  # type: ignore[union-attr]
             except Exception as err:  # noqa: BLE001 - a missed sample is not fatal
                 _LOGGER.debug("Could not write down the energy counters: %s", err)
 
-        await _record_cop()
+        # The counters as they came back from the store, stamped with the
+        # moment they were read rather than with now: a restart is not a
+        # reading, and a sample dated today with yesterday's counters would
+        # pass for yesterday's in the daily figure.
+        await _record_cop(read_at=runtime.web.last_read(runtime.energy_out.key))  # type: ignore[union-attr]
         entry.async_on_unload(
             async_track_time_interval(hass, _record_cop, COP_SAMPLE_INTERVAL)
         )
@@ -699,5 +737,11 @@ async def async_remove_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> None
     ]
     if not others:
         dashboard.async_unregister(hass)
-    # What the unit was seen to have belongs to this entry alone.
+    # What the unit was seen to have, what its display last gave and the
+    # energy counters behind the coefficient of performance belong to this
+    # entry alone, and go with it.
     await Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_seen").async_remove()
+    await Store(
+        hass, HARVEST_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_display"
+    ).async_remove()
+    await Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_cop").async_remove()
