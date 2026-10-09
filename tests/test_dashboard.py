@@ -112,7 +112,7 @@ def test_the_overview_says_what_the_pump_is_doing_right_now(dashboard_views, pum
     sections = _tab(dashboard_views, pump, "overview")
     assert _headings(sections) == [
         "CTC EcoZenith i255", "Snabbstyrning",
-        "Temperaturer det senaste dygnet", "Nyckeltal",
+        "Temperaturer det senaste dygnet", "Pumpen det senaste dygnet", "Nyckeltal",
     ]
     status = sections[0]
     # One line of chips, and the whole width to read it on.
@@ -246,6 +246,34 @@ def test_the_overview_ends_in_a_day_of_the_circuit(dashboard_views, pumps):
     assert card["entities"][0]["name"] == "Utetemperatur"
 
 
+def test_the_overview_shows_what_the_pump_did_when(dashboard_views, pumps):
+    """R38: the statuses and the heater as timeline bands under the temperatures."""
+    pump = pumps["vsh"]
+    sections = _tab(dashboard_views, pump, "overview")
+    headings = _headings(sections)
+    assert headings.index("Pumpen det senaste dygnet") == headings.index(
+        "Temperaturer det senaste dygnet"
+    ) + 1
+    graph = _section(sections, "Pumpen det senaste dygnet")
+    assert graph["column_span"] == 2
+    (card,) = graph["cards"][1:]
+    assert card["type"] == "history-graph" and card["hours_to_show"] == 24
+    by_entity = {entity_id: key for key, entity_id in pump["entities"].items()}
+    # The registers themselves, not the binaries derived from hp1_status,
+    # which would be four bands of the same register.
+    assert [by_entity[e["entity"]] for e in card["entities"]] == [
+        "hp1_status", "system_status", "immersion_active", "sg_mode",
+    ]
+    assert [e["name"] for e in card["entities"]] == [
+        "Värmepump status", "Systemstatus", "Elpatron aktiv", "SmartGrid-läge",
+    ]
+    # SmartGrid is a band only where the installation has used it.
+    pump["unused"] = ["sg_mode"]
+    graph = _section(_tab(dashboard_views, pump, "overview"), "Pumpen det senaste dygnet")
+    assert pump["entities"]["sg_mode"] not in json.dumps(graph)
+    assert len(graph["cards"][1]["entities"]) == 3
+
+
 def test_a_graph_is_left_out_when_the_pump_has_none_of_its_readings(dashboard_views, pumps):
     pump = pumps["vsh"]
     for key in ("outdoor_temp", "hs1_flow", "return_temp", "dhw_temp", "room_temp_1"):
@@ -325,6 +353,7 @@ def test_performance_opens_with_the_graphs_and_then_every_reading(dashboard_view
         "Temperaturer det senaste dygnet",
         "Kompressorn det senaste dygnet",
         "Energi per dygn",
+        "Kompressorns gångtid per dygn",
         "Värmefaktor per dygn",
         "Temperaturer",
         "Varmvatten",
@@ -333,7 +362,7 @@ def test_performance_opens_with_the_graphs_and_then_every_reading(dashboard_view
         "Pumpens inställningar",
         "Om enheten",
     ]
-    assert all(s.get("column_span") == 2 for s in sections[:4])
+    assert all(s.get("column_span") == 2 for s in sections[:5])
     energy = _section(sections, "Energi per dygn")["cards"][1]
     assert energy["type"] == "statistics-graph"
     assert energy["chart_type"] == "bar" and energy["stat_types"] == ["change"]
@@ -345,6 +374,27 @@ def test_performance_opens_with_the_graphs_and_then_every_reading(dashboard_view
     cop = _section(sections, "Värmefaktor per dygn")["cards"][1]
     assert cop["chart_type"] == "line" and cop["stat_types"] == ["mean"]
     assert cop["entities"] == [pump["entities"]["cop_day"]]
+
+
+def test_the_compressors_running_time_per_day_is_a_bar_per_day_and_goes_where_it_is_zero(
+    dashboard_views, pumps
+):
+    """R38: 62214 only grows, so its change per day is the hours the compressor ran."""
+    pump = pumps["vsh"]
+    sections = _tab(dashboard_views, pump, "performance")
+    headings = _headings(sections)
+    assert headings.index("Kompressorns gångtid per dygn") == headings.index("Energi per dygn") + 1
+    runtime = _section(sections, "Kompressorns gångtid per dygn")["cards"][1]
+    assert runtime["type"] == "statistics-graph"
+    assert runtime["chart_type"] == "bar" and runtime["stat_types"] == ["change"]
+    assert runtime["period"] == "day" and runtime["days_to_show"] == 30
+    assert runtime["entities"] == [pump["entities"]["compressor_hours"]]
+    # An i550 Pro whose compressor hours have only ever been zero gets no graph
+    # of them, the same rule that keeps a flat zero out of the sections.
+    pump["unused"] = ["compressor_hours"]
+    assert "Kompressorns gångtid per dygn" not in _headings(
+        _tab(dashboard_views, pump, "performance")
+    )
 
 
 def test_readings_hide_while_they_have_nothing_to_show(dashboard_views, pumps):
