@@ -296,6 +296,17 @@ async def _async_controls(
     outside the touch area, so there the icon above it is pressed. Anywhere
     else the caption is pressed on its own centre: in the i550 Pro's quick menu
     the icon right above the system information caption is the alarm reset.
+
+    Open point, to be settled at a panel and not in code: whether Avancerat
+    and Display are drawn as tile grids too, so that a caption's centre misses
+    there as well. If so the walk stops at Avancerat, by the rule below that a
+    press which changed nothing ends the walk, and the repairs view asks the
+    owner to open the page instead; a loss of a convenience, never a press on
+    anything that acts. The screen definitions can be fetched without moving
+    the panel (``/wp/<screen>`` for the two pages, on an i255 and an i550),
+    and only with that in hand should the icon rule be widened, since a wrong
+    icon above a caption on a settings page could be a menu the walk must
+    never enter.
     """
     page_map = await client.async_screen_map()
     screens = page_map.get(page, [])
