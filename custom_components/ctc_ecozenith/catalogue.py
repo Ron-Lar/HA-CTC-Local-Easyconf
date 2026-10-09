@@ -18,7 +18,7 @@ from typing import Any
 
 from .const import PERIOD_MARKERS, SENTINELS, SlowPage, SlowValue
 from .keys import row_key
-from .web_api import CtcWebClient, CtcWebError, Widget, tap_target
+from .web_api import CtcWebClient, CtcWebError, Widget
 
 _LOGGER = logging.getLogger(__name__)
 
