@@ -186,18 +186,32 @@ class CtcDisplaySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        return (
-            self.coordinator.last_update_success
-            and self._value.key in (self.coordinator.data or {})
+        """Available while the reading is fresh, page by page.
+
+        The data carries a value across a page that could not be reached, so
+        being in the data is not enough: the value has to have been read off
+        the panel recently, within as many intervals as a whole harvest may
+        fail in a row. A page that has stopped answering thus goes unavailable
+        after the same patience as a display that has, instead of showing
+        yesterday's delivered heat as today's for days.
+        """
+        return self.coordinator.last_update_success and self.coordinator.is_fresh(
+            self._value.key
         )
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
-        return {
+        attributes = {
             "källa": "displayens webbgränssnitt",
             "sida": str(self._value.page),
             "skärm": str(self._value.screen),
         }
+        # When the value was actually read, so a reading carried from an
+        # earlier harvest is seen for what it is.
+        read_at = self.coordinator.last_read(self._value.key)
+        if read_at is not None:
+            attributes["senast läst"] = read_at.isoformat(timespec="seconds")
+        return attributes
 
 
 class CtcIdentitySensor(SensorEntity):
