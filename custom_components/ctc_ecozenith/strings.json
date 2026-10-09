@@ -112,9 +112,13 @@
     }
   },
   "issues": {
-    "pages_missing": {
-      "title": "No page of the display is being read",
-      "description": "Not one of the display's pages is ticked, so the display is never read: delivered heat, and with it the coefficient of performance, lives only there. Tick the pages under Settings, Devices and services, CTC Local Easyconf, Configure. Is the list empty, the menu could not be read when the integration was set up; reload the integration and it reads the menu again."
+    "pages_unticked": {
+      "title": "No page of the display is ticked",
+      "description": "The display's menu has been read, but not one of its pages is ticked, so the display is never read: delivered heat, and with it the coefficient of performance, lives only there. Tick the pages under Settings, Devices and services, CTC Local Easyconf, Configure. The coefficient of performance needs the page with the stored or historical operation data."
+    },
+    "menu_unread": {
+      "title": "The display's menu could not be read",
+      "description": "No page of the display is read, because its menu could not be read: the integration did not find its way from the home screen into the operation data menu, or the display did not answer. Until then only Modbus is read, without delivered heat or a coefficient of performance. The menu is tried again three times, five minutes apart, after every start of Home Assistant, and at once with Read the display's menu again under Settings, Devices and services, CTC Local Easyconf, Configure. If it never works, download the diagnostics from the integration's menu and attach them to an issue on GitHub: they show how far the reading got."
     },
     "history_page_missing": {
       "title": "The coefficient of performance is missing its history page",

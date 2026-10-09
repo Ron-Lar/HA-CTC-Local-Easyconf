@@ -112,9 +112,13 @@
     }
   },
   "issues": {
-    "pages_missing": {
-      "title": "Ingen sida i displayen läses",
-      "description": "Ingen av displayens sidor är ikryssad, så displayen läses aldrig: avgiven värme, och därmed värmefaktorn, finns bara där. Kryssa i sidorna under Inställningar, Enheter och tjänster, CTC Local Easyconf, Konfigurera. Är listan tom kunde menyn inte läsas när integrationen sattes upp; ladda om integrationen, då läses menyn på nytt."
+    "pages_unticked": {
+      "title": "Ingen av displayens sidor är ikryssad",
+      "description": "Displayens meny är läst, men ingen av dess sidor är ikryssad, så displayen läses aldrig: avgiven värme, och därmed värmefaktorn, finns bara där. Kryssa i sidorna under Inställningar, Enheter och tjänster, CTC Local Easyconf, Konfigurera. Värmefaktorn behöver sidan med lagrad eller historisk driftinfo."
+    },
+    "menu_unread": {
+      "title": "Displayens meny kunde inte läsas",
+      "description": "Ingen sida i displayen läses, eftersom dess meny inte kunde läsas: integrationen hittade inte vägen från hemskärmen in i driftinfomenyn, eller så svarade inte displayen. Till dess läses bara Modbus, utan avgiven värme och värmefaktor. Menyn provas igen tre gånger med fem minuters mellanrum efter varje start av Home Assistant, och genast med Läs om displayens meny under Inställningar, Enheter och tjänster, CTC Local Easyconf, Konfigurera. Lyckas det aldrig: hämta diagnostiken ur integrationens meny och bifoga den i ett ärende på GitHub, den visar hur långt läsningen kom."
     },
     "history_page_missing": {
       "title": "Värmefaktorn saknar historiksidan",

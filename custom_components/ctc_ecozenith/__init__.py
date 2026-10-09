@@ -208,6 +208,10 @@ def menu_read_from_the_options(entry_id: str, now: float) -> None:
     _MENU_LAST[entry_id] = now
 
 ISSUE_PAGES = "pages_missing"
+#: The two things the pages_missing issue can say, under its one id (R12): a
+#: menu that was read with nothing ticked, and a menu that was never read.
+ISSUE_PAGES_UNTICKED = "pages_unticked"
+ISSUE_MENU_UNREAD = "menu_unread"
 ISSUE_HISTORY_PAGE = "history_page_missing"
 ISSUE_IDENTITY = "identity_incomplete"
 ISSUE_UPDATE_AVAILABLE = "update_available"
@@ -288,7 +292,7 @@ def _async_review_issues(
     if not _display_notices_apply(hass, entry):
         return
 
-    def review(key: str, needed: bool) -> None:
+    def review(key: str, needed: bool, text: str | None = None) -> None:
         issue_id = f"{entry.entry_id}_{key}"
         if needed:
             ir.async_create_issue(
@@ -297,12 +301,24 @@ def _async_review_issues(
                 issue_id,
                 is_fixable=False,
                 severity=ir.IssueSeverity.WARNING,
-                translation_key=key,
+                translation_key=text or key,
             )
         else:
             ir.async_delete_issue(hass, DOMAIN, issue_id)
 
-    review(ISSUE_PAGES, runtime.web is None)
+    # One issue, two texts (R12). A stored menu with nothing ticked is the
+    # owner's choice and the text says where to tick; no stored menu means
+    # the reading never got through, which is tried again by itself and is
+    # nothing the tick boxes can mend, since they are built from that menu.
+    # The id stays the same, so an issue somebody has ignored stays ignored
+    # when its text changes.
+    review(
+        ISSUE_PAGES,
+        runtime.web is None,
+        ISSUE_PAGES_UNTICKED
+        if pages_from_storage(entry.options.get(CONF_MENU))
+        else ISSUE_MENU_UNREAD,
+    )
     review(ISSUE_HISTORY_PAGE, runtime.web is not None and runtime.energy_out is None)
     review(ISSUE_IDENTITY, not runtime.identity.serial)
 
