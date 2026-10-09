@@ -22,7 +22,7 @@ key and its entity was left behind with a twin beside it. Now the key is where
 the row stands: the page, the screen and the first variable it reads,
 "p30_s128_v22". The name is free to improve. The first reading of the menu
 after the change pairs every row of the stored menu with the row at the same
-place in the new one (pair_keys), and each new row carries the key it had
+place in the new one (migrate_keys), and each new row carries the key it had
 (with_previous_keys); set-up then moves the entity's unique_id and the stored
 values over, and leaves the entity id alone.
 
@@ -219,7 +219,7 @@ def _place(value: SlowValue, candidates: list[SlowValue], taken: set[int]) -> Sl
     return None
 
 
-def pair_keys(old: Iterable[SlowPage], new: Iterable[SlowPage]) -> dict[str, str]:
+def migrate_keys(old: Iterable[SlowPage], new: Iterable[SlowPage]) -> dict[str, str]:
     """For each row of the old menu, the key of the row at its place in the new one.
 
     Paired on the page, the screen and the variables, never on the name: the
@@ -271,7 +271,7 @@ def with_previous_keys(old: Iterable[SlowPage], new: Iterable[SlowPage]) -> list
     new_pages = list(new)
     by_key = {value.key: value for page in old_pages for value in page.values}
     parents: dict[str, list[SlowValue]] = {}
-    for old_key, new_key in pair_keys(old_pages, new_pages).items():
+    for old_key, new_key in migrate_keys(old_pages, new_pages).items():
         parents.setdefault(new_key, []).append(by_key[old_key])
     result: list[SlowPage] = []
     for page in new_pages:
