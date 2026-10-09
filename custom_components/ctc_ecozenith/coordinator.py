@@ -11,6 +11,7 @@ and it puts the panel back when it is done.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -331,6 +332,15 @@ class CtcControlManager:
     only while one has reached it within CONTROL_EXPIRY_SECONDS. The rule itself
     is in keepalive.py; this is the Home Assistant side of it: the timer, the
     log and the listeners.
+
+    Writes take time, and two things can happen while one is on its way. A
+    newer value for the same address: sets and the refresh take turns behind
+    one lock, an address at a time, so a refresh never writes an older value
+    over a newer one. A release, from the button, a select or the entry being
+    unloaded: those cannot wait for the lock, so the state is read again when
+    the write is done, and a write that was overtaken by a release records
+    nothing. The controller may then hold the value for its five minutes, but
+    Home Assistant no longer claims it, which is what the release asked for.
     """
 
     def __init__(
@@ -347,6 +357,11 @@ class CtcControlManager:
         self._clock = clock
         self._unsub = None
         self._listeners: list[Callable[[], None]] = []
+        #: Taken by a set for its write and by the refresh for each address.
+        self._writing = asyncio.Lock()
+        #: Set by async_stop and never cleared: the entry is going, and a
+        #: refresh that is still running records nothing and writes no more.
+        self._stopped = False
 
     @property
     def active(self) -> dict[int, int]:
@@ -401,7 +416,8 @@ class CtcControlManager:
         """Set or release one control register.
 
         The value is recorded only once the write has reached the controller, so
-        a failed write never shows as control in force.
+        a failed write never shows as control in force. A release waits for
+        nothing and is recorded at once.
         """
         if raw is None:
             self._state.release(address)
@@ -409,18 +425,37 @@ class CtcControlManager:
                 self._stop_timer()
             self._notify()
             return
-        try:
-            await self._client.async_write(address, raw)
-        except CtcModbusError:
-            # A write that fails while an older value is in force counts against
-            # that value's time, like a failed refresh would.
-            if self._state.failed(address, self._clock()):
-                self._said_released(address)
-                if not self._state:
-                    self._stop_timer()
-                self._notify()
-            raise
-        recovered = self._state.written(address, raw, self._clock())
+        async with self._writing:
+            if self._stopped:
+                raise CtcModbusError(
+                    f"control register {address} was not written: the entry is being unloaded"
+                )
+            generation = self._state.generation(address)
+            try:
+                await self._client.async_write(address, raw)
+            except CtcModbusError as err:
+                if self._stopped or self._state.generation(address) != generation:
+                    raise
+                # A write that fails while an older value is in force counts
+                # against that value's time, like a failed refresh would.
+                now = self._clock()
+                if self._state.failed(address, now):
+                    self._said_released(address)
+                    if not self._state:
+                        self._stop_timer()
+                    self._notify()
+                elif self._state.failures(address) == 1:
+                    self._said_missed(address, err)
+                raise
+            if self._stopped or self._state.generation(address) != generation:
+                _LOGGER.debug(
+                    "Control register %s was released while %s was on its way, so the "
+                    "write is not recorded",
+                    address,
+                    raw,
+                )
+                return
+            recovered = self._state.written(address, raw, self._clock())
         _LOGGER.debug("Control register %s set to %s", address, raw)
         if recovered:
             _LOGGER.info("Control register %s reached the controller again", address)
@@ -458,41 +493,67 @@ class CtcControlManager:
     async def _async_refresh(self, _now) -> None:
         """Write every override again, and give up the ones the unit has forgotten.
 
-        A miss is a debug line, except the first of a run, which is a warning
-        that says what happens next. The release is one warning; a write that
-        reaches the unit again after misses is one info line.
+        The state is read again for each address, under the write lock, so a
+        value set a moment ago is what goes out, and read once more after the
+        write, so an address released while the write was on its way is left
+        released. A miss is a debug line, except the first of a run, which is a
+        warning that says what happens next. The release is one warning; a
+        write that reaches the unit again after misses is one info line.
         """
         changed = False
-        for address, raw in self._state.active.items():
-            try:
-                await self._client.async_write(address, raw)
-            except CtcModbusError as err:
-                now = self._clock()
-                if self._state.failed(address, now):
-                    self._said_released(address)
-                    changed = True
-                elif self._state.failures(address) == 1:
-                    until = self._moment(self._state.valid_until(address))
-                    _LOGGER.warning(
-                        "Could not refresh control register %s (%s). The controller holds "
-                        "the last value until about %s and the override is released then "
-                        "unless a write reaches it",
+        for address in list(self._state.active):
+            async with self._writing:
+                if self._stopped:
+                    return
+                raw = self._state.get(address)
+                if raw is None:
+                    continue
+                generation = self._state.generation(address)
+                try:
+                    await self._client.async_write(address, raw)
+                except CtcModbusError as err:
+                    if self._stopped:
+                        return
+                    if self._state.generation(address) != generation:
+                        continue
+                    now = self._clock()
+                    if self._state.failed(address, now):
+                        self._said_released(address)
+                        changed = True
+                    elif self._state.failures(address) == 1:
+                        self._said_missed(address, err)
+                    else:
+                        _LOGGER.debug("Could not refresh control register %s: %s", address, err)
+                    continue
+                if self._stopped:
+                    return
+                if self._state.generation(address) != generation:
+                    _LOGGER.debug(
+                        "Control register %s was released while its refresh was on its way",
                         address,
-                        err,
-                        until.isoformat(timespec="seconds") if until else "?",
                     )
+                    continue
+                if self._state.written(address, raw, self._clock()):
+                    _LOGGER.info("Control register %s reached the controller again", address)
+                    changed = True
                 else:
-                    _LOGGER.debug("Could not refresh control register %s: %s", address, err)
-                continue
-            if self._state.written(address, raw, self._clock()):
-                _LOGGER.info("Control register %s reached the controller again", address)
-                changed = True
-            else:
-                _LOGGER.debug("Control register %s refreshed with %s", address, raw)
+                    _LOGGER.debug("Control register %s refreshed with %s", address, raw)
         if changed:
             if not self._state:
                 self._stop_timer()
             self._notify()
+
+    def _said_missed(self, address: int, err: Exception) -> None:
+        """The first miss of a run, whichever path it came by: what happens next."""
+        until = self._moment(self._state.valid_until(address))
+        _LOGGER.warning(
+            "A write of control register %s did not reach the controller (%s). It holds "
+            "the last value until about %s and the override is released then unless a "
+            "write reaches it",
+            address,
+            err,
+            until.isoformat(timespec="seconds") if until else "?",
+        )
 
     def _said_released(self, address: int) -> None:
         _LOGGER.warning(
@@ -503,5 +564,15 @@ class CtcControlManager:
         )
 
     async def async_stop(self) -> None:
+        """The entry is going: stop the timer, forget everything, outlast no write.
+
+        Nothing is written; the controller lets go by itself. A refresh that is
+        in the middle of a write is let finish that one write and then stops,
+        and this waits for it, so that when it returns no write of this
+        manager's is on its way or queued behind the client's shutdown.
+        """
+        self._stopped = True
         self._stop_timer()
         self._state.clear()
+        async with self._writing:
+            pass
