@@ -328,6 +328,13 @@ TEXT = {
         "state_off": "Av",
         "state_problem_on": "Larm",
         "state_problem_off": "OK",
+        # A control without a value yet, and the 0 the pump means as no limit.
+        "state_unset": "ej satt",
+        "state_unset_note": (
+            "Pumpen lämnar inte ut sitt eget värde här, så reglaget står tomt tills "
+            "Home Assistant har skrivit ett."
+        ),
+        "state_no_limit": "ingen gräns",
     },
     "en": {
         "overview": "Overview",
@@ -384,8 +391,22 @@ TEXT = {
         "state_off": "Off",
         "state_problem_on": "Alarm",
         "state_problem_off": "OK",
+        "state_unset": "not set",
+        "state_unset_note": (
+            "The pump does not give out its own value here, so the control stays empty "
+            "until Home Assistant has written one."
+        ),
+        "state_no_limit": "no limit",
     },
 }
+
+#: Keys whose 0 the pump means as no limit at all, so the card writes the word
+#: (state_no_limit) rather than a 0: the compressor's top speed, where an i255
+#: runs at 50 rps with 0 set, as the stored setting and as the control that
+#: mirrors it. The card uses the word only for the pump's own value, never for
+#: a 0 somebody wrote through the control. Whether the immersion heater limits
+#: mean the same by 0 is an open question, and they are left as they read.
+_NO_LIMIT_AT_ZERO = frozenset({"ctl_max_rps", "set_max_rps_1"})
 
 #: What the words for states are called in TEXT.
 _STATE_PREFIX = "state_"
@@ -556,6 +577,8 @@ class _Builder:
             name = self._under_a_control_heading(name)
         item: dict[str, Any] = {"entity": entity_id, "name": name}
         item.update(self.explanation(real))
+        if real in _NO_LIMIT_AT_ZERO:
+            item["zero_means"] = "no_limit"
         if real.startswith(_COP_PREFIX):
             # The figure says what it rests on and, while it has none, why: the
             # card draws the one or the other in small text under it.

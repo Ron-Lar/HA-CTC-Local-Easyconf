@@ -64,16 +64,25 @@
     return Number.isFinite(value) ? value : null;
   }
 
+  //: The domains a control lives in. One of these in "unknown" is a control
+  //: without a value yet, not a reading that is missing.
+  const CONTROL_DOMAINS = new Set(["number", "select"]);
+
   /** The page's own word for a state, or undefined when Home Assistant's own
-   *  wording is the right one. A binary sensor's on and off come out of the
-   *  table the page sends as `states`, in the language the page is built in,
-   *  looked up by device class first ("problem_on") and then plainly ("on"):
-   *  Home Assistant would word them in the user's language instead, and put
-   *  "Not running" and "Off" beside Swedish labels. An enum sensor's state is
-   *  the integration's own string already and is left to Home Assistant, as is
-   *  everything the table has no word for, so an older page without the table
-   *  reads as it did. */
-  function ownWord(entityId, stateObj, states) {
+   *  wording is the right one. The words come out of the table the page sends
+   *  as `states`, in the language the page is built in. A binary sensor's on
+   *  and off are looked up by device class first ("problem_on") and then
+   *  plainly ("on"): Home Assistant would word them in the user's language
+   *  instead, and put "Not running" and "Off" beside Swedish labels. A control
+   *  in "unknown" has no value yet (the hot water setpoint has no mirror
+   *  register, so it is unknown until something is written) and says so
+   *  rather than "Unknown". A 0 the pump means as no limit at all is a word
+   *  too, for the keys the page marks with `zeroMeans`, and only for the
+   *  pump's own value: a 0 somebody wrote through the control is a 0. An
+   *  enum sensor's state is the integration's own string already and is left
+   *  to Home Assistant, as is everything the table has no word for, so an
+   *  older page without the table reads as it did. */
+  function ownWord(entityId, stateObj, states, zeroMeans) {
     if (!stateObj || !states) return undefined;
     const domain = String(entityId || "").split(".")[0];
     const state = stateObj.state;
@@ -81,6 +90,10 @@
     if (domain === "binary_sensor" && (state === "on" || state === "off")) {
       const deviceClass = attributes.device_class;
       return (deviceClass && states[`${deviceClass}_${state}`]) || states[state];
+    }
+    if (CONTROL_DOMAINS.has(domain) && state === "unknown") return states.unset;
+    if (zeroMeans && parseFieldValue(state) === 0 && attributes["styrning aktiv"] !== "ja") {
+      return states[zeroMeans];
     }
     return undefined;
   }
@@ -214,6 +227,7 @@
       if (!open) return;
       note.replaceChildren();
       note.append(item.explanation || "");
+      this._more(note, item);
       const meta = document.createElement("span");
       meta.className = "meta";
       if (item.source) meta.append(item.source, " · ");
@@ -234,6 +248,10 @@
       note.appendChild(meta);
     }
 
+    /** What a card adds to a note between the explanation and the source:
+     *  nothing, unless the card has something to say about this very value. */
+    _more(note, item) {}  // eslint-disable-line no-unused-vars
+
     _state(entityId) {
       return this._hass ? this._hass.states[entityId] : undefined;
     }
@@ -242,7 +260,7 @@
      *  Home Assistant makes of the state, else the state with its unit. */
     _text(item, stateObj) {
       if (!stateObj) return "";
-      const own = ownWord(item.entity, stateObj, this._config.states);
+      const own = ownWord(item.entity, stateObj, this._config.states, item.zero_means);
       if (own !== undefined) return own;
       try {
         return this._hass.formatEntityState
@@ -449,6 +467,22 @@
     .control .label { color: var(--primary-text-color); overflow-wrap: break-word; min-width: 0; }
     .widget { display: flex; align-items: center; gap: 8px; justify-self: end; }
     .widget[data-pending="1"] { opacity: .5; }
+    /* A control without a value yet: the slider's track dimmed with no knob on
+       it, so nothing looks set, the "i" beside it, and a word in grey where the
+       value would be. appearance: none is what lets the knob be hidden at all;
+       the track is then drawn as a line of the card's own. */
+    .widget[data-unset="1"] input[type="range"] {
+      -webkit-appearance: none; appearance: none; height: 20px; opacity: .6;
+      background: linear-gradient(var(--divider-color, #ccc), var(--divider-color, #ccc))
+        center / 100% 4px no-repeat;
+    }
+    .widget[data-unset="1"] input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none; width: 0; height: 0;
+    }
+    .widget[data-unset="1"] input[type="range"]::-moz-range-thumb {
+      width: 0; height: 0; border: none; background: transparent;
+    }
+    .widget[data-unset="1"] .reading { color: var(--secondary-text-color); font-weight: 400; }
     select, input[type="number"] {
       font: inherit; padding: 6px 8px; border-radius: 8px; max-width: 190px;
       border: 1px solid var(--divider-color, #ccc);
@@ -482,7 +516,7 @@
         widget.dataset.pending = "0";
         row.append(this._named(item, note), widget, note);
         card.appendChild(row);
-        return { item, row, widget, update: null };
+        return { item, row, widget, note, update: null };
       });
     }
 
@@ -493,16 +527,28 @@
           // The control is built from the entity's own range and options, so it
           // waits for the first state rather than guessing at an empty one.
           if (!this._state(row.item.entity)) continue;
-          row.update = this._widget(row.widget, row.item);
+          row.update = this._widget(row.widget, row.item, row.note);
         }
         row.update();
       }
     }
 
+    /** A control without a value says why in its note: the pump does not give
+     *  out its own value here, so nothing is set until Home Assistant writes. */
+    _more(note, item) {
+      const stateObj = this._state(item.entity);
+      const states = this._config.states || {};
+      if (!stateObj || stateObj.state !== "unknown" || !states.unset_note) return;
+      const why = document.createElement("span");
+      why.className = "meta";
+      why.textContent = states.unset_note;
+      note.appendChild(why);
+    }
+
     /** Build the control itself and return how to keep it current. A control the
      *  user is holding is left alone: Home Assistant sends a new state while a
      *  slider is being dragged, and writing it back would fight the thumb. */
-    _widget(container, item) {
+    _widget(container, item, note) {
       const entityId = item.entity;
       const domain = String(entityId).split(".")[0];
       /** Send a value and answer whether it was taken. A refused write is a
@@ -567,6 +613,19 @@
 
       const attributes = (this._state(entityId) || {}).attributes || {};
       const step = Number(attributes.step) || 1;
+      const states = this._config.states || {};
+      // A number without a value yet: the hot water setpoint has no mirror
+      // register, so it is unknown until something is written. The browser
+      // would draw its slider with the knob in the middle, as if someone had
+      // set it there, and whoever dragged it wrote a value they never meant.
+      // The row is marked unset instead: the style hides the knob and dims the
+      // track, the reading says so, and an "i" beside it opens the row's note.
+      const why = explainButton(this._config.explain, () => this._toggle(item, note));
+      why.hidden = true;
+      const mark = (unset) => {
+        container.dataset.unset = unset ? "1" : "0";
+        why.hidden = !unset;
+      };
       // The card's YAML may insist on one or the other; otherwise the range decides.
       const kind = item.widget === "slider" || item.widget === "field"
         ? item.widget
@@ -580,20 +639,36 @@
         const reading = document.createElement("span");
         reading.className = "reading";
         slider.addEventListener("input", () => {
+          // The user is setting it: whatever the pump says, it is no longer unset.
+          mark(false);
           reading.textContent = withUnit(slider.value, attributes.unit_of_measurement);
         });
-        slider.addEventListener("change", () => send(slider.value));
-        container.append(slider, reading);
-        return () => {
+        const update = () => {
           const stateObj = this._state(entityId);
           if (!stateObj) return;
+          const unset = stateObj.state === "unknown";
+          // A write on its way from an unset slider: the knob stays where the
+          // user put it until the pump's value arrives or the refusal lets go.
+          if (unset && container.dataset.pending === "1") return;
           if (!holding(slider)) {
-            slider.value = stateObj.state;
+            // Unset, the knob is parked at the bottom of the range, hidden by
+            // the style, rather than left in the middle by the browser.
+            slider.value = unset
+              ? (attributes.min !== undefined ? attributes.min : 0)
+              : stateObj.state;
             reading.textContent = this._text(item, stateObj);
             if (String(slider.value) === String(stateObj.state)) container.dataset.pending = "0";
           }
+          mark(unset);
           slider.disabled = stateObj.state === "unavailable";
         };
+        // A refused write goes straight back to what the pump says, unset
+        // included, rather than waiting for the next state to come round.
+        slider.addEventListener("change", () => {
+          send(slider.value).then((taken) => { if (!taken) update(); });
+        });
+        container.append(slider, reading, why);
+        return update;
       }
 
       const field = document.createElement("input");
@@ -647,15 +722,19 @@
         if (event.key === "Enter") commit();
       });
       field.addEventListener("blur", commit);
-      container.append(field, unit);
+      container.append(field, unit, why);
       return () => {
         const stateObj = this._state(entityId);
         if (!stateObj) return;
+        const unset = stateObj.state === "unknown";
         if (!holding(field)) {
           field.value = stateObj.state;
           shown = Number(stateObj.state);
           if (String(field.value) === String(stateObj.state)) container.dataset.pending = "0";
         }
+        // The number input holds "" for unknown; the placeholder says what that is.
+        field.placeholder = unset && states.unset ? states.unset : "";
+        mark(unset);
         field.disabled = stateObj.state === "unavailable";
       };
     }
