@@ -539,6 +539,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         identity=identity,
     )
 
+    # On the entry before the panel is first touched, not after. Home Assistant
+    # takes runtime_data away when an entry is unloaded, and an options dialog
+    # that was open across the reload can send "read the menu again" while the
+    # first harvest below is still walking: the options flow borrows this
+    # runtime's web client, and with it the one panel lock the harvest holds,
+    # only if the runtime is already here. Without it the flow would build a
+    # client of its own, see a free lock and walk the same panel at once.
+    # Everything that reads the runtime before set-up is done, the daily
+    # report and the dashboard among them, copes with web being None.
+    entry.runtime_data = runtime
+
     pages = pages_from_storage(options.get(CONF_SLOW_PAGES, []))
     if pages:
         web = CtcWebCoordinator(
@@ -613,7 +624,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
 
         entry.async_on_unload(async_at_started(hass, _seed))
 
-    entry.runtime_data = runtime
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except Exception:
