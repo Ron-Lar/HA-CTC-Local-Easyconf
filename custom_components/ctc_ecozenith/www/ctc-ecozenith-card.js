@@ -19,12 +19,13 @@
  * is also the hover text, since a hover alone never reaches a phone or a screen reader.
  * Every string goes into the page as text, never as HTML.
  *
- * The pure helpers at the top of the closure are what decides a write: which
- * control a number gets, and what a typed field is taken to say. They are loaded
- * into node by tests/test_card.py, so the closure hands them over and stops
- * before the custom elements when there is no browser. Nothing is a global in
- * either place: the NIBE card declares the same names at its top level, and the
- * two may well be loaded on one page.
+ * The pure helpers at the top of the closure are what decides a write, which
+ * control a number gets and what a typed field is taken to say, and what a state
+ * reads as when the page has a word of its own for it. They are loaded into node
+ * by tests/test_card*.py, so the closure hands them over and stops before the
+ * custom elements when there is no browser. Nothing is a global in either place:
+ * the NIBE card declares the same names at its top level, and the two may well be
+ * loaded on one page.
  */
 
 (() => {
@@ -63,12 +64,33 @@
     return Number.isFinite(value) ? value : null;
   }
 
+  /** The page's own word for a state, or undefined when Home Assistant's own
+   *  wording is the right one. A binary sensor's on and off come out of the
+   *  table the page sends as `states`, in the language the page is built in,
+   *  looked up by device class first ("problem_on") and then plainly ("on"):
+   *  Home Assistant would word them in the user's language instead, and put
+   *  "Not running" and "Off" beside Swedish labels. An enum sensor's state is
+   *  the integration's own string already and is left to Home Assistant, as is
+   *  everything the table has no word for, so an older page without the table
+   *  reads as it did. */
+  function ownWord(entityId, stateObj, states) {
+    if (!stateObj || !states) return undefined;
+    const domain = String(entityId || "").split(".")[0];
+    const state = stateObj.state;
+    const attributes = stateObj.attributes || {};
+    if (domain === "binary_sensor" && (state === "on" || state === "off")) {
+      const deviceClass = attributes.device_class;
+      return (deviceClass && states[`${deviceClass}_${state}`]) || states[state];
+    }
+    return undefined;
+  }
+
   if (typeof customElements === "undefined") {
-    // Node, for tests/test_card.py: hand over the helpers and stop here, before
+    // Node, for tests/test_card*.py: hand over the helpers and stop here, before
     // anything below reaches for HTMLElement or document. A browser never takes
     // this branch, so the page gets no globals from it.
     if (typeof module !== "undefined") {
-      module.exports = { widgetFor, parseFieldValue, SLIDER_STEPS };
+      module.exports = { widgetFor, parseFieldValue, ownWord, SLIDER_STEPS };
     }
     return;
   }
@@ -216,8 +238,12 @@
       return this._hass ? this._hass.states[entityId] : undefined;
     }
 
-    _text(stateObj) {
+    /** What a value reads as: the page's own word where it has one, else what
+     *  Home Assistant makes of the state, else the state with its unit. */
+    _text(item, stateObj) {
       if (!stateObj) return "";
+      const own = ownWord(item.entity, stateObj, this._config.states);
+      if (own !== undefined) return own;
       try {
         return this._hass.formatEntityState
           ? this._hass.formatEntityState(stateObj)
@@ -347,7 +373,7 @@
         const off = row.item.on_state !== undefined
           && (!stateObj || stateObj.state !== String(row.item.on_state));
         row.chip.hidden = off || this._missing(row.item);
-        row.value.textContent = this._text(stateObj);
+        row.value.textContent = this._text(row.item, stateObj);
       }
     }
   }
@@ -406,7 +432,7 @@
       for (const row of this._items) {
         const stateObj = this._state(row.item.entity);
         row.tile.hidden = this._missing(row.item);
-        row.value.textContent = this._text(stateObj);
+        row.value.textContent = this._text(row.item, stateObj);
         if (row.sub) row.sub.textContent = this._below(row.item, stateObj);
       }
     }
@@ -563,7 +589,7 @@
           if (!stateObj) return;
           if (!holding(slider)) {
             slider.value = stateObj.state;
-            reading.textContent = this._text(stateObj);
+            reading.textContent = this._text(item, stateObj);
             if (String(slider.value) === String(stateObj.state)) container.dataset.pending = "0";
           }
           slider.disabled = stateObj.state === "unavailable";
@@ -776,7 +802,7 @@
         // Home Assistant sets hass again.
         if (!stateObj || row.seen === stateObj) continue;
         row.seen = stateObj;
-        row.value.textContent = this._text(stateObj);
+        row.value.textContent = this._text(row.item, stateObj);
         if (row.sub) row.sub.textContent = this._below(row.item, stateObj);
       }
       this._show();
