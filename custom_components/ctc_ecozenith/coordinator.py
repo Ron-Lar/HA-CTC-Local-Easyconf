@@ -271,7 +271,7 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         now = utcnow()
         wait = first_harvest_delay(stored, interval, now)
         self.update_interval = timedelta(seconds=wait)
-        self.next_attempt = now + timedelta(seconds=wait)
+        self.next_attempt = self._attempt_at(now + timedelta(seconds=wait))
 
     # ------------------------------------------------------------ the age
 
@@ -327,7 +327,20 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _reschedule(self) -> None:
         """The pace from here: the interval, or the retry pace after a failure."""
         self.update_interval = timedelta(seconds=self.patience.seconds)
-        self.next_attempt = utcnow() + self.update_interval
+        self.next_attempt = self._attempt_at(utcnow() + self.update_interval)
+
+    def _attempt_at(self, moment: datetime) -> datetime | None:
+        """``moment``, or None where no attempt will be made then.
+
+        Home Assistant runs no schedule for an entry whose polling is switched
+        off, whatever the interval says, so the diagnostic sensor would
+        otherwise name a next attempt that passes without one. A refresh asked
+        for by hand still harvests; it is only the schedule that is off.
+        """
+        entry = getattr(self, "config_entry", None)
+        if entry is not None and getattr(entry, "pref_disable_polling", False):
+            return None
+        return moment
 
     async def _async_harvest(self) -> dict[str, Any]:
         """One walk over the selected pages, in named steps.
