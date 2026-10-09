@@ -194,7 +194,7 @@ def test_a_window_asks_for_a_known_span_only(cop):
 
 @pytest.fixture(scope="module")
 def sensor():
-    ha_stub.install()
+    ha_stub.skip_unless_stubbed()
     return load("sensor")
 
 
@@ -230,7 +230,7 @@ def _runtime(cop, samples, data=None, success=True):
 
 def _sensors(sensor, runtime):
     added = []
-    run(sensor.async_setup_entry(None, SimpleNamespace(runtime_data=runtime), added.extend))
+    run(sensor.async_setup_entry(None, SimpleNamespace(runtime_data=runtime, entry_id="test", async_on_unload=lambda f: None), added.extend))
     return {s._span: s for s in added if isinstance(s, sensor.CtcCopSensor)}
 
 

@@ -122,6 +122,12 @@ def install() -> bool:
     event = _module("homeassistant.helpers.event")
     event.async_track_time_interval = async_track_time_interval
 
+    # The identity sensors listen for a dispatcher signal; under the stand-in
+    # nothing sends one, so connecting is a no-op that hands back an unsubscribe.
+    dispatcher = _module("homeassistant.helpers.dispatcher")
+    dispatcher.async_dispatcher_connect = lambda hass, signal, target: (lambda: None)
+    dispatcher.async_dispatcher_send = lambda hass, signal, *args: None
+
     platform = _module("homeassistant.helpers.entity_platform")
     platform.AddEntitiesCallback = object
 
@@ -168,9 +174,11 @@ def install() -> bool:
         PRESSURE = "pressure"
         DURATION = "duration"
         ENUM = "enum"
+        TIMESTAMP = "timestamp"
 
     class SensorStateClass(enum.Enum):
         MEASUREMENT = "measurement"
+        TOTAL = "total"
         TOTAL_INCREASING = "total_increasing"
 
     class SensorEntity:

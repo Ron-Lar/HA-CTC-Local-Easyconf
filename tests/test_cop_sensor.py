@@ -21,7 +21,7 @@ from conftest import load
 
 @pytest.fixture(scope="module")
 def sensor():
-    ha_stub.install()
+    ha_stub.skip_unless_stubbed()
     return load("sensor")
 
 
@@ -85,7 +85,7 @@ def _runtime(cop, *, hours_row=True, anchor=COMMISSIONED, data=None, success=Tru
 
 def _sensors(sensor, runtime):
     added = []
-    run(sensor.async_setup_entry(None, SimpleNamespace(runtime_data=runtime), added.extend))
+    run(sensor.async_setup_entry(None, SimpleNamespace(runtime_data=runtime, entry_id="test", async_on_unload=lambda f: None), added.extend))
     return {s._span: s for s in added if isinstance(s, sensor.CtcCopSensor)}
 
 
