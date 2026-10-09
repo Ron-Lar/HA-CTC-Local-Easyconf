@@ -208,7 +208,12 @@ def _stored_page(item: Any) -> Any:
 
 
 def menu_section(
-    options: Mapping[str, Any], runtime: Any, menu_tries: int, walked: bool, swept: bool
+    options: Mapping[str, Any],
+    runtime: Any,
+    menu_tries: int,
+    walked: bool,
+    swept: bool,
+    menu_outcome: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The stored menu, which pages are ticked and harvested, and the walks this run."""
     pages = getattr(runtime, "pages", None)
@@ -216,6 +221,9 @@ def menu_section(
         "version": options.get(CONF_MENU_VERSION),
         "root": options.get(CONF_MENU_ROOT),
         "readings_this_run": menu_tries,
+        # How far the last walk through the menu got (roadmap L6), None
+        # before the first walk of this run.
+        "last_walk": dict(menu_outcome) if menu_outcome else None,
         "selected": _page_numbers(options.get(CONF_SLOW_PAGES)),
         "harvested": [page.page for page in pages] if pages is not None else None,
         "system_information_walked_this_run": walked,
@@ -390,15 +398,17 @@ def build(
     menu_tries: int = 0,
     walked: bool = False,
     swept: bool = False,
+    menu_outcome: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The whole download, before the keys are redacted and the strings washed.
 
     ``runtime`` is None for an entry that is not set up, waiting for the
     controller to answer for one; the download still says what the entry is
-    and what it has stored. ``menu_tries``, ``walked`` and ``swept`` are the
-    package's books of this run: how many readings of the menu were spent,
-    and whether the walk to the system information page and the sweep for
-    the identity's screens have been made.
+    and what it has stored. ``menu_tries``, ``walked``, ``swept`` and
+    ``menu_outcome`` are the package's books of this run: how many readings
+    of the menu were spent, whether the walk to the system information page
+    and the sweep for the identity's screens have been made, and how far the
+    last walk through the menu got.
     """
     identity = getattr(runtime, "identity", None)
     if identity is None:
@@ -411,7 +421,9 @@ def build(
         },
         "identity": _section(lambda: identity_section(identity)),
         "device": _section(lambda: device_section(runtime)),
-        "menu": _section(lambda: menu_section(options, runtime, menu_tries, walked, swept)),
+        "menu": _section(
+            lambda: menu_section(options, runtime, menu_tries, walked, swept, menu_outcome)
+        ),
         "display": _section(lambda: display_section(runtime)),
         "modbus": _section(lambda: modbus_section(runtime)),
         "control": _section(lambda: control_section(runtime)),

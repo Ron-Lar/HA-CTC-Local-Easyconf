@@ -486,7 +486,12 @@ loaded or waiting to be set up again, never the reason.
 
 This integration's own part, `stats_extra.py`, adds which transports are in
 use, whether control is enabled, how many display pages are harvested and how
-many register reads failed. It also says whether a coefficient of performance
+many register reads failed. It says how many pages the display's menu has, so
+that no page harvested because nothing is ticked can be told from no page
+harvested because the menu was never read, and whether the last reading of the
+menu since Home Assistant started recognised the home screen and got into the
+operation data menu, so that a menu that cannot be read says at which step.
+It also says whether a coefficient of performance
 is possible and, if not, why: whether the row with the unit's operating hours
 was recognised on the history page, whether the delivered heat counter was
 recognised there too, whether the energy consumed comes from the display or

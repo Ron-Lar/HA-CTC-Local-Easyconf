@@ -43,7 +43,12 @@ def test_the_form_books_its_reading_after_walking_and_not_at_a_busy_panel():
     assert "menu_read_from_the_options(" not in busy, "ingen läsning skedde, så inget bokförs"
     assert 'return self.async_abort(reason="panel_busy")' in busy
     booked = after.split("except CtcWebError")[1]
-    assert "menu_read_from_the_options(self._entry.entry_id, self.hass.loop.time())" in booked
+    # The reading rides along since L6, so how the form's walk went is what
+    # the report and the diagnostics say.
+    assert (
+        "menu_read_from_the_options(self._entry.entry_id, self.hass.loop.time(), reading)"
+        in booked
+    )
     assert booked.index("menu_read_from_the_options(") < booked.index("menu_after_rescan(")
 
 

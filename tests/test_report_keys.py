@@ -42,6 +42,9 @@ EVERYTHING = {
     "cop_floor": False,
     "cop_stuck": True,
     "cop_implausible": False,
+    "menu_pages": 7,
+    "menu_home": True,
+    "menu_root": True,
     "heat_total_kwh": 22499.0,
     "consumption_total_kwh": 9116.0,
     "cop_day": 2.9,
@@ -81,8 +84,10 @@ def test_the_lists_do_not_overlap_and_are_what_the_consent_text_counts(stats_ext
     assert not (stats_extra.FEATURE_KEYS & stats_extra.METRIC_KEYS)
     # Four figures, two totals, three parts of the serial number's story.
     assert len(stats_extra.METRIC_KEYS) == 9
-    # Four about the set-up, six about whether a figure is possible, three why not.
-    assert len(stats_extra.FEATURE_KEYS) == 13
+    # Four about the set-up, six about whether a figure is possible, three why
+    # not, and three about the display's menu: how many pages it has, and how far
+    # the last walk through it got (R12, L6).
+    assert len(stats_extra.FEATURE_KEYS) == 16
 
 
 # ------------------------------------------------------ the consent text
@@ -112,6 +117,9 @@ def test_the_english_consent_text_names_what_the_report_carries():
             # with the operating hours was recognised, not that the page is
             # harvested.
             "operating hours",
+            # menu_pages, menu_home and menu_root.
+            "pages the display's menu has",
+            "home screen",
             "{endpoint}",
             "{privacy_url}",
         ):
@@ -132,6 +140,8 @@ def test_the_swedish_consent_text_names_what_the_report_carries():
         "varningar och fel",
         "slumpat id",
         "drifttid",
+        "sidor displayens meny har",
+        "hemskärmen",
         "{endpoint}",
         "{privacy_url}",
     ):
@@ -157,6 +167,8 @@ def test_the_readme_tells_the_same_story():
         "warnings and errors",
         "random id",
         "operating hours",
+        "pages the display's menu has",
+        "home screen",
         "FEATURE_KEYS",
         "METRIC_KEYS",
         "only when it is wrong",
