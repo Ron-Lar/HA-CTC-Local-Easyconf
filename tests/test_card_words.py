@@ -30,12 +30,12 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node not i
 
 #: What dashboard_views.state_words gives a Swedish page, and an English one.
 SV = {
-    "on": "Till", "off": "Av", "problem_on": "Larm", "problem_off": "OK",
+    "on": "Till", "off": "Av", "problem_on": "Utlöst", "problem_off": "OK",
     "unset": "ej satt", "unset_note": "Pumpen lämnar inte ut sitt eget värde här.",
     "no_limit": "ingen gräns",
 }
 EN = {
-    "on": "On", "off": "Off", "problem_on": "Alarm", "problem_off": "OK",
+    "on": "On", "off": "Off", "problem_on": "Raised", "problem_off": "OK",
     "unset": "not set", "unset_note": "The pump does not give out its own value here.",
     "no_limit": "no limit",
 }
@@ -115,7 +115,7 @@ def test_a_binary_state_gets_the_pages_word_by_device_class_first_then_plainly()
         c.ownWord("binary_sensor.a", {json.dumps(_binary("on"))}, t),
         c.ownWord("binary_sensor.a", {json.dumps(_binary("off"))}, t),
       ]));
-    """) == ["Till", "Av", "Larm", "OK", "Till", "Av"]
+    """) == ["Till", "Av", "Utlöst", "OK", "Till", "Av"]
 
 
 def test_what_the_table_has_no_word_for_is_left_to_home_assistant():
@@ -212,13 +212,14 @@ def test_the_status_line_reads_in_one_language(card_name, field):
 
 
 def test_an_alarm_is_a_word_of_its_own():
+    # And not the chip's own name over again: the binary is called Larm.
     states = dict(STATES, **{"binary_sensor.alarm": _binary("on", "problem")})
     assert _node(f"""
       const card = page.mountCard(CARD, "ctc-ecozenith-chips",
         {{items: [{{entity: "binary_sensor.alarm", name: "Larm"}}], states: {json.dumps(SV)}}},
         {json.dumps(states)});
       console.log(JSON.stringify(page.all(card, (e) => e.className === "value")[0].textContent));
-    """) == "Larm"
+    """) == "Utlöst"
 
 
 def test_a_page_without_the_table_reads_as_it_did():
