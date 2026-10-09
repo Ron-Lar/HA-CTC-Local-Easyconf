@@ -35,6 +35,7 @@ from .const import (
 from .keepalive import Keepalive
 from .patience import Patience
 from .modbus_api import (
+    PROBE_REGISTER,
     REQUEST_TIMEOUT,
     CtcModbusClient,
     CtcModbusError,
@@ -42,7 +43,7 @@ from .modbus_api import (
     decode_reading,
     plan_blocks,
 )
-from .poll import MissingBlocks, SlowRounds, read_round
+from .poll import MissingBlocks, SlowRounds, lead_with, read_round
 from .web_api import CtcWebClient, CtcWebError
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,7 +68,9 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.descriptions: tuple[ModbusSensor, ...] = (
             MODBUS_SENSORS + MODBUS_SETTINGS if include_settings else MODBUS_SENSORS
         )
-        self._blocks = plan_blocks(self.descriptions)
+        # The block with the register every model answers goes first, so a
+        # controller that answers nothing is found out after one timeout.
+        self._blocks = lead_with(plan_blocks(self.descriptions), PROBE_REGISTER)
         #: Blocks this model has turned out not to have. Learnt per run, so a
         #: restart gives every block a fresh chance.
         self._missing = MissingBlocks()
@@ -88,7 +91,9 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
-            result = await read_round(self.client, self._blocks, self._missing.missing)
+            result = await read_round(
+                self.client, self._blocks, self._missing.missing, probe=PROBE_REGISTER
+            )
         except CtcModbusTransportError as err:
             self.read_failures += 1
             # Home Assistant logs the failure once, and the recovery, by itself.

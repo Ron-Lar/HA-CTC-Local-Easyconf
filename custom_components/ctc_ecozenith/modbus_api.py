@@ -75,6 +75,12 @@ CLOSE_SETTLE = 10.0
 #: client, since a reload builds a new client for the same pump.
 _CLOSED_AT: dict[tuple[str, int], float] = {}
 
+#: The outdoor temperature, the one register every CTC model answers: what the
+#: set-up flow asks for to see that Modbus is there, and what a poll round asks
+#: for first, so that a controller that answers nothing at all is found out at
+#: once rather than one timeout per block.
+PROBE_REGISTER = 62000
+
 #: Whether the library's version has been written to the log in this process.
 #: It is said once, since the version decides how a silent register is handled
 #: (see :func:`client_options`) and is the first thing to ask for in a report.
@@ -458,7 +464,7 @@ class CtcModbusClient:
 
     async def async_probe(self) -> bool:
         """Confirm the controller answers on the documented outdoor register."""
-        values = await self.async_read(62000, 1)
+        values = await self.async_read(PROBE_REGISTER, 1)
         return bool(values)
 
 
