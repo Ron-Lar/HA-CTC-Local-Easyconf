@@ -191,6 +191,12 @@ def _state(hass, key: str):
     return hass.states.get(_entity_id(hass, "sensor", key))
 
 
+def _registered(hass, key: str) -> bool:
+    from homeassistant.helpers import entity_registry as er
+
+    return er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{HOST}_{key}") is not None
+
+
 # ----------------------------------------------------------- no store
 
 
@@ -198,7 +204,10 @@ async def test_a_start_without_a_store_walks_nothing_and_harvests_soon_after(has
     entry = await _vsh_entry(hass)
     panel = await _set_up(hass, entry)
     assert panel.visits == [], "uppsättningen rör inte panelen"
-    assert _state(hass, "p21_utetemperatur").state == "unavailable"
+    # Without a stored harvest nothing is known about any row yet, and a row is
+    # made when it first reads as a number (L3): no display entity before the
+    # first harvest.
+    assert not _registered(hass, "p21_utetemperatur")
     assert _display_key(entry) not in hass_storage
 
     # A few seconds on, the first harvest walks every page and the sensors fill.
@@ -320,8 +329,9 @@ async def test_a_display_that_will_not_answer_is_shown_as_such(hass, hass_storag
     assert state.state == "unknown", "ingen skörd har lyckats, men entiteten står kvar"
     assert state.attributes["misslyckade i rad"] == 1
     assert "could not read the panel state" in state.attributes["senaste skäl"]
-    # The display sensors themselves are unavailable, as before.
-    assert _state(hass, "p21_utetemperatur").state == "unavailable"
+    # The display rows themselves never read as numbers, so they have no
+    # entities yet (L3); the harvest sensor above is what says why.
+    assert not _registered(hass, "p21_utetemperatur")
 
 
 # ----------------------------------------------------------- the empty page

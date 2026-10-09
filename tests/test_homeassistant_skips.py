@@ -129,12 +129,12 @@ async def test_one_page_gives_way_twice_and_then_harvests_anyway(hass, stubs):
         assert entry.state is ConfigEntryState.LOADED
         (panel,) = MovablePanel.instances
         web = entry.runtime_data.web
-        sensor = _entity_id(hass, "sensor", f"p{HISTORY}_utetemperatur")
-
         # The first harvest is planned a moment after set-up (R6), not run
-        # inside it: fire it, then there and back.
+        # inside it, and the rows get their entities from it (L3): fire it,
+        # then there and back.
         await _advance(hass, MIN_FIRST_DELAY + 1)
         assert panel.moves == [HISTORY, HOME]
+        sensor = _entity_id(hass, "sensor", f"p{HISTORY}_utetemperatur")
         assert hass.states.get(sensor).state == "7.2"
         assert web.skips_in_a_row == 0
         assert web.next_attempt is not None

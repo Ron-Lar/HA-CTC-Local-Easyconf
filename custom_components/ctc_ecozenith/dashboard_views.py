@@ -185,7 +185,7 @@ _CONTROL_PREFIX = "Styr "
 #: The full list, group by group, so that every value the integration makes has
 #: a place in it: (id, icon, keys). Display values follow, a group per page.
 _VALUE_GROUPS = (
-    ("status", ICON, _STATUS_TILES + _STATUS_ROWS + _EVENT_ROWS),
+    ("status", ICON, _STATUS_TILES + _STATUS_ROWS + _EVENT_ROWS + ("last_alarm",)),
     ("control", "mdi:tune-variant", tuple(k for _id, _icon, keys in _CONTROL_GROUPS for k in keys)),
     *_READINGS,
     *_TECHNICAL,
