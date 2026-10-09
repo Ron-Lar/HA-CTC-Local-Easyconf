@@ -429,18 +429,25 @@ async def _async_catch_up(
             _LOGGER.debug("Could not catch up with the display: %s", err)
 
         if changed:
-            # Writing the options reloads the entry, which is where the new pages
-            # and the new identity are picked up. The reload cancels this task and
-            # starts it over, and the attempts already spent are remembered, so a
-            # menu that is still owed is tried again there rather than endlessly.
-            # Written with the panel free: the reload cancels the entry's tasks,
-            # the harvest among them, and a harvest cut short mid-walk would
-            # leave the panel on whatever page it had reached.
-            async with client.panel:
-                hass.config_entries.async_update_entry(
-                    entry, options={**entry.options, **changed}
-                )
-            return
+            options = {**entry.options, **changed}
+            if _takes_a_reload(entry, runtime, options):
+                # The menu: writing it reloads the entry, which is where the
+                # new pages are picked up. The reload cancels this task and
+                # starts it over, and the attempts already spent are
+                # remembered, so a menu that is still owed is tried again
+                # there rather than endlessly. Written with the panel free:
+                # the reload cancels the entry's tasks, the harvest among
+                # them, and a harvest cut short mid-walk would leave the
+                # panel on whatever page it had reached.
+                async with client.panel:
+                    hass.config_entries.async_update_entry(entry, options=options)
+                return
+            # The screens alone: written in place like the identity. The
+            # listener leaves such a write be, so no reload follows and
+            # nothing starts this task over; it goes on by itself to the menu
+            # it may still owe. The next round reads the screens back out of
+            # the options and writes nothing again.
+            hass.config_entries.async_update_entry(entry, options=options)
         if not _menu_is_due(entry, version):
             return
 
@@ -934,21 +941,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     return True
 
 
+def _takes_a_reload(
+    entry: CtcConfigEntry, runtime: CtcRuntime, options: dict[str, Any]
+) -> bool:
+    """Whether a write of these options is one the reload listener acts on.
+
+    One rule, for the listener and for the task that writes from the inside
+    and has to know whether its write ends it. The entry's data and every
+    option but the identity, and the screens the identity was found on, are
+    somebody's choice and take a reload to come into force. Those two are
+    written from the inside, by _async_adopt_identity and _async_catch_up,
+    and change nothing about what is polled, so a write that differs from
+    what this set-up was built from in nothing else is left alone.
+    """
+    if dict(entry.data) != runtime.applied_data:
+        return True
+    return not only_identity_differs(runtime.applied_options, options)
+
+
 async def _async_reload(hass: HomeAssistant, entry: CtcConfigEntry) -> None:
     """Reload on a change of the entry, unless only the identity filled itself in.
 
     Home Assistant calls this for every write of the entry. A write that
     changes nothing but CONF_IDENTITY comes from _async_adopt_identity, which
     has already told everything that reads the identity, and a reload would
-    only cost what is listed there. A change of the host or of any other
-    option is somebody's choice and takes a reload to come into force.
+    only cost what is listed there; one that changes nothing but the screens
+    comes from _async_catch_up, which carries on by itself. A change of the
+    host or of any other option is somebody's choice and takes a reload to
+    come into force. The rule is _takes_a_reload.
     """
     runtime = getattr(entry, "runtime_data", None)
-    if (
-        runtime is not None
-        and dict(entry.data) == runtime.applied_data
-        and only_identity_differs(runtime.applied_options, entry.options)
-    ):
+    if runtime is not None and not _takes_a_reload(entry, runtime, entry.options):
         _LOGGER.debug("The identity was written to the entry; nothing to reload for")
         return
     await hass.config_entries.async_reload(entry.entry_id)
