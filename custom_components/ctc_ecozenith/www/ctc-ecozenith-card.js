@@ -405,20 +405,27 @@
     _widget(container, item) {
       const entityId = item.entity;
       const domain = String(entityId).split(".")[0];
+      /** Send a value and answer whether it was taken. A refused write is a
+       *  rejected promise, and the reason is already on the screen as Home
+       *  Assistant's toast. The row only has to stop looking busy, now rather
+       *  than six seconds from now. No row of its own for the error, no range
+       *  check and no clipping here: HA holds min and max, and clipping would
+       *  send something other than what was typed. The promise wrapper also
+       *  turns a call that throws outright into a refusal. The answer is a
+       *  resolved true or false rather than a rejection, so a control with
+       *  nothing to undo, a slider or a list, need not catch anything. */
       const send = (value) => {
         container.dataset.pending = "1";
         const settle = () => { container.dataset.pending = "0"; };
         const timer = setTimeout(settle, 6000);
-        // A refused write is a rejected promise, and the reason is already on
-        // the screen as Home Assistant's toast. The row only has to stop looking
-        // busy, now rather than six seconds from now. No row of its own for the
-        // error, no range check and no clipping here: HA holds min and max, and
-        // clipping would send something other than what was typed. The promise
-        // wrapper also turns a call that throws outright into a refusal.
-        new Promise((resolve) => resolve(this._call(entityId, value))).catch(() => {
-          clearTimeout(timer);
-          settle();
-        });
+        return new Promise((resolve) => resolve(this._call(entityId, value))).then(
+          () => true,
+          () => {
+            clearTimeout(timer);
+            settle();
+            return false;
+          }
+        );
       };
 
       if (domain === "button") {
@@ -522,7 +529,16 @@
         }
         if (value === shown) return;
         shown = value;
-        send(value);
+        send(value).then((taken) => {
+          // Refused, and nothing shown or sent since: the refused number must
+          // not count as shown, or Enter on it again would be dead. While the
+          // field still shows it, the pump's own value goes back in, so a blur
+          // sends nothing. A number the user has begun typing since is left
+          // alone, and simply counts as new.
+          if (taken || shown !== value) return;
+          if (parseFieldValue(field.value) === value) restore();
+          else shown = NaN;
+        });
       };
       // Enter and leaving the field are the two ways of saying "this is it".
       // The browser's change event would also fire on every click of the
