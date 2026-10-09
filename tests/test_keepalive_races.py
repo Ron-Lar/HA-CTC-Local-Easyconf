@@ -68,8 +68,8 @@ def coordinator():
 
 
 @pytest.fixture()
-def manager(coordinator, modbus_api):
-    ha_stub.tracked.clear()
+def manager(coordinator, modbus_api, monkeypatch):
+    ha_stub.record_timers(monkeypatch)
     client = HeldClient(modbus_api.CtcModbusError)
     clock = Clock()
     manager = coordinator.CtcControlManager(hass=object(), client=client, clock=clock)
@@ -365,7 +365,7 @@ def test_an_unload_in_the_middle_of_a_refresh_with_two_addresses_leaves_one_clos
     GatedLibraryClient.gates = {}
     library = FakeLibrary(client_class=GatedLibraryClient).install(monkeypatch)
     host = f"unload-{next(_HOSTS)}.test"
-    ha_stub.tracked.clear()
+    ha_stub.record_timers(monkeypatch)
     client = modbus_api.CtcModbusClient(host)
     manager = coordinator.CtcControlManager(hass=object(), client=client, clock=Clock())
 
@@ -400,7 +400,7 @@ def test_a_shutdown_alone_still_stops_a_refresh_from_building_a_second_client(
     GatedLibraryClient.gates = {}
     library = FakeLibrary(client_class=GatedLibraryClient).install(monkeypatch)
     host = f"unload-{next(_HOSTS)}.test"
-    ha_stub.tracked.clear()
+    ha_stub.record_timers(monkeypatch)
     client = modbus_api.CtcModbusClient(host)
     manager = coordinator.CtcControlManager(hass=object(), client=client, clock=Clock())
 

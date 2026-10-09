@@ -7,9 +7,10 @@ release. The ordinary suite can only read the decision as source; here the
 background task runs it, with VSH's seven pages in the options.
 
 Shares the stand-ins and fixtures of test_homeassistant.py and runs the same
-way, from the Nibe integration's virtual environment:
+way, from a virtual environment that has Home Assistant and
+pytest-homeassistant-custom-component installed:
 
-    /Users/andrei/projects/HA-Nibe-Easyconf/.venv/bin/python -m pytest \\
+    python -m pytest \\
         -o asyncio_mode=auto tests/test_homeassistant_menu.py
 """
 

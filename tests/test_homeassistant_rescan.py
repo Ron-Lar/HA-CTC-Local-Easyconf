@@ -10,9 +10,10 @@ and the rescan is sent in the middle of it; it has to be answered "the panel
 is in use", with no second client built.
 
 Shares the stand-ins and fixtures of test_homeassistant.py and runs the same
-way, from the Nibe integration's virtual environment:
+way, from a virtual environment that has Home Assistant and
+pytest-homeassistant-custom-component installed:
 
-    /Users/andrei/projects/HA-Nibe-Easyconf/.venv/bin/python -m pytest \\
+    python -m pytest \\
         -o asyncio_mode=auto tests/test_homeassistant_rescan.py
 """
 

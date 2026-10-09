@@ -207,7 +207,7 @@ def test_the_same_model_on_the_old_library_learns_it_too(quick, old_library, mod
 def test_the_coordinator_leads_with_the_probe_block_and_hands_it_to_the_round(poll, modbus_api):
     import ha_stub
 
-    ha_stub.install()
+    ha_stub.skip_unless_stubbed()
     coordinator = load("coordinator")
     const = load("const")
 

@@ -26,7 +26,7 @@ FIRST = 62000
 
 @pytest.fixture(scope="module")
 def coordinator_module():
-    ha_stub.install()
+    ha_stub.skip_unless_stubbed()
     return load("coordinator")
 
 
@@ -60,7 +60,7 @@ def _scripted(coordinator_module, poll, modbus_api, monkeypatch, rounds):
     coordinator = coordinator_module.CtcModbusCoordinator(hass=object(), client=client, interval=30)
     queue = [dict(raw) for raw in rounds]
 
-    async def read_round(client, planned, skip=()):
+    async def read_round(client, planned, skip=(), **_kwargs):
         raw = queue.pop(0)
         return poll.RoundResult(raw=raw, answered=[s for s, _n in planned if s in raw])
 
