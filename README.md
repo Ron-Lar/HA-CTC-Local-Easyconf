@@ -350,6 +350,16 @@ write to 61500, 61503 or 62000 never reaches the wire.
   numbers. Readings marked as missing use CTC's own markers, plus or minus 9999
   and 10000 and 32767, and a 32 bit counter of all ones, which are filtered out
   after the sign is applied, so a negative marker cannot pass as a temperature.
+  A display row that reads the marker and has never read as a number, the brine
+  temperatures on an air to water unit for instance, gets no entity until it
+  first does; the first harvest in which it reads as a number adds the entity,
+  with no reload. A row that has read as a number once, a true zero included,
+  keeps its entity through any spell of the marker, an outdoor unit switched
+  off for a week among them. The integration remembers which rows have, beside
+  what it has seen. An entity from an earlier version for a row the display's
+  menu no longer has on its page is removed from the registry, with a line in
+  the log; one for a row that is still on its page, or on a page the menu does
+  not know, is left alone.
 - **The web interface is undocumented.** A firmware update can change it. Modbus
   is documented and will keep working.
 - **The coefficient of performance is untested on an i360.** Going by CTC's
