@@ -201,10 +201,19 @@ def test_silence_from_everyone_is_the_line_not_the_blocks(poll):
     assert missing.missing == set()
 
 
-def test_a_silence_that_took_the_line_is_not_held_against_the_block(poll):
+def test_a_silence_that_took_the_line_counts_like_any_other_silence(poll):
+    # pymodbus before 3.8 closes the line after every silence, so on that
+    # library a block the model lacks would otherwise never be learnt. The
+    # rest having answered is what tells the register from the line.
+    missing = poll.MissingBlocks()
+    assert missing.note(silent_round(poll, dropped=[62167])) == []
+    assert missing.note(silent_round(poll, unanswered=[62167])) == []
+    assert missing.note(silent_round(poll, dropped=[62167])) == [62167]
+    assert missing.missing == {62167}
+    # But silence from everyone, however the line went, is still the line.
     missing = poll.MissingBlocks()
     for _ in range(5):
-        assert missing.note(silent_round(poll, dropped=[62167])) == []
+        assert missing.note(silent_round(poll, dropped=[62000, 62167], answered=[])) == []
     assert missing.missing == set()
 
 

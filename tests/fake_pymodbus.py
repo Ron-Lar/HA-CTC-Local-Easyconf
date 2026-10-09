@@ -3,10 +3,10 @@
 Installed in sys.modules for the duration of a test, so the integration's own
 lazy ``from pymodbus.client import AsyncModbusTcpClient`` picks it up. The
 controller behind it is scripted per register address, and the library's own
-rules can be switched: by default it behaves like pymodbus 3.9 and later, where
+rules can be switched: by default it behaves like pymodbus 3.8 and later, where
 a register nobody answers raises ModbusIOException and leaves the line up; set
-``closes_after_silence`` for the older behaviour, where the library also drops
-the connection.
+``closes_after_silence`` for the older behaviour (3.6.9, the manifest's floor),
+where the library also drops the connection.
 
 The one invariant the whole thing exists to prove: building a second client
 while the first is still open raises on the spot.
@@ -53,7 +53,7 @@ class FakeController:
         self.gone_before: set[int] = set()
         #: Registers answered with an exception code rather than data.
         self.rejected: set[int] = set()
-        #: pymodbus before 3.9: a silent request also closes the connection.
+        #: pymodbus before 3.8: a silent request also closes the connection.
         self.closes_after_silence = False
         #: Register values; anything unscripted reads as its own address.
         self.values: dict[int, int] = {}

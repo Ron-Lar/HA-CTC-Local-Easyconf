@@ -203,7 +203,7 @@ def test_silence_keeps_the_connection(quick, library, modbus_api, host):
 
 
 def test_silence_that_takes_the_line_is_still_silence(quick, library, modbus_api, host):
-    # pymodbus before 3.9 closes the connection after any silent request.
+    # pymodbus before 3.8 closes the connection after any silent request.
     library.controller.silent.add(61500)
     library.controller.closes_after_silence = True
     client = modbus_api.CtcModbusClient(host)
