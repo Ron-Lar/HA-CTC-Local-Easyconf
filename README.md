@@ -205,13 +205,20 @@ it is never out of date. Each heat pump gets four tabs.
 
 - **Overview.** What the pump is doing right now: the controller's status and
   the heat pump's own as a line of chips, the handful of controls worth reaching
-  for, the circuit over the last day, and the key figures as large numbers.
+  for, the circuit over the last day and, under it, what the pump did when, as
+  timeline bands of the two statuses and the immersion heater, and the key
+  figures as large numbers. The status chips that are booleans, an alarm, a
+  block, a defrost, a running compressor or heater, SmartGrid, are on the line
+  only while they are on, in the theme's colour for what they mean: an alarm is
+  a red chip, and a quiet pump shows no row of "Av".
 - **Controls.** Everything writable, as the thing it is, a mode picked from a
   list, a setpoint slid or typed, grouped by what it does to the house rather
   than by entity domain: heating, hot water, operation and power. Letting go of
-  every override at once has a section of its own.
-- **Performance.** How the pump has run: the circuit and the compressor over a
-  day, energy and the coefficient of performance per day over a month, and then
+  every override at once is the last row under operation and power, and its
+  explanation says why it exists.
+- **Performance.** How the pump has run: the flow against its setpoint and the
+  compressor over a day, energy, the compressor's running time and the
+  coefficient of performance per day over a month, a bar per day, and then
   every reading in its own section, temperatures, hot water, energy, the
   refrigerant circuit, the settings stored in the heat pump and what the unit
   says about itself.
@@ -219,6 +226,11 @@ it is never out of date. Each heat pump gets four tabs.
   installation offers, the display's own pages among them under the names the
   panel prints. Nothing is left out here whatever it reads, which makes it the
   tab that answers whether a value exists at all.
+
+The coefficient of performance says under its figure what it rests on, the
+last day, a rolling year, the first year or the whole life, and while it has no
+figure it says why instead: no sample old enough yet, too little energy so far,
+a counter standing still. It stays on the page as long as its sensor does.
 
 The cards are the integration's own rather than Home Assistant's tiles, because
 a heat pump has a hundred values and they have to fit on a screen: chips for the
