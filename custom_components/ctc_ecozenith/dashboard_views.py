@@ -146,6 +146,12 @@ _TECHNICAL = (
       "hp1_brine_in", "hp1_brine_out", "hp1_discharge", "hp1_suction",
       "hp1_high_pressure", "hp1_low_pressure", "compressor_hours",
       "compressor_hours_24h", "degree_minutes", "hp1_defrost_timer")),
+    # What the status codes said from one round to the next (transitions.py).
+    # Not a learnt section: a count of zero since midnight is the answer, not
+    # hardware that is missing, and the timestamps hide themselves until a
+    # start has been seen.
+    ("cycles", "mdi:counter",
+     ("last_start", "starts_today", "last_run", "mean_run_24h")),
     ("settings", "mdi:cog-outline",
      ("set_heating_mode_1", "set_hp1_blocked", "set_slope_1", "set_adjust_1",
       "set_max_rps_1", "set_max_immersion_lower", "set_max_immersion_upper")),
@@ -204,6 +210,7 @@ TEXT = {
         "release": "Släpp styrningen",
         "control": "Styrning",
         "compressor": "Kompressor och köldkrets",
+        "cycles": "Starter och körningar",
         "settings": "Pumpens inställningar",
         "unit": "Om enheten",
         "other": "Övrigt",
@@ -257,6 +264,7 @@ TEXT = {
         "release": "Release control",
         "control": "Control",
         "compressor": "Compressor and refrigerant circuit",
+        "cycles": "Starts and runs",
         "settings": "Settings in the heat pump",
         "unit": "About the unit",
         "other": "Other",

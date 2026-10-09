@@ -194,6 +194,31 @@ DERIVED: dict[str, str] = {
         "varmvattendelen eller den nedre. Båda effekterna står som attribut."
     ),
     "smartgrid_active": "Till när SmartGrid-läget är något annat än Normal.",
+    # The transitions in the heat pump's status, from one Modbus round to the
+    # next (transitions.py). Nothing is stored, and the texts say so.
+    "last_start": (
+        "När kompressorn senast startade, ur övergångarna i Värmepump status: en start är när "
+        "statusen går från stilla till värme, kyla, varmvatten eller avfrostning. Systemstatus "
+        "och utetemperatur vid starten står som attribut. Känd först från en start som skett "
+        "medan Home Assistant var igång."
+    ),
+    "starts_today": (
+        "Antal kompressorstarter sedan midnatt, räknade ur övergångarna i Värmepump status "
+        "var 30:e sekund. En avfrostning mitt i en körning räknas inte som ett stopp och en ny "
+        "start. Nollas vid midnatt och vid omstart av Home Assistant; attributet räknas sedan "
+        "säger från när. Många korta körningar är pendling som sliter på kompressorn."
+    ),
+    "last_run": (
+        "Hur många minuter kompressorns senaste avslutade körning varade, från start till stopp, "
+        "med avfrostningar inräknade i körningen. Start och stopp står som attribut. Tom tills "
+        "en hel körning har setts medan Home Assistant var igång."
+    ),
+    "mean_run_24h": (
+        "Kompressorns drifttid det senaste dygnet (Modbus 62234) delat med displayens Antal "
+        "starter /24 h: hur länge en körning varar i snitt. Korta körningar betyder pendling. "
+        "Displayens räknare hämtas bara på det långsamma intervallet, så talet kan släpa något; "
+        "båda talen står som attribut."
+    ),
     "cop_day": (
         "Värmefaktor senaste dygnet: avgiven värme delat med tillförd el, ur två avläsningar av "
         "energiräknarna 20 till 30 timmar isär. Visas när minst 3 kWh har förbrukats."
@@ -381,6 +406,10 @@ def source(key: str, pages: list[Mapping[str, Any]] | None = None, interval: int
         return "Knapp i Home Assistant"
     if key in ("compressor_running", "defrosting", "alarm", "blocked"):
         return "Räknas fram ur Värmepump status, Modbus-register 62017"
+    if key in ("last_start", "starts_today", "last_run"):
+        return "Räknas fram ur övergångarna i Värmepump status, Modbus-register 62017"
+    if key == "mean_run_24h":
+        return "Räknas ur Modbus-register 62234 och displayens Antal starter /24 h"
     if key == "immersion_active":
         return "Räknas fram ur Elpatron övre och Elpatron nedre, Modbus-register 62168 och 62169"
     if key == "smartgrid_active":

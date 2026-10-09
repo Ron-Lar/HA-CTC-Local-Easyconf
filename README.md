@@ -61,6 +61,18 @@ quotient that cannot be right. The sensor stays available and empty rather than
 going unavailable, because an unavailable entity shows no attributes and the
 reason is the point.
 
+**Starts, run length and the mean run.** The status register says what the heat
+pump is doing every half minute, and the integration watches it from one round
+to the next: when the compressor last started, how many times it has started
+since midnight, and how long the last run lasted. A defrost in the middle of a
+run is part of the run, not a stop and a start. The codes that say nothing about
+the compressor, a communication error among them, hold the last known state, so
+an error that comes and goes is not counted as starts. The first round after a
+start of Home Assistant is the baseline, and nothing is stored: the day's count
+starts over with Home Assistant and says from when it counts. Where the history
+page is harvested, the day's compressor minutes from Modbus divided by the
+display's starts per day gives the mean run.
+
 ## The catch with the display, and what the integration does about it
 
 Only the page the panel is currently showing is kept up to date. Every other
