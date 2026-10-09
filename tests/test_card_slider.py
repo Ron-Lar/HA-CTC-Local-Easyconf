@@ -36,7 +36,7 @@ PAGE = TESTS / "card_page.js"
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 
 STATES = {
-    "on": "Till", "off": "Av", "problem_on": "Larm", "problem_off": "OK",
+    "on": "Till", "off": "Av", "problem_on": "Utlöst", "problem_off": "OK",
     "unset": "ej satt", "unset_note": "Pumpen lämnar inte ut sitt eget värde här.",
     "no_limit": "ingen gräns",
 }

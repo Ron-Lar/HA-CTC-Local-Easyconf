@@ -104,3 +104,17 @@ def test_the_pumps_day_has_no_smartgrid_band_on_either_pump(dashboard_views, pum
         # The mode is still read, as a chip, and so is SmartGrid active.
         chips = {item["entity"] for item in _section(sections, pump["name"])["cards"][1]["items"]}
         assert {pump["entities"]["sg_mode"], pump["entities"]["smartgrid_active"]} <= chips
+
+
+# --------------------------------------------- F6.3: the word for a raised alarm
+
+
+def test_the_word_for_a_raised_alarm_is_not_the_binarys_name(dashboard_views, pumps):
+    """The chip and the row write the name and then the word, and the binary
+    is called Larm (binary_sensor.py), so "Larm" again read as "Larm Larm"."""
+    for lang in ("sv", "en"):
+        words = dashboard_views.state_words(dashboard_views.TEXT[lang])
+        for pump in pumps.values():
+            assert words["problem_on"].casefold() != pump["names"]["alarm"].casefold()
+    assert dashboard_views.TEXT["sv"]["state_problem_on"] == "Utlöst"
+    assert dashboard_views.TEXT["en"]["state_problem_on"] == "Raised"

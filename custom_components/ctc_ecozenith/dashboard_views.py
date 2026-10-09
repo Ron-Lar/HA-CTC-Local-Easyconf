@@ -336,10 +336,12 @@ TEXT = {
         "more_info": "Mer info",
         "explain": "Förklaring",
         # The cards' own words for a binary state, by device class and plainly,
-        # so a Swedish page never says "Not running" (state_words).
+        # so a Swedish page never says "Not running" (state_words). The pair for
+        # a problem stands beside the binary's name, which is Larm, so the word
+        # for a raised one is not Larm again: the chip read "Larm Larm".
         "state_on": "Till",
         "state_off": "Av",
-        "state_problem_on": "Larm",
+        "state_problem_on": "Utlöst",
         "state_problem_off": "OK",
         # A control without a value yet, and the 0 the pump means as no limit.
         "state_unset": "ej satt",
@@ -402,7 +404,7 @@ TEXT = {
         "explain": "Explanation",
         "state_on": "On",
         "state_off": "Off",
-        "state_problem_on": "Alarm",
+        "state_problem_on": "Raised",
         "state_problem_off": "OK",
         "state_unset": "not set",
         "state_unset_note": (

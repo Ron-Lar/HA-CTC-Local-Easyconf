@@ -30,11 +30,11 @@ def test_the_words_are_the_text_tables_state_entries_without_the_prefix(dashboar
     sv = dashboard_views.state_words(dashboard_views.TEXT["sv"])
     en = dashboard_views.state_words(dashboard_views.TEXT["en"])
     assert {k: v for k, v in sv.items() if k != "unset_note"} == {
-        "on": "Till", "off": "Av", "problem_on": "Larm", "problem_off": "OK",
+        "on": "Till", "off": "Av", "problem_on": "Utlöst", "problem_off": "OK",
         "unset": "ej satt", "no_limit": "ingen gräns",
     }
     assert {k: v for k, v in en.items() if k != "unset_note"} == {
-        "on": "On", "off": "Off", "problem_on": "Alarm", "problem_off": "OK",
+        "on": "On", "off": "Off", "problem_on": "Raised", "problem_off": "OK",
         "unset": "not set", "no_limit": "no limit",
     }
     # The note the "i" beside "ej satt" opens: why there is no value.
@@ -87,4 +87,5 @@ def test_the_binaries_the_integration_makes_have_a_word_for_their_device_classes
     words = dashboard_views.state_words(dashboard_views.TEXT["sv"])
     assert words.get("running_on", words["on"]) == "Till"
     assert words.get("running_off", words["off"]) == "Av"
-    assert (words["problem_on"], words["problem_off"]) == ("Larm", "OK")
+    # The binary is called Larm, so the word for a raised one is another word.
+    assert (words["problem_on"], words["problem_off"]) == ("Utlöst", "OK")
