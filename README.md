@@ -83,7 +83,11 @@ So the display is treated as a supplement, not the base:
   screen in the map. The log says on debug what each walk cost in requests
   and presses.
 - If the panel is not where the integration left it, somebody is standing at it,
-  and that cycle is skipped.
+  and that cycle is skipped, with one page selected as much as with seven. Two
+  cycles in a row are given way; the third is harvested anyway and the panel is
+  put back on the page it was found on, so a panel left on another page does
+  not stop the harvest for good. The first skip and the resumption are each one
+  line in the log.
 - The device's diagnostic sensor *Senaste displayskörd* says when the display
   was last read, and in its attributes how many harvests in a row were skipped
   or failed, when the next attempt is, the reason for the last empty one, and

@@ -24,6 +24,7 @@ from .catalogue import numeric_value
 from .harvest import StoredHarvest, first_harvest_delay, is_fresh, stale_after, utcnow
 from .const import (
     HARVEST_PATIENCE,
+    HARVEST_SKIP_LIMIT,
     RETRY_INTERVAL,
     CONTROL_EXPIRY_SECONDS,
     CONTROL_KEEPALIVE_SECONDS,
@@ -219,12 +220,23 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.interval = interval
         self.restore_page = restore_page
         #: The page the panel was showing before this integration first touched
-        #: it. Kept across restarts so that one failed restore cannot make the
-        #: wrong page the new normal.
+        #: it in this run, learnt the first time a harvest finds the panel
+        #: outside the harvested pages. Within the run it keeps one failed
+        #: restore from making the wrong page the new normal; a restart learns
+        #: it again, unless the caller hands it back in, and nothing does yet.
         self.home_page = home_page
         self._on_home_page_found = on_home_page_found
         self._expected_page: int | None = None
+        #: The harvest's own bookkeeping, for the diagnostics to show: how many
+        #: rounds in a row gave way because the panel was not where the last
+        #: round left it, why the last round gave way (None when it did not),
+        #: and when the last round started and the next one is due. The
+        #: failures in a row are on ``patience``.
+        self.skips_in_a_row = 0
         self.last_skip_reason: str | None = None
+        #: Whether this round found the panel away from where the last one
+        #: left it; the home page and the restore target both depend on it.
+        self._moved = False
         #: Why the last attempt failed, in the words of its UpdateFailed, and
         #: None after an attempt that worked.
         self.last_failure: str | None = None
@@ -397,22 +409,63 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _someone_at_the_panel(self, origin: int) -> bool:
         """Whether somebody standing at the panel would be fighting us for it.
 
-        If the page is not where we left it, leave it alone this round.
+        If the page is not where we left it, leave it alone this round, whether
+        one page is harvested or seven. But not for good: a panel parked on
+        another page, or left somewhere by a restore that failed, would
+        otherwise stop the harvest for ever and silently age every value.
+        After HARVEST_SKIP_LIMIT rounds given way, the harvest goes ahead and
+        puts the panel back on the page it found it on, which is where whoever
+        moved it left it.
         """
-        if (
-            self._expected_page is not None
-            and origin != self._expected_page
-            and len(self.pages) > 1
-        ):
+        moved = self._expected_page is not None and origin != self._expected_page
+        self._moved = moved
+        if moved and self.skips_in_a_row < HARVEST_SKIP_LIMIT:
+            self.skips_in_a_row += 1
             self.last_skip_reason = "panelen används av någon annan"
-            _LOGGER.debug("Panel is on page %s, not %s; skipping this cycle", origin, self._expected_page)
+            if self.skips_in_a_row == 1:
+                _LOGGER.info(
+                    "The panel is on page %s, not on page %s where the harvest left it, "
+                    "so somebody may be using it: this round is skipped and the display's "
+                    "values keep their age. After %s skipped rounds the harvest goes ahead "
+                    "anyway",
+                    origin,
+                    self._expected_page,
+                    HARVEST_SKIP_LIMIT,
+                )
+            else:
+                _LOGGER.debug(
+                    "Panel is still on page %s, not %s; skipping this round (%s in a row)",
+                    origin,
+                    self._expected_page,
+                    self.skips_in_a_row,
+                )
             return True
+        if self.skips_in_a_row:
+            if moved:
+                _LOGGER.info(
+                    "The panel has been away from page %s for %s rounds, so the harvest "
+                    "goes ahead and puts it back on page %s afterwards",
+                    self._expected_page,
+                    self.skips_in_a_row,
+                    origin,
+                )
+            else:
+                _LOGGER.info("The panel is back on page %s, so the harvest resumes", origin)
+        self.skips_in_a_row = 0
         self.last_skip_reason = None
         return False
 
     def _note_home(self, origin: int) -> None:
-        """First time in: whatever the panel was showing is where it belongs."""
-        if self.home_page is None and origin not in {p.page for p in self.pages}:
+        """First time in: whatever the panel was showing is where it belongs.
+
+        Not after giving way, though: the page the panel stands on then is
+        where somebody left it, not where it lives.
+        """
+        if (
+            not self._moved
+            and self.home_page is None
+            and origin not in {p.page for p in self.pages}
+        ):
             self.home_page = origin
             if self._on_home_page_found is not None:
                 self._on_home_page_found(origin)
@@ -422,11 +475,18 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         Restoring to the page this cycle started on is right until a restore
         fails, after which that wrong page would become the new reference.
-        The remembered home page breaks that loop.
+        The remembered home page breaks that loop. A round that goes ahead
+        after giving way is the exception: the page the panel stands on is
+        where somebody left it, and that is where it goes back, harvested page
+        or not.
         """
         if not self.restore_page:
             return None
-        if origin in {p.page for p in self.pages} and self.home_page is not None:
+        if (
+            not self._moved
+            and origin in {p.page for p in self.pages}
+            and self.home_page is not None
+        ):
             return self.home_page
         return origin
 
@@ -460,15 +520,25 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_leave(self, restore_to: int | None) -> None:
         """Put the panel back and note where it was left, for the next cycle."""
+        restored = False
         if restore_to is not None:
             try:
-                await self._async_restore(restore_to)
+                restored = await self._async_restore(restore_to)
             except CtcWebError:
                 _LOGGER.debug("Could not restore the panel to page %s", restore_to)
         try:
             self._expected_page = await self.client.async_current_page()
         except CtcWebError:
-            self._expected_page = None
+            # The page could not be read just now. Forgetting where the panel
+            # is would make the next round walk it whoever is standing there,
+            # so the best knowledge stands instead: the page it was just put
+            # back on, or failing that the page expected before this round.
+            if restored:
+                self._expected_page = restore_to
+            _LOGGER.debug(
+                "Could not read where the panel is after the round; expecting page %s",
+                self._expected_page,
+            )
 
     async def async_restore_page(self, target: int) -> bool:
         """Put the panel back on ``target``, for callers outside the harvest.

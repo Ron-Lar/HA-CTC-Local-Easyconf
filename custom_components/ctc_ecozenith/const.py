@@ -120,6 +120,11 @@ WEB_MAX_CONCURRENCY: Final = 3
 #: harvests in a row may fail before its readings are called unavailable.
 RETRY_INTERVAL: Final = 300
 HARVEST_PATIENCE: Final = 3
+#: How many harvests in a row give way when the panel is not where the last
+#: one left it, before the harvest goes ahead anyway. Somebody using the panel
+#: is left alone for that long; a panel parked on another page, or left
+#: somewhere by a restore that failed, does not stop the harvest for good.
+HARVEST_SKIP_LIMIT: Final = 2
 
 PLATFORMS: Final = ["sensor", "binary_sensor", "number", "select", "button"]
 
