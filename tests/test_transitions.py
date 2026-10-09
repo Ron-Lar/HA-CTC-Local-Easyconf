@@ -31,7 +31,12 @@ def transitions():
 
 @pytest.fixture()
 def watch(transitions):
-    return transitions.TransitionWatch()
+    # The tests here feed a sample where something changed, often an hour
+    # apart, which a real poll never is: it comes every half minute. The gap
+    # rule, which gives an end first seen more than GAP_UNKNOWN after the last
+    # known sample no length, is widened for them; it has its own tests below,
+    # on a watch at the default.
+    return transitions.TransitionWatch(gap=timedelta(hours=2))
 
 
 def feed(transitions, watch, *steps, **extra):
@@ -138,6 +143,96 @@ def test_a_code_that_says_nothing_holds_the_state(transitions, watch, silent):
     # is measured from the start that was seen.
     assert feed(transitions, watch, (at(10, 25), silent), (at(10, 30), 1)) == ["kompressor_stopp"]
     assert watch.last_run.minutes == 30.0
+
+
+# ------------------------------- an end first seen after a long silence (F4.3)
+
+
+def test_a_stop_seen_after_hours_of_silent_codes_has_no_length(transitions):
+    # The outdoor unit is switched off at 14:00 while the status still said
+    # heating; the controller answers 32 (communication error) every half hour
+    # until 18:00, when it says 1. The run was seen running for an hour; the
+    # four hours of silence are not running time, and the length is not known.
+    watch = transitions.TransitionWatch()
+    silence = [(at(hour, minute), 32) for hour in (14, 15, 16, 17) for minute in (0, 30)]
+    assert feed(transitions, watch, (at(12), 1), (at(13), 3), *silence) == ["kompressor_start"]
+    (stop,) = watch.observe(transitions.Sample(at(18), hp_status=1, outdoor=3.0))
+    assert stop.kind == "kompressor_stopp"
+    assert stop.minutes is None
+    assert "längd" not in stop.attributes()
+    # The stop is still dated at the recovery, and the start is still known.
+    assert watch.last_run == transitions.Run(at(13), at(18), None)
+    assert _sensor(transitions, "last_run").value(watch) is None
+    assert _sensor(transitions, "last_run").attributes(watch) == {
+        "startade": "2026-10-09T13:00:00+02:00", "slutade": "2026-10-09T18:00:00+02:00",
+    }
+    assert watch.running is False
+
+
+def test_a_stop_seen_after_a_modbus_outage_has_no_length(transitions):
+    # A failed round is no sample: from 13:59 to 18:00 the watch hears nothing
+    # at all, which to it is the same silence as four hours of code 32.
+    watch = transitions.TransitionWatch()
+    assert feed(transitions, watch, (at(12, 59), 1), (at(13), 3), (at(13, 59), 3)) == [
+        "kompressor_start",
+    ]
+    assert feed(transitions, watch, (at(18), 1)) == ["kompressor_stopp"]
+    assert watch.last_run == transitions.Run(at(13), at(18), None)
+
+
+def test_a_defrost_end_seen_after_a_silence_has_no_length_either(transitions):
+    watch = transitions.TransitionWatch()
+    kinds = feed(
+        transitions, watch,
+        (at(13, 59), 1), (at(14), 3), (at(14, 5), 4), (at(14, 6), 32), (at(14, 36), 32),
+    )
+    assert kinds == ["kompressor_start", "avfrostning_start"]
+    (end,) = watch.observe(transitions.Sample(at(15), hp_status=3))
+    assert end.kind == "avfrostning_slut"
+    assert end.minutes is None
+    assert "längd" not in end.attributes()
+    assert watch.last_defrost.ended == at(15)
+    assert watch.last_defrost.minutes is None
+    assert _sensor(transitions, "last_defrost").attributes(watch)["längd"] is None
+    assert _sensor(transitions, "last_defrost").attributes(watch)["avslutad"] == (
+        "2026-10-09T15:00:00+02:00"
+    )
+    # The run goes on, and its own stop, seen within the gap, is measured as
+    # ever: the rule is judged end by end.
+    assert feed(transitions, watch, (at(15, 29), 3), (at(15, 30), 1)) == ["kompressor_stopp"]
+    assert watch.last_run.minutes == 90.0
+
+
+def test_the_gap_is_ten_minutes_and_the_edge_still_measures(transitions):
+    assert transitions.GAP_UNKNOWN == timedelta(minutes=10)
+    # Exactly the gap after the last known sample: measured, as the five
+    # minute silences above are.
+    watch = transitions.TransitionWatch()
+    feed(transitions, watch, (at(9), 1), (at(10), 3), (at(10, 20), 3))
+    assert feed(transitions, watch, (at(10, 30), 1)) == ["kompressor_stopp"]
+    assert watch.last_run.minutes == 30.0
+    # One second more: not known.
+    watch = transitions.TransitionWatch()
+    feed(transitions, watch, (at(9), 1), (at(10), 3), (at(10, 20), 3))
+    late = at(10, 30) + timedelta(seconds=1)
+    assert feed(transitions, watch, (late, 1)) == ["kompressor_stopp"]
+    assert watch.last_run.minutes is None
+    # The gap is the watch's to set, for a poll that runs slower.
+    patient = transitions.TransitionWatch(gap=timedelta(hours=1))
+    feed(transitions, patient, (at(9), 1), (at(10), 3), (at(10, 20), 3))
+    feed(transitions, patient, (at(10, 50), 1))
+    assert patient.last_run.minutes == 50.0
+
+
+def test_a_start_first_seen_after_a_silence_is_still_a_start(transitions):
+    # Only an end has a length to get wrong; a start after hours of silence
+    # counts and is dated at the recovery as before.
+    watch = transitions.TransitionWatch()
+    assert feed(transitions, watch, (at(9), 1), (at(9, 1), 32), (at(13), 3)) == [
+        "kompressor_start",
+    ]
+    assert watch.starts_today == 1
+    assert watch.last_start == at(13)
 
 
 def test_a_silent_baseline_is_no_baseline(transitions, watch):
