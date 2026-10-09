@@ -574,6 +574,37 @@ def test_all_values_lists_every_entity_the_pump_has_exactly_once(dashboard_views
         assert all(row.get("explanation") and row.get("source") for row in rows)
 
 
+def test_a_button_is_on_the_controls_tab_and_not_in_the_list_of_values(dashboard_views, pumps):
+    """V6: a button's state is the time it was last pressed, "Unknown" until then."""
+    pump = pumps["vsh"]
+    pump["entities"]["release_control"] = "button.ctc_ecozenith_i255_slapp_all_styrning"
+    pump["names"]["release_control"] = "Släpp all styrning"
+    config = dashboard_views.build_dashboard([pump], "sv", NEW_HA)
+    listed = [row["entity"] for row in _values_card(config)["rows"] if "entity" in row]
+    assert pump["entities"]["release_control"] not in listed
+    # Everything else is still there once, and the button has its row to be
+    # pressed on, so the page as a whole still refers to every entity.
+    assert set(listed) == set(pump["entities"].values()) - {pump["entities"]["release_control"]}
+    assert len(listed) == len(set(listed))
+    assert dashboard_views.entity_ids(config) == set(pump["entities"].values())
+
+
+def test_the_supplied_power_register_is_named_without_its_number_and_keeps_its_identity(
+    const, explanations
+):
+    """V6: the register number is the source row's to show, and the unique_id never held the name."""
+    (power,) = [d for d in const.MODBUS_SENSORS if d.key == "hp1_power"]
+    assert power.name == "Tillförd effekt värmepump"
+    assert power.address == 62331
+    assert explanations.source("hp1_power") == "Modbus-register 62331"
+    # The entity's identity is "<domain>_<host>_<key>" (sensor.py), so a renamed
+    # register keeps its entity_id, its history and the user's own settings.
+    sensor = _source("sensor.py")
+    cls = sensor[sensor.index("class CtcModbusSensor"):sensor.index("class CtcModbusSensor") + 600]
+    assert 'self._attr_unique_id = f"{DOMAIN}_{host}_{description.key}"' in cls
+    assert "description.name" not in cls[:cls.index("_attr_unique_id")]
+
+
 def test_a_display_row_is_listed_under_the_name_the_panel_prints(dashboard_views, pumps):
     pump = pumps["pt"]
     config = dashboard_views.build_dashboard([pump], "sv", NEW_HA)

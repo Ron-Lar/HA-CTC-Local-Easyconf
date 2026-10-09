@@ -252,6 +252,9 @@ _LEARNT_SECTIONS = frozenset({"temperatures", "hot_water", "energy", "compressor
 
 #: How every control entity's name starts (const.CONTROL_NUMBERS and _SELECTS).
 _CONTROL_PREFIX = "Styr "
+#: A button has no value: its state is the time it was last pressed, unknown
+#: until then, so it has a row where it can be pressed and none in the list.
+_BUTTON = "button."
 
 #: The full list, group by group, so that every value the integration makes has
 #: a place in it: (id, icon, keys). Display values follow, a group per page.
@@ -759,14 +762,18 @@ def values_sections(
 ) -> list[dict[str, Any]]:
     """Every value the installation offers, in one list with a filter over it.
 
-    Nothing is left out here, whatever it reads and whatever it has only ever
-    read: this is the tab you open to find out whether a value exists at all.
+    No value is left out here, whatever it reads and whatever it has only ever
+    read: this is the tab you open to find out whether a value exists at all. A
+    button is not a value, and is on the controls tab instead.
     """
     build = _Builder(pump, text, ha_version)
     rows: list[dict[str, Any]] = []
 
     def group(heading: str, keys: Iterable[str], trim: bool = False) -> None:
-        found = build._items(keys, hideable=False, trim=trim)
+        found = [
+            item for item in build._items(keys, hideable=False, trim=trim)
+            if not str(item["entity"]).startswith(_BUTTON)
+        ]
         if found:
             rows.append({"heading": heading})
             rows.extend(found)
