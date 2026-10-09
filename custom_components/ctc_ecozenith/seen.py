@@ -29,9 +29,17 @@ _LOGGER = logging.getLogger(__name__)
 #: How long a change to the set may wait before it is written down.
 SAVE_DELAY_SECONDS = 60
 
-#: Version 1 held the zero set alone, as ``{"keys": [...]}``. Version 2 adds
+#: The store's format. The major version stays at 1 for as long as an older
+#: release can still make sense of the file: Home Assistant refuses a file whose
+#: major version is above the one the code opens it with, so raising it would
+#: leave a return to that release with an entry that cannot be set up at all.
+#: What changes within the major is told by the minor version, which older code
+#: reads straight through, keeping what it does not know and writing it back.
+STORAGE_VERSION = 1
+
+#: Minor 1 held the zero set alone, as ``{"keys": [...]}``. Minor 2 adds
 #: ``numeric``, the keys that have ever been a number; see :func:`migrate`.
-STORAGE_VERSION = 2
+STORAGE_MINOR_VERSION = 2
 
 #: How a display row's key begins: the page it is harvested from.
 _DISPLAY_KEY = re.compile(r"^p\d+_")
@@ -61,23 +69,26 @@ def is_display_key(key: str) -> bool:
     return _DISPLAY_KEY.match(key) is not None
 
 
-def migrate(old_version: int, data: Any) -> dict[str, list[str]]:
-    """The store's content as version 2 writes it, from any earlier shape.
+def migrate(data: Any) -> dict[str, list[str]]:
+    """The store's content as minor 2 writes it, from whatever shape is on disk.
 
-    Version 1 knew only which keys had been something other than zero. A
-    display row among them was a number, since the display's rows never read
-    as anything else, so those seed the numeric set; a Modbus key may have been
-    an enumeration's label, and is not presumed. Rubbish gives an empty store.
+    The shape decides, not a version number: a file an older release wrote
+    back after a return still says minor 1, yet may carry the numeric set the
+    newer release had put there, and nothing in it is worth throwing away.
+    Minor 1 knew only which keys had been something other than zero. A display
+    row among them was a number, since the display's rows never read as
+    anything else, so those seed the numeric set, beside whatever numeric set
+    the file already holds; a Modbus key may have been an enumeration's label,
+    and is not presumed. Rubbish gives an empty store.
     """
     keys: set[str] = set()
     numeric: set[str] = set()
     if isinstance(data, Mapping):
         if isinstance(data.get("keys"), list):
             keys = {str(key) for key in data["keys"]}
-        if old_version >= 2 and isinstance(data.get("numeric"), list):
+        if isinstance(data.get("numeric"), list):
             numeric = {str(key) for key in data["numeric"]}
-        else:
-            numeric = {key for key in keys if is_display_key(key)}
+        numeric |= {key for key in keys if is_display_key(key)}
     return {"keys": sorted(keys), "numeric": sorted(numeric)}
 
 
@@ -99,7 +110,7 @@ class SeenValues:
         if isinstance(stored, Mapping) and isinstance(stored.get("keys"), list):
             # The store migrates on disk; this reads the old shape as well,
             # for a store handed in by something that does not.
-            data = migrate(2 if "numeric" in stored else 1, stored)
+            data = migrate(stored)
             self.keys = set(data["keys"])
             self.numeric = set(data["numeric"])
             self.fresh = False

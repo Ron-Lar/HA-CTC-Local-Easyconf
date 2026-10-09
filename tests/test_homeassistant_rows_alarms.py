@@ -196,7 +196,8 @@ async def test_a_row_that_has_been_a_number_is_made_at_once_and_the_old_store_is
     Home Assistant finds the file one version behind and asks the store to
     migrate it; the display rows it knew become the numeric record, so a row
     that reads the marker right now, an outdoor unit switched off, still gets
-    its entity at set-up, and the file is written back at version 2.
+    its entity at set-up, and the file is written back at minor 2, the major
+    still 1 so that the release before can read it after a return.
     """
     entry = await _entry_with_the_page(hass)
     hass_storage[f"{DOMAIN}_{entry.entry_id}_seen"] = {
@@ -214,7 +215,7 @@ async def test_a_row_that_has_been_a_number_is_made_at_once_and_the_old_store_is
     seen = entry.runtime_data.seen
     assert f"p{PAGE}_brine_in_ut_1" in seen.numeric and "hp1_rps" in seen.keys
     stored = hass_storage[f"{DOMAIN}_{entry.entry_id}_seen"]
-    assert stored["version"] == 2
+    assert (stored["version"], stored["minor_version"]) == (1, 2)
     assert f"p{PAGE}_brine_in_ut_1" in stored["data"]["numeric"]
     assert set(stored["data"]["keys"]) >= {f"p{PAGE}_brine_in_ut_1", "hp1_rps"}
 
