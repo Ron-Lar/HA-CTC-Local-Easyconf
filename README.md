@@ -173,14 +173,22 @@ every form of them, on both models tested.
 1. On the panel, go to Installer, Define, Remote control and set **Ethernet** to
    **Modbus TCP**. The port row only appears once that is done. Note that this
    is reported to be mutually exclusive with the cloud connection.
-2. Add the integration. It sweeps your local network and identifies CTC displays
-   by asking each host for `/settings/name`. If yours is on another subnet, or
-   the sweep finds nothing, type the address instead.
+2. Add the integration. It first asks how to find the unit, and nothing goes on
+   the network before you have chosen. **Search the network** asks every
+   address on Home Assistant's own networks for `/settings/name` on port 80,
+   which is how a CTC display tells itself apart, and changes nothing anywhere.
+   **Enter an address** skips the search. If yours is on another subnet, or the
+   search finds nothing, type the address instead.
 3. Tick the display pages you want harvested. The menu is read from the unit
    itself, so the list matches your model and your installed options, in your
    own language. Everything is ticked to begin with; switch off what you do not
    want. For the coefficient of performance, keep the page with the stored or
    historical operation data.
+
+Four things are switched on from the start, and the set-up says so on its way:
+control of the heat pump, the walk to the System information page described
+below, the anonymous statistics and the daily check for a new release. All four
+are changed under Configure.
 
 The serial number and the display's own software version are only written into
 the System information page while that page is shown on the panel. The

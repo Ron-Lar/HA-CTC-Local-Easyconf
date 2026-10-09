@@ -2,15 +2,23 @@
   "config": {
     "step": {
       "user": {
+        "title": "Find the heat pump",
+        "description": "Search the network asks every address on Home Assistant's own networks, on port 80, whether it is a CTC display, and changes nothing anywhere. Enter an address skips the search.\n\nFrom the start, control of the heat pump, the walk to System information, the anonymous statistics and the check for new releases are switched on; all four are changed under Configure. What the statistics send: {privacy_url}",
+        "menu_options": {
+          "scan": "Search the network",
+          "manual": "Enter an address"
+        }
+      },
+      "scan": {
         "title": "Choose heat pump",
-        "description": "The local network has been swept for CTC displays.",
+        "description": "CTC displays found on Home Assistant's own networks: {count}.",
         "data": {
           "picked": "Devices found"
         }
       },
       "manual": {
         "title": "Enter address",
-        "description": "No CTC was found automatically. The address is shown on the panel under Installer, Settings, Communication, Ethernet.",
+        "description": "Type the display's address. It is shown on the panel under Installer, Settings, Communication, Ethernet.",
         "data": {
           "host": "IP address",
           "modbus_port": "Modbus TCP port",
@@ -20,7 +28,7 @@
       },
       "slow": {
         "title": "Slow values from the display",
-        "description": "Modbus is read continuously and handles all control. The display's web interface additionally carries values Modbus does not have, such as delivered heat.\n\nThe catch is that only the page the panel is showing stays fresh, so the integration has to walk there and back. The panel moves while it does. Tick the pages you want, or skip this step and run on Modbus alone.\n\nThe coefficient of performance needs the page with the stored or historical operation data, where delivered heat is counted.\n\n{count} pages were found on the {model}.",
+        "description": "Modbus is read continuously and handles all control. The display's web interface additionally carries values Modbus does not have, such as delivered heat.\n\nThe catch is that only the page the panel is showing stays fresh, so the integration has to walk there and back. The panel moves while it does. Tick the pages you want, or skip this step and run on Modbus alone.\n\nThe coefficient of performance needs the page with the stored or historical operation data, where delivered heat is counted.\n\n{count} pages were found on the {model}.\n\nFrom the start, control of the heat pump, the walk to System information, the anonymous statistics and the check for new releases are switched on; all four are changed under Configure. What the statistics send: {privacy_url}",
         "data": {
           "slow_pages": "Pages to read",
           "slow_interval": "How often",
@@ -29,12 +37,13 @@
       },
       "confirm": {
         "title": "Add {model}?",
-        "description": "A CTC display was found at {host}. Setting it up walks the unit's menu to see what it can report, so the panel will move for a moment."
+        "description": "A CTC display was found at {host}. Setting it up walks the unit's menu to see what it can report, so the panel will move for a moment.\n\nFrom the start, control of the heat pump, the walk to System information, the anonymous statistics and the check for new releases are switched on; all four are changed under Configure. What the statistics send: {privacy_url}"
       }
     },
     "error": {
       "not_a_ctc": "That address answers, but it is not a CTC display.",
-      "modbus_failed": "The display answers but Modbus does not. Turn it on from the panel under Installer, Define, Remote control, where Ethernet must be set to Modbus TCP."
+      "modbus_failed": "The display answers but Modbus does not. Turn it on from the panel under Installer, Define, Remote control, where Ethernet must be set to Modbus TCP.",
+      "nothing_found": "The search found no CTC display. Type the display's address instead; a display on another network is not reached by the search."
     },
     "abort": {
       "already_configured": "This heat pump is already set up.",
