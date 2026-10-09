@@ -8,6 +8,11 @@ which the unit still covers; two more and the honest state is that the
 override is gone, whatever Home Assistant would like it to be. Time decides,
 not a count of misses, because the controller counts time.
 
+A write takes time, and the state can change while it is on its way: a release
+or a newer value. Each address therefore carries a generation that every
+change moves on, so whoever waited on a write can tell whether what it is
+about to record is still the state it set out from.
+
 Free of Home Assistant, like patience.py, so the rule can be tested on its own.
 The clock is handed in as seconds and never read here.
 """
@@ -23,6 +28,7 @@ class Keepalive:
         self._values: dict[int, int] = {}
         self._ok_at: dict[int, float] = {}
         self._failures: dict[int, int] = {}
+        self._generation: dict[int, int] = {}
 
     @property
     def active(self) -> dict[int, int]:
@@ -48,6 +54,19 @@ class Keepalive:
         """How many writes in a row have failed since the last one that reached it."""
         return self._failures.get(address, 0)
 
+    def generation(self, address: int) -> int:
+        """A number that moves on whenever this address is written or released.
+
+        Read it before a write goes out and again when the write is done: if
+        it changed in between, somebody released or re-set the address while
+        the write was on its way, and the write's outcome is theirs to
+        overrule, not the other way round.
+        """
+        return self._generation.get(address, 0)
+
+    def _moved(self, address: int) -> None:
+        self._generation[address] = self._generation.get(address, 0) + 1
+
     def written(self, address: int, raw: int, now: float) -> bool:
         """Record a write that reached the controller.
 
@@ -56,6 +75,7 @@ class Keepalive:
         recovered = self._failures.pop(address, 0) > 0
         self._values[address] = raw
         self._ok_at[address] = now
+        self._moved(address)
         return recovered
 
     def failed(self, address: int, now: float) -> bool:
@@ -81,9 +101,13 @@ class Keepalive:
         self._values.pop(address, None)
         self._ok_at.pop(address, None)
         self._failures.pop(address, None)
+        if was:
+            self._moved(address)
         return was
 
     def clear(self) -> None:
+        for address in list(self._values):
+            self._moved(address)
         self._values.clear()
         self._ok_at.clear()
         self._failures.clear()
