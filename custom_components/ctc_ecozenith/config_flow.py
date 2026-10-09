@@ -400,6 +400,10 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         #: Whether ``_pages`` came off the panel just now, or out of storage
         #: because the panel would not give the menu up.
         self._fresh = False
+        #: Whether the reading found any page at all, whole or not. An
+        #: interrupted one is folded into the stored menu without a stamp;
+        #: see async_step_rescan.
+        self._found = False
         #: The operation data root the reading found, if it found one.
         self._root: int | None = None
         #: What the first form said, kept until the form after "read the
@@ -579,12 +583,23 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             if self._fresh:
                 # Only a menu that came whole off the panel replaces the
                 # stored one and is stamped, with the root it was swept from.
-                # A missed or interrupted reading writes neither: the stored
-                # menu stands as it was, and the reading stays owed.
+                # A missed reading writes neither: the stored menu stands as
+                # it was, and the reading stays owed.
                 changes[CONF_MENU] = pages_to_storage(self._pages)
                 changes[CONF_MENU_VERSION] = await _async_version(self.hass)
                 if self._root is not None:
                     changes[CONF_MENU_ROOT] = self._root
+            elif self._found:
+                # An interrupted reading is folded in for what it found, the
+                # stored pages it did not reach standing beside them in their
+                # old place (catalogue.menu_after_rescan), so a page only it
+                # knows can be ticked here and is still on the list, with its
+                # tick, the next time the form is opened. Left out of the menu
+                # it could not be offered there, and the next save of the form
+                # dropped it from the harvest without a word. Not stamped: the
+                # reading stays owed, and the whole one that follows replaces
+                # the menu with the tick kept.
+                changes[CONF_MENU] = pages_to_storage(self._pages)
             return await self._async_save(changes)
 
         try:
@@ -611,6 +626,7 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             reading.pages,
             reading.complete,
         )
+        self._found = bool(reading.pages)
         self._root = reading.root
 
         # Offered as the first form left them, so a tick box or an interval
