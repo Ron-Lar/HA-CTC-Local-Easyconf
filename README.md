@@ -84,7 +84,13 @@ with the event types `kompressor_start`, `kompressor_stopp`, `avfrostning_start`
 outdoor temperature and, for a stop or the end of a defrost, the length in
 minutes. The logbook writes them out, and an automation triggers on the entity's
 state instead of comparing states. The first round after a start of Home
-Assistant raises none. None of this goes into the anonymous report.
+Assistant raises none. The entity stays available when a Modbus round fails:
+its state is the moment of the last event, which a lost line does not undo, and
+the Modbus sensors themselves show that the line is down, so a state trigger
+never sees the entity pass through unavailable and fire the old event again. On
+Home Assistant 2026.9 or later the trigger `event.received` with an
+`event_type` is the plainest way to listen. None of this goes into the
+anonymous report.
 
 **The alarm the panel shows, with its E-code.** Modbus says only that the heat
 pump is off because of an alarm. The display prints the alarm itself out of its

@@ -13,6 +13,15 @@ number it has fired up to and fires what came after, so a round that holds two
 transitions (an alarm that clears straight into a start) gives two events in
 order, and the baseline round after a start of Home Assistant gives none.
 Nothing of this goes to the anonymous report.
+
+The entity stays available when a Modbus round fails. Its state is the moment
+of the last event, a thing that happened, which a lost line does not undo, and
+Home Assistant's own event platform treats it the same way: it restores the
+last event across a restart without asking the device. With the coordinator's
+availability instead, one lost round took the entity to unavailable and the
+next round wrote the old event back, and a state trigger, the plain kind the
+README recommends and the only kind on Home Assistant 2024.12, fired the same
+alarm a second time. The Modbus sensors say when the line is down.
 """
 
 from __future__ import annotations
@@ -57,14 +66,20 @@ class CtcEvents(CoordinatorEntity, EventEntity):
         self._attr_unique_id = f"{DOMAIN}_{host}_events"
         self._attr_device_info = runtime.device
 
+    @property
+    def available(self) -> bool:
+        # The last event is a moment in the past; a round that failed does not
+        # make it unhappen, and taking the entity to unavailable and back made
+        # a state trigger fire the old event again. See the module docstring.
+        return True
+
     @callback
     def _handle_coordinator_update(self) -> None:
         # The watch has seen this round already: it listens to the coordinator
         # from before the platforms were set up. One state write per event, so
-        # each is a state change of its own, in the order they happened.
+        # each is a state change of its own, in the order they happened. A
+        # round with nothing new writes nothing: the state is the last event.
         for transition in self._watch.since(self._fired):
             self._fired = transition.seq
             self._trigger_event(transition.kind, transition.attributes())
             self.async_write_ha_state()
-        # Availability follows the coordinator whether or not anything happened.
-        self.async_write_ha_state()
