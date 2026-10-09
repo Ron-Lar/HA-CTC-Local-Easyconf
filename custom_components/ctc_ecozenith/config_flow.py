@@ -21,6 +21,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .catalogue import (
+    MenuReading,
     PanelBusy,
     async_discover_pages,
     async_rescan_pages,
@@ -89,6 +90,9 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._settings_name: str = ""
         self._found: list[DiscoveredDisplay] = []
         self._pages: list[Any] = []
+        #: Whether ``_pages`` is the whole menu, read from a verified root with
+        #: nothing given up on the way. Only then is the version stamped.
+        self._complete = False
 
     # ------------------------------------------------------------ entry point
 
@@ -212,6 +216,24 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             chosen = {int(page) for page in user_input.get(CONF_SLOW_PAGES, [])}
             keep = [page for page in self._pages if page.page in chosen]
+            options = {
+                CONF_SLOW_PAGES: pages_to_storage(keep),
+                CONF_MENU: pages_to_storage(self._pages),
+                CONF_SLOW_INTERVAL: int(
+                    user_input.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)
+                ),
+                CONF_FAST_INTERVAL: DEFAULT_FAST_INTERVAL,
+                CONF_RESTORE_PAGE: user_input.get(CONF_RESTORE_PAGE, True),
+                CONF_ENABLE_CONTROL: True,
+                CONF_LANGUAGE: LANG_SWEDISH,
+            }
+            if self._complete:
+                # Only the whole menu is stamped. A reading without the
+                # operation data root is the one page the panel stood on, and
+                # an interrupted sweep is missing what it did not reach; left
+                # unstamped, the entry is owed a reading, and the background
+                # reads the menu again a few minutes in, up to three times.
+                options[CONF_MENU_VERSION] = await _async_version(self.hass)
             return self.async_create_entry(
                 title=f"{self._model} ({self._host})",
                 data={
@@ -222,27 +244,18 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "model": self._model,
                     "settings_name": self._settings_name,
                 },
-                options={
-                    CONF_SLOW_PAGES: pages_to_storage(keep),
-                    CONF_MENU: pages_to_storage(self._pages),
-                    CONF_MENU_VERSION: await _async_version(self.hass),
-                    CONF_SLOW_INTERVAL: int(
-                        user_input.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)
-                    ),
-                    CONF_FAST_INTERVAL: DEFAULT_FAST_INTERVAL,
-                    CONF_RESTORE_PAGE: user_input.get(CONF_RESTORE_PAGE, True),
-                    CONF_ENABLE_CONTROL: True,
-                    CONF_LANGUAGE: LANG_SWEDISH,
-                },
+                options=options,
             )
 
         session = async_get_clientsession(self.hass)
         client = CtcWebClient(session, self._host, self._web_port, LANG_SWEDISH)
         try:
-            self._pages = await async_discover_pages(client)
+            reading = await async_discover_pages(client)
         except CtcWebError as err:
             _LOGGER.warning("Could not read the display's menu: %s", err)
-            self._pages = []
+            reading = MenuReading()
+        self._pages = reading.pages
+        self._complete = reading.complete
 
         if not self._pages:
             # Modbus alone is a perfectly good entry; the display is a bonus.
@@ -536,7 +549,7 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=data)
 
         try:
-            discovered = await async_rescan_pages(self._web_client())
+            reading = await async_rescan_pages(self._web_client())
         except PanelBusy:
             # The harvest, or a walk through the menu, holds the panel. A form
             # that waited for it would hang for minutes, so it says so instead
@@ -544,11 +557,15 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             return self.async_abort(reason="panel_busy")
         except CtcWebError as err:
             _LOGGER.warning("Could not read the display's menu: %s", err)
-            discovered = []
+            reading = MenuReading()
+        # An interrupted sweep is offered for what it found, beside the stored
+        # pages it did not reach, and is not fresh: nothing disappears and the
+        # version is not stamped. See catalogue.menu_after_rescan.
         self._pages, self._fresh = menu_after_rescan(
             pages_from_storage(self._entry.options.get(CONF_MENU)),
             pages_from_storage(self._entry.options.get(CONF_SLOW_PAGES)),
-            discovered,
+            reading.pages,
+            reading.complete,
         )
 
         already = [
