@@ -261,6 +261,34 @@
     .chip .label { color: var(--secondary-text-color); font-size: .8em; }
     .chip .value { color: var(--primary-text-color); font-weight: 500; }
     .chips + .note { padding-top: 10px; }
+    /* R36: a boolean chip is only on the line while it is on, in the theme's
+       colour for what it means: an alarm red, a block or SmartGrid amber, a
+       defrost blue, a running compressor or heater green. The alarm chip is a
+       solid red pill with white text, the one thing on the page that must not
+       be missed; the others are a tint of their colour with a dot in it, which
+       is how Home Assistant's own tiles carry a state colour, and they stay
+       legible in both themes. Without color-mix every one is a solid pill. */
+    .chip[data-color="error"] { --chip-color: var(--error-color, #db4437); }
+    .chip[data-color="warning"] { --chip-color: var(--warning-color, #ffa600); }
+    .chip[data-color="info"] { --chip-color: var(--info-color, #039be5); }
+    .chip[data-color="success"] { --chip-color: var(--success-color, #43a047); }
+    .chip[data-color] { background: var(--chip-color); }
+    .chip[data-color] .label, .chip[data-color] .value, .chip[data-color] .why {
+      color: var(--text-primary-color, #fff);
+    }
+    @supports (background: color-mix(in srgb, red 24%, white)) {
+      .chip[data-color]:not([data-color="error"]) {
+        background: color-mix(in srgb, var(--chip-color) 22%, var(--card-background-color, #fff));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip-color) 45%, transparent);
+      }
+      .chip[data-color]:not([data-color="error"])::before {
+        content: ""; width: 8px; height: 8px; border-radius: 50%; flex: none;
+        align-self: center; background: var(--chip-color);
+      }
+      .chip[data-color]:not([data-color="error"]) .label { color: var(--secondary-text-color); }
+      .chip[data-color]:not([data-color="error"]) .value { color: var(--primary-text-color); }
+      .chip[data-color]:not([data-color="error"]) .why { color: var(--primary-color, #03a9f4); }
+    }
   `;
 
   class CtcEcoZenithChips extends CtcCard {
@@ -278,6 +306,8 @@
       this._items = (this._config.items || []).map((item) => {
         const chip = document.createElement("div");
         chip.className = "chip";
+        // R36: the colour of what the chip means, from the page's YAML.
+        if (item.color) chip.dataset.color = String(item.color);
         const value = document.createElement("span");
         value.className = "value";
         chip.append(this._named(item, note), value);
@@ -290,8 +320,13 @@
     _update() {
       if (!this._hass) return;
       for (const row of this._items) {
-        row.chip.hidden = this._missing(row.item);
-        row.value.textContent = this._text(this._state(row.item.entity));
+        const stateObj = this._state(row.item.entity);
+        // R36: a chip with an on_state is on the line only while it reads it,
+        // so "Larm: OK" and "Avfrostning: Av" are not there to read.
+        const off = row.item.on_state !== undefined
+          && (!stateObj || stateObj.state !== String(row.item.on_state));
+        row.chip.hidden = off || this._missing(row.item);
+        row.value.textContent = this._text(stateObj);
       }
     }
   }

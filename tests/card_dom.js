@@ -199,4 +199,39 @@ function mount(cardPath, options = {}) {
   };
 }
 
-module.exports = { mount };
+/** Mount any of the page's cards with a config and the states it reads, and
+ *  hand back the card with a way to send it new states and to look through
+ *  what it drew. `states` is entity_id to {state, attributes}, as hass.states
+ *  holds them. Used for the chips and the readings (tests/test_card_chips.py,
+ *  tests/test_card_readings.py), which draw from attributes and hide rows.
+ */
+function mountCard(cardPath, name, config, states = {}) {
+  require(cardPath);
+  const Card = customElements.get(name);
+  if (!Card) throw new Error(`${name} is not defined`);
+  const card = new Card();
+  card.setConfig(config);
+  const hass = (current) => ({ states: current, callService: () => Promise.resolve() });
+  card.hass = hass(states);
+  /** Every element under the card's root that `test` accepts, depth first. */
+  const all = (test) => {
+    const found = [];
+    const walk = (node) => {
+      for (const child of node.children) {
+        if (test(child)) found.push(child);
+        walk(child);
+      }
+    };
+    walk(card.shadowRoot);
+    return found;
+  };
+  return {
+    card,
+    all,
+    update: (next) => { card.hass = hass(next); },
+    /** The elements whose className is `className`, in drawing order. */
+    byClass: (className) => all((e) => e.className === className),
+  };
+}
+
+module.exports = { mount, mountCard };
