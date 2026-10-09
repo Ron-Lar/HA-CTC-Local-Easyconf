@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Hitta värmepumpen",
-        "description": "Sök på nätverket frågar varje adress i Home Assistants egna nät, på port 80, om den är en CTC-display, och ändrar ingenting någonstans. Ange adress hoppar över sökningen.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}",
+        "description": "Sök på nätverket frågar varje adress i Home Assistants egna nät, på port 80, om den är en CTC-display, och ändrar ingenting någonstans. Ange adress hoppar över sökningen, och är också vägen in för en display vars webbgränssnitt är avslaget.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}",
         "menu_options": {
           "scan": "Sök på nätverket",
           "manual": "Ange adress"
@@ -19,7 +19,7 @@
       },
       "manual": {
         "title": "Ange adress",
-        "description": "Skriv in displayens adress. Den står i pumpens meny under Avancerat, Inställningar, Kommunikation, Ethernet.",
+        "description": "Skriv in displayens adress. Den står i pumpens meny under Avancerat, Inställningar, Kommunikation, Ethernet. Svarar inte displayens webbgränssnitt läggs värmepumpen till på enbart Modbus: inga displaysidor, ingen värmefaktor och inget serienummer, tills webbgränssnittet slås på och menyn läses om under Konfigurera.",
         "data": {
           "host": "IP-adress",
           "modbus_port": "Modbus TCP-port",
@@ -52,7 +52,7 @@
       }
     },
     "error": {
-      "not_a_ctc": "Adressen svarar, men det är ingen CTC-display.",
+      "not_a_ctc": "Adressen svarar inte som en CTC-display. Kontrollera adressen. Displayens webbgränssnitt slås på vid panelen under Avancerat, Definiera, Kommunikation, Web = Ja; utan det läggs värmepumpen till på enbart Modbus, och då måste Modbus svara.",
       "modbus_failed": "Modbus svarade inte den här gången heller.",
       "nothing_found": "Sökningen hittade ingen CTC-display. Skriv in displayens adress i stället; en display på ett annat nät nås inte av sökningen."
     },

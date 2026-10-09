@@ -79,6 +79,7 @@ from .const import (
     LANG_SWEDISH,
     PLATFORMS,
     SlowPage,
+    has_display,
     identity_signal,
     web_interface_url,
 )
@@ -269,7 +270,13 @@ def _async_review_issues(
     heat and no coefficient of performance, and that is worth saying plainly:
     an empty list is as often a menu that could not be read at set-up as it is
     a deliberate choice.
+
+    An entry on Modbus alone has none of the three to settle, and is told
+    apart first; see _display_notices_apply.
     """
+    if not _display_notices_apply(hass, entry):
+        return
+
     def review(key: str, needed: bool) -> None:
         issue_id = f"{entry.entry_id}_{key}"
         if needed:
@@ -287,6 +294,21 @@ def _async_review_issues(
     review(ISSUE_PAGES, runtime.web is None)
     review(ISSUE_HISTORY_PAGE, runtime.web is not None and runtime.energy_out is None)
     review(ISSUE_IDENTITY, not runtime.identity.serial)
+
+
+def _display_notices_apply(hass: HomeAssistant, entry: "CtcConfigEntry") -> bool:
+    """Whether the repairs view's notices about the display concern this entry at all.
+
+    An entry set up on Modbus alone, because the display's web interface did
+    not answer (roadmap R11), has no pages to tick, no history page and no
+    system information page to read, so the three notices would only ask for
+    what cannot be done. Any of them left from before is taken away.
+    """
+    if has_display(entry.data):
+        return True
+    for key in (ISSUE_PAGES, ISSUE_HISTORY_PAGE, ISSUE_IDENTITY):
+        ir.async_delete_issue(hass, DOMAIN, f"{entry.entry_id}_{key}")
+    return False
 
 
 @callback
@@ -370,6 +392,11 @@ async def _async_catch_up(
     menu itself has no way there, so repeating it would only move the panel.
     """
     await _async_check_release(hass, entry, version)
+    if not has_display(entry.data):
+        # On Modbus alone (roadmap R11): no menu to read, no identity on a
+        # screen, no panel to walk. Each would only wait out the display's
+        # timeouts, up to half a minute a start, for nothing.
+        return
     while True:
         changed: dict[str, Any] = {}
         try:
@@ -751,7 +778,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         serial_number=identity.serial,
         sw_version=identity.display_firmware,
         hw_version=identity.bootloader,
-        configuration_url=web_interface_url(host, web_port),
+        # No link to a web interface that did not answer at set-up (R11).
+        configuration_url=web_interface_url(host, web_port) if has_display(entry.data) else None,
     )
 
     runtime = CtcRuntime(

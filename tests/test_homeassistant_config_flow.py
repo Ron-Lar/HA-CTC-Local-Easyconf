@@ -24,23 +24,32 @@ pytest.importorskip("pytest_homeassistant_custom_component")
 
 from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
     DeadModbus,
+    FakeModbus,
+    _let_the_background_run,
     _needs_auto_asyncio_mode,
     stubs,
 )
+from test_homeassistant_menu import VSH  # noqa: E402
 
+from homeassistant.config_entries import ConfigEntryState  # noqa: E402
 from homeassistant.const import CONF_HOST  # noqa: E402
 from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
+from homeassistant.helpers import device_registry as dr, issue_registry as ir  # noqa: E402
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo  # noqa: E402
 from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
 
 from custom_components.ctc_ecozenith.catalogue import MenuReading  # noqa: E402
 from custom_components.ctc_ecozenith.const import (  # noqa: E402
+    CONF_DISPLAY,
+    CONF_MENU,
     CONF_MODBUS_PORT,
     CONF_SLAVE,
+    CONF_SLOW_PAGES,
     CONF_WEB_PORT,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.discovery import DiscoveredDisplay  # noqa: E402
+from custom_components.ctc_ecozenith.discovery import DiscoveredDisplay, WebProbe  # noqa: E402
+from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
 
 FLOW = f"custom_components.{DOMAIN}.config_flow"
 
@@ -54,10 +63,11 @@ ADDRESS = {CONF_HOST: FOUND.host, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF
 
 @pytest.fixture
 def display():
-    """The display's answer to a typed address, and a menu that reads as nothing."""
+    """The display's answer, typed or discovered, and a menu that reads as nothing."""
     probe = AsyncMock(return_value=FOUND)
     with (
         patch(f"{FLOW}.async_probe_host", probe),
+        patch(f"{FLOW}.async_probe_web", AsyncMock(return_value=WebProbe(FOUND, answered=True))),
         patch(f"{FLOW}.async_discover_pages", AsyncMock(return_value=MenuReading())),
     ):
         yield probe
@@ -217,3 +227,100 @@ async def test_a_discovered_unit_carries_its_model_and_address_on_the_card(hass,
     assert "privacy_url" in result["description_placeholders"]
     (flow,) = hass.config_entries.flow.async_progress()
     assert flow["context"]["title_placeholders"] == {"name": f"EcoZenith i255 ({FOUND.host})"}
+
+
+# ------------------------------------------------------- Modbus alone (R11)
+
+
+async def _type_the_address(hass, web: WebProbe):
+    """The address form, filled in, with the web port answering as told."""
+    with patch(f"{FLOW}.async_probe_web", AsyncMock(return_value=web)):
+        result = await _start(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "manual"}
+        )
+        return await hass.config_entries.flow.async_configure(result["flow_id"], ADDRESS)
+
+
+async def test_a_typed_address_whose_web_is_silent_is_added_on_modbus_alone(hass, stubs):
+    discover_pages = AsyncMock(return_value=MenuReading())
+    with (
+        patch(f"{FLOW}.async_discover_pages", discover_pages),
+        patch(
+            f"custom_components.{DOMAIN}.async_read_identity",
+            AsyncMock(return_value=Identity()),
+        ) as identity,
+    ):
+        result = await _type_the_address(hass, WebProbe(None, answered=False))
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["title"] == f"EcoZenith ({FOUND.host})"
+        assert result["data"][CONF_DISPLAY] is False
+        assert result["data"]["model"] == "EcoZenith"
+        assert result["options"][CONF_SLOW_PAGES] == []
+        assert CONF_MENU not in result["options"]
+        discover_pages.assert_not_awaited()
+
+        await hass.async_block_till_done()
+        await _let_the_background_run(hass)
+        entry = result["result"]
+        assert entry.state is ConfigEntryState.LOADED
+        # Nothing that needs the display runs: no menu, no identity.
+        stubs.discover.assert_not_awaited()
+        identity.assert_not_awaited()
+
+    (device,) = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    assert device.name == "CTC EcoZenith"
+    assert device.configuration_url is None
+    issues = ir.async_get(hass)
+    for key in ("pages_missing", "history_page_missing", "identity_incomplete"):
+        assert issues.async_get_issue(DOMAIN, f"{entry.entry_id}_{key}") is None, key
+
+
+async def test_a_silent_web_port_and_a_silent_modbus_is_no_ctc(hass, stubs):
+    with patch(f"{FLOW}.CtcModbusClient", DeadModbus):
+        result = await _type_the_address(hass, WebProbe(None, answered=False))
+    assert result["step_id"] == "manual"
+    assert result["errors"] == {"base": "not_a_ctc"}
+
+
+async def test_something_else_on_the_web_port_is_no_ctc_and_modbus_is_not_asked(hass, stubs):
+    result = await _type_the_address(hass, WebProbe(None, answered=True))
+    assert result["step_id"] == "manual"
+    assert result["errors"] == {"base": "not_a_ctc"}
+    assert FakeModbus.instances == []
+
+
+async def test_read_again_that_finds_pages_makes_it_an_entry_with_a_display(hass, stubs):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=f"{DOMAIN}_{FOUND.host}",
+        title=f"EcoZenith ({FOUND.host})",
+        data={**ADDRESS, "model": "EcoZenith", "settings_name": "", CONF_DISPLAY: False},
+        options={CONF_SLOW_PAGES: []},
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    with (
+        patch(
+            f"{FLOW}.async_rescan_pages",
+            AsyncMock(return_value=MenuReading(pages=VSH, complete=True)),
+        ),
+        patch(f"{FLOW}.async_probe_host", AsyncMock(return_value=FOUND)),
+    ):
+        flow = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            flow["flow_id"], {"rescan": True}
+        )
+        assert result["step_id"] == "rescan"
+        result = await hass.config_entries.options.async_configure(
+            flow["flow_id"], {CONF_SLOW_PAGES: ["20", "25"]}
+        )
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done()
+    assert entry.data[CONF_DISPLAY] is True
+    assert entry.data["model"] == "EcoZenith i255"
+    assert entry.state is ConfigEntryState.LOADED
+    # Data and options went in one write: one reload, so two clients in all.
+    assert len(FakeModbus.instances) == 2

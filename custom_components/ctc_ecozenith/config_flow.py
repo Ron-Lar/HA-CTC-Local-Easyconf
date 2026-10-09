@@ -32,6 +32,7 @@ from .catalogue import (
 )
 from .const import (
     CONF_CHECK_UPDATES,
+    CONF_DISPLAY,
     CONF_ENABLE_CONTROL,
     CONF_SEND_STATISTICS,
     CONF_FAST_INTERVAL,
@@ -54,12 +55,15 @@ from .const import (
     DOMAIN,
     LANG_SWEDISH,
     MIN_SLOW_INTERVAL,
+    has_display,
 )
 from .discovery import (
+    FAMILY,
     DiscoveredDisplay,
     async_discover,
     async_home_assistant_networks,
     async_probe_host,
+    async_probe_web,
 )
 from .modbus_api import CtcModbusClient, CtcModbusError
 from .web_api import CtcWebClient, CtcWebError
@@ -109,6 +113,9 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         #: from the list or discovered. A Modbus failure after a try from the
         #: Modbus form says so, rather than showing the same form unchanged.
         self._origin: str | None = None
+        #: False once a typed address turned out to have no web interface
+        #: answering, and the entry is made on Modbus alone (roadmap R11).
+        self._display = True
 
     # ------------------------------------------------------------ entry point
 
@@ -145,6 +152,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_manual()
             self._host = picked
             self._origin = None
+            self._display = True
             for display in self._found:
                 if display.host == picked:
                     self._model = display.model
@@ -242,18 +250,34 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _async_address_given(
         self, user_input: dict[str, Any], step_id: str
     ) -> FlowResult:
-        """Check a typed address: the display first, then Modbus in async_step_connect."""
+        """Check a typed address: the display first, then Modbus in async_step_connect.
+
+        A display that does not answer at all no longer stops the set-up. Web
+        switched off at the panel, an older display, or a firewall that lets
+        502 through and nothing else used to end here as "not a CTC", though
+        the runtime does well without the web. Only here, where somebody typed
+        the address: Modbus is tried on its own, and an entry is made on Modbus
+        alone if it answers (roadmap R11). Something answering on the web port
+        that is not a CTC display still stops it, since that is some other
+        device.
+        """
         self._origin = step_id
         self._host = user_input[CONF_HOST].strip()
         self._modbus_port = user_input[CONF_MODBUS_PORT]
         self._web_port = user_input[CONF_WEB_PORT]
         self._slave = user_input[CONF_SLAVE]
         session = async_get_clientsession(self.hass)
-        display = await async_probe_host(session, self._host, self._web_port)
-        if display is None:
+        probe = await async_probe_web(session, self._host, self._web_port)
+        if probe.display is not None:
+            self._display = True
+            self._model = probe.display.model
+            self._settings_name = probe.display.settings_name
+        elif probe.answered:
             return self._address_form(step_id, {"base": "not_a_ctc"})
-        self._model = display.model
-        self._settings_name = display.settings_name
+        else:
+            self._display = False
+            self._model = FAMILY
+            self._settings_name = ""
         return await self.async_step_connect()
 
     # ------------------------------------------------------------- validation
@@ -271,6 +295,10 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await client.async_probe()
         except CtcModbusError as err:
             _LOGGER.debug("Modbus probe failed: %s", err)
+            if not self._display:
+                # Neither the web port nor Modbus answered: no CTC at that
+                # address, as far as can be told, which the text explains.
+                return self._address_form(self._origin or STEP_MANUAL, {"base": "not_a_ctc"})
             # Tried from this very form before: say that it failed again, or
             # the same form coming back looks as if nothing had happened.
             again = self._origin == STEP_MODBUS_FAILED
@@ -280,7 +308,44 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         finally:
             await client.async_close()
 
+        if not self._display:
+            return self._create_without_display()
         return await self.async_step_slow()
+
+    def _entry_data(self) -> dict[str, Any]:
+        """What the entry keeps about the unit: where it is and what it said it was."""
+        return {
+            CONF_HOST: self._host,
+            CONF_MODBUS_PORT: self._modbus_port,
+            CONF_WEB_PORT: self._web_port,
+            CONF_SLAVE: self._slave,
+            "model": self._model,
+            "settings_name": self._settings_name,
+            CONF_DISPLAY: self._display,
+        }
+
+    def _create_without_display(self) -> FlowResult:
+        """The entry for a heat pump on Modbus alone (roadmap R11).
+
+        No pages and no menu, and the model "EcoZenith", since the display that
+        would name it did not answer. Nothing that needs the display runs for
+        it: no reading of the identity, no reading of the menu, no walk, and
+        the repairs view says nothing about pages or the serial number. A
+        "read the menu again" under Configure that finds pages makes it a
+        display entry; see CtcOptionsFlow.async_step_rescan.
+        """
+        return self.async_create_entry(
+            title=f"{self._model} ({self._host})",
+            data=self._entry_data(),
+            options={
+                CONF_SLOW_PAGES: [],
+                CONF_SLOW_INTERVAL: DEFAULT_SLOW_INTERVAL,
+                CONF_FAST_INTERVAL: DEFAULT_FAST_INTERVAL,
+                CONF_RESTORE_PAGE: True,
+                CONF_ENABLE_CONTROL: True,
+                CONF_LANGUAGE: LANG_SWEDISH,
+            },
+        )
 
     # ------------------------------------------------------------ slow values
 
@@ -315,14 +380,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 options[CONF_MENU_ROOT] = self._root
             return self.async_create_entry(
                 title=f"{self._model} ({self._host})",
-                data={
-                    CONF_HOST: self._host,
-                    CONF_MODBUS_PORT: self._modbus_port,
-                    CONF_WEB_PORT: self._web_port,
-                    CONF_SLAVE: self._slave,
-                    "model": self._model,
-                    "settings_name": self._settings_name,
-                },
+                data=self._entry_data(),
                 options=options,
             )
 
@@ -341,14 +399,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Modbus alone is a perfectly good entry; the display is a bonus.
             return self.async_create_entry(
                 title=f"{self._model} ({self._host})",
-                data={
-                    CONF_HOST: self._host,
-                    CONF_MODBUS_PORT: self._modbus_port,
-                    CONF_WEB_PORT: self._web_port,
-                    CONF_SLAVE: self._slave,
-                    "model": self._model,
-                    "settings_name": self._settings_name,
-                },
+                data=self._entry_data(),
                 options={
                     CONF_SLOW_PAGES: [],
                     CONF_SLOW_INTERVAL: DEFAULT_SLOW_INTERVAL,
@@ -394,6 +445,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         self._host = host
         self._origin = None
+        self._display = True
         self._model = display.model
         self._settings_name = display.settings_name
         # The card of a discovered unit reads strings.json's flow_title, "{name}".
@@ -609,7 +661,9 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             description_placeholders=STATS_PLACEHOLDERS,
         )
 
-    async def _async_save(self, changes: dict[str, Any]) -> FlowResult:
+    async def _async_save(
+        self, changes: dict[str, Any], data: dict[str, Any] | None = None
+    ) -> FlowResult:
         """Write the options, which reloads the entry.
 
         Switching the statistics off erases what has already been sent, rather
@@ -617,13 +671,39 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         form abandoned on the way, at a busy panel for one, changes nothing.
         Imported here rather than at the top: stats.py pulls in Home
         Assistant, and this module is read by tests that run without it.
+
+        New entry data, where there is any, goes in the same write as the
+        options, so the entry reloads once: the options the flow then hands
+        Home Assistant are the ones already written, and change nothing.
         """
         was_on = self._entry.options.get(CONF_SEND_STATISTICS, True)
         if was_on and not changes.get(CONF_SEND_STATISTICS, True):
             from .stats import async_forget_install
 
             await async_forget_install(self.hass, self._entry, DOMAIN)
-        return self.async_create_entry(title="", data={**self._entry.options, **changes})
+        options = {**self._entry.options, **changes}
+        if data is not None:
+            self.hass.config_entries.async_update_entry(self._entry, data=data, options=options)
+        return self.async_create_entry(title="", data=options)
+
+    async def _async_display_found(self) -> dict[str, Any]:
+        """The entry's data once the display of a Modbus-only entry has turned up.
+
+        An entry made on Modbus alone (roadmap R11) is told so by its data, and
+        nothing that needs the display runs for it. When "read the menu again"
+        finds pages, the display is there after all, so the entry becomes one
+        with a display, named by the settings file the display gives now.
+        """
+        data = {**self._entry.data, CONF_DISPLAY: True}
+        display = await async_probe_host(
+            async_get_clientsession(self.hass),
+            data[CONF_HOST],
+            data.get(CONF_WEB_PORT, DEFAULT_WEB_PORT),
+        )
+        if display is not None:
+            data["model"] = display.model
+            data["settings_name"] = display.settings_name
+        return data
 
     def _web_client(self) -> CtcWebClient:
         """The display's client for a walk started from the options.
@@ -689,7 +769,10 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
                 # reading stays owed, and the whole one that follows replaces
                 # the menu with the tick kept.
                 changes[CONF_MENU] = pages_to_storage(self._pages)
-            return await self._async_save(changes)
+            data = None
+            if self._found and not has_display(self._entry.data):
+                data = await self._async_display_found()
+            return await self._async_save(changes, data)
 
         try:
             reading = await async_rescan_pages(self._web_client())
