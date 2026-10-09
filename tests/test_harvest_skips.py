@@ -300,7 +300,9 @@ def test_the_round_leaves_when_it_ran_and_when_the_next_is_due(harvest):
     panel, coordinator, round = harvest
 
     async def scenario():
-        assert coordinator.last_attempt is None and coordinator.next_attempt is None
+        # The first harvest is planned at construction (R6), so only the last
+        # attempt is still empty before any round has run.
+        assert coordinator.last_attempt is None
         await round()
         assert coordinator.last_attempt is not None
         assert coordinator.next_attempt - coordinator.last_attempt >= timedelta(seconds=INTERVAL)
