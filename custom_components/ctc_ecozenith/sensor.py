@@ -17,7 +17,8 @@ from homeassistant.const import (
     UnitOfTime,
     UnitOfVolumeFlowRate,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -32,7 +33,25 @@ from .cop import (
     modbus_consumption_answered,
     powered_on_hours,
 )
-from .const import DOMAIN, STATUS_UNKNOWN, ModbusSensor, SlowValue, device_class_for
+from .const import (
+    DOMAIN,
+    STATUS_UNKNOWN,
+    ModbusSensor,
+    SlowValue,
+    device_class_for,
+    identity_signal,
+)
+
+#: What the unit says about itself, one sensor each: the entity key, the name,
+#: where on the identity the value is read, and the icon.
+IDENTITY_ROWS = (
+    ("hp_model", "Värmepumpsmodell", lambda i: i.heatpump_model, "mdi:heat-pump-outline"),
+    ("display_fw", "Programversion display", lambda i: i.display_firmware, "mdi:chip"),
+    ("hp_fw", "Programversion VP-styrkort", lambda i: i.heatpump_firmware, "mdi:chip"),
+    ("bootloader", "Bootloaderversion", lambda i: i.bootloader, "mdi:chip"),
+    ("serial", "Serienummer", lambda i: i.serial, "mdi:identifier"),
+    ("made", "Tillverkad", lambda i: i.manufactured, "mdi:factory"),
+)
 
 # By the names const.py uses, so the choice of class can be tested without
 # Home Assistant installed.
@@ -79,23 +98,37 @@ async def async_setup_entry(
                 entities.append(CtcDisplaySensor(runtime, page.title, value))
         entities.append(CtcHarvestSensor(runtime))
 
-    # What the unit is: read once from the display and then unchanging.
-    for key, name, value, icon in (
-        ("hp_model", "Värmepumpsmodell", runtime.identity.heatpump_model, "mdi:heat-pump-outline"),
-        ("display_fw", "Programversion display", runtime.identity.display_firmware, "mdi:chip"),
-        ("hp_fw", "Programversion VP-styrkort", runtime.identity.heatpump_firmware, "mdi:chip"),
-        ("bootloader", "Bootloaderversion", runtime.identity.bootloader, "mdi:chip"),
-        ("serial", "Serienummer", runtime.identity.serial, "mdi:identifier"),
-        ("made", "Tillverkad", runtime.identity.manufactured, "mdi:factory"),
-    ):
-        if value:
-            entities.append(CtcIdentitySensor(runtime, key, name, value, icon))
+    # What the unit is: static once read, but read late where the system
+    # information page had never been shown on the panel. A row gets its
+    # sensor when its value is there, at set-up or when the background walk
+    # fills the identity in afterwards; a row that has no value yet has no
+    # sensor, as before.
+    signal = identity_signal(entry.entry_id)
+    offered: set[str] = set()
+
+    def identity_sensors() -> list[SensorEntity]:
+        new: list[SensorEntity] = []
+        for key, name, read, icon in IDENTITY_ROWS:
+            if key in offered or not read(runtime.identity):
+                continue
+            offered.add(key)
+            new.append(CtcIdentitySensor(runtime, key, name, read, icon, signal))
+        return new
+
+    entities.extend(identity_sensors())
 
     if runtime.cop is not None:
         for span in ("day", "year", "first_year", "lifetime"):
             entities.append(CtcCopSensor(runtime, span))
 
     async_add_entities(entities)
+
+    @callback
+    def _identity_filled_in() -> None:
+        if new := identity_sensors():
+            async_add_entities(new)
+
+    entry.async_on_unload(async_dispatcher_connect(hass, signal, _identity_filled_in))
 
 
 class CtcModbusSensor(CoordinatorEntity, SensorEntity):
@@ -280,20 +313,35 @@ class CtcHarvestSensor(CoordinatorEntity, SensorEntity):
 class CtcIdentitySensor(SensorEntity):
     """Something the unit says about itself and then never changes.
 
-    Read from the display once at setup and stored with the entry, so it costs
-    nothing to keep and survives the display being unreachable.
+    Read from the display and stored with the entry, so it costs nothing to
+    keep and survives the display being unreachable. Read live off the
+    runtime's identity, and written again on the identity signal: a serial
+    number or a version that the background walk finds after set-up shows up
+    here without a reload of the entry.
     """
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_should_poll = False
 
-    def __init__(self, runtime, key: str, name: str, value: str, icon: str) -> None:
+    def __init__(self, runtime, key: str, name: str, read, icon: str, signal: str) -> None:
         host = next(iter(runtime.device["identifiers"]))[1]
         self._attr_unique_id = f"{DOMAIN}_{host}_{key}"
         self._attr_name = name
-        self._attr_native_value = value
         self._attr_icon = icon
         self._attr_device_info = runtime.device
+        self._runtime = runtime
+        self._read = read
+        self._signal = signal
+
+    @property
+    def native_value(self):
+        return self._read(self._runtime.identity)
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, self._signal, self.async_write_ha_state)
+        )
 
 
 class CtcCopSensor(CoordinatorEntity, SensorEntity):

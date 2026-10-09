@@ -478,8 +478,8 @@ def test_every_key_on_the_page_is_a_unique_id_the_integration_creates(dashboard_
     created = {d.key for d in const.MODBUS_SENSORS + const.MODBUS_SETTINGS}
     created |= {r.key for r in const.CONTROL_NUMBERS + const.CONTROL_SELECTS}
     created |= set(re.findall(r'DerivedBinary\(\s*"([a-z0-9_]+)"', _source("binary_sensor.py")))
-    identity = re.search(r"# What the unit is.*?\):\n", _source("sensor.py"), re.S)
-    created |= set(re.findall(r'\("([a-z_]+)", "', identity.group(0)))
+    identity = re.search(r"IDENTITY_ROWS = \((.*?)\n\)", _source("sensor.py"), re.S)
+    created |= set(re.findall(r'\("([a-z_]+)", "', identity.group(1)))
     spans = re.search(r"for span in \(([^)]*)\)", _source("sensor.py")).group(1)
     created |= {f"cop_{span}" for span in re.findall(r'"([a-z_]+)"', spans)}
     # Entities with a key of their own, spelled out in the unique id: the

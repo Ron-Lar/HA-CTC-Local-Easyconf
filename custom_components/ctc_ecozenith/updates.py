@@ -21,6 +21,28 @@ _LOGGER = logging.getLogger(__name__)
 _NUMBERS = re.compile(r"\d+")
 _VERSION = re.compile(r"^v?\d+(\.\d+){0,3}$")
 
+#: How much earlier than the interval a check may come and still count as the
+#: next one. The daily timer and the clock the last check is remembered on are
+#: not the same clock, and a timer that fires a moment early must not leave a
+#: whole day without a check.
+CHECK_SLACK_SECONDS = 300.0
+
+
+def check_is_due(
+    last: float | None, now: float, interval: float, slack: float = CHECK_SLACK_SECONDS
+) -> bool:
+    """Whether GitHub is worth asking again, given when it last answered.
+
+    On the event loop's clock rather than in the entry: a reload of the entry
+    used to ask again at once, and a few saved options in a row were a few
+    questions to GitHub in a row for an answer that cannot have changed. Nothing
+    remembered means asking, and so does an interval gone by, less a little
+    slack for the timer.
+    """
+    if last is None:
+        return True
+    return now - last >= interval - slack
+
 
 def _parts(version: str | None) -> tuple[int, ...]:
     return tuple(int(number) for number in _NUMBERS.findall(version or "")[:4])
