@@ -2,15 +2,23 @@
   "config": {
     "step": {
       "user": {
+        "title": "Hitta värmepumpen",
+        "description": "Sök på nätverket frågar varje adress i Home Assistants egna nät, på port 80, om den är en CTC-display, och ändrar ingenting någonstans. Ange adress hoppar över sökningen.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}",
+        "menu_options": {
+          "scan": "Sök på nätverket",
+          "manual": "Ange adress"
+        }
+      },
+      "scan": {
         "title": "Välj värmepump",
-        "description": "Nätverket har genomsökts efter CTC-displayer.",
+        "description": "CTC-displayer hittade i Home Assistants egna nät: {count}.",
         "data": {
           "picked": "Hittade enheter"
         }
       },
       "manual": {
         "title": "Ange adress",
-        "description": "Ingen CTC hittades automatiskt. Adressen står i pumpens meny under Avancerat, Inställningar, Kommunikation, Ethernet.",
+        "description": "Skriv in displayens adress. Den står i pumpens meny under Avancerat, Inställningar, Kommunikation, Ethernet.",
         "data": {
           "host": "IP-adress",
           "modbus_port": "Modbus TCP-port",
@@ -20,7 +28,7 @@
       },
       "slow": {
         "title": "Långsamma värden från displayen",
-        "description": "Modbus läses hela tiden och sköter all styrning. Displayens webbgränssnitt har dessutom värden som Modbus saknar, till exempel avgiven värme.\n\nFällan är att bara den sida panelen visar hålls färsk, så integrationen måste bläddra dit och tillbaka. Panelen rör sig då för den som står vid den. Kryssa i de sidor du vill hämta, eller hoppa över steget och kör enbart Modbus.\n\nVärmefaktorn kräver sidan med lagrad eller historisk driftinfo, där avgiven värme räknas.\n\n{count} sidor hittades i {model}.",
+        "description": "Modbus läses hela tiden och sköter all styrning. Displayens webbgränssnitt har dessutom värden som Modbus saknar, till exempel avgiven värme.\n\nFällan är att bara den sida panelen visar hålls färsk, så integrationen måste bläddra dit och tillbaka. Panelen rör sig då för den som står vid den. Kryssa i de sidor du vill hämta, eller hoppa över steget och kör enbart Modbus.\n\nVärmefaktorn kräver sidan med lagrad eller historisk driftinfo, där avgiven värme räknas.\n\n{count} sidor hittades i {model}.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}",
         "data": {
           "slow_pages": "Sidor att hämta",
           "slow_interval": "Hur ofta",
@@ -29,12 +37,13 @@
       },
       "confirm": {
         "title": "Lägg till {model}?",
-        "description": "En CTC-display hittades på {host}. Uppsättningen bläddrar i pumpens meny för att se vilka värden den kan lämna, så panelen rör sig en stund."
+        "description": "En CTC-display hittades på {host}. Uppsättningen bläddrar i pumpens meny för att se vilka värden den kan lämna, så panelen rör sig en stund.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}"
       }
     },
     "error": {
       "not_a_ctc": "Adressen svarar, men det är ingen CTC-display.",
-      "modbus_failed": "Displayen svarar men Modbus gör det inte. Slå på det i pumpens meny under Avancerat, Definiera, Fjärrstyrning, där Ethernet ska stå på Modbus TCP."
+      "modbus_failed": "Displayen svarar men Modbus gör det inte. Slå på det i pumpens meny under Avancerat, Definiera, Fjärrstyrning, där Ethernet ska stå på Modbus TCP.",
+      "nothing_found": "Sökningen hittade ingen CTC-display. Skriv in displayens adress i stället; en display på ett annat nät nås inte av sökningen."
     },
     "abort": {
       "already_configured": "Den här värmepumpen är redan tillagd.",

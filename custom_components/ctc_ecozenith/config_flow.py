@@ -1,9 +1,10 @@
 """Config and options flow for CTC Local Easyconf.
 
-Setup has two questions. First where the unit is, answered by scanning the local
-network and falling back to typing an address. Then which of the display's own
-pages should be harvested for the values Modbus does not carry, offered as a
-list of tick boxes built from the unit's own menu.
+Setup has two questions. First where the unit is: the user chooses between
+searching the local network and typing an address, and the search runs only once
+it has been chosen. Then which of the display's own pages should be harvested
+for the values Modbus does not carry, offered as a list of tick boxes built from
+the unit's own menu.
 """
 
 from __future__ import annotations
@@ -76,6 +77,11 @@ STATS_PLACEHOLDERS = {
 CONF_PICKED = "picked"
 MANUAL = "manual"
 
+#: The two ways in, offered as a menu before anything goes on the network
+#: (roadmap R70). Each is the id of the step it leads to.
+STEP_SCAN = "scan"
+STEP_MANUAL = "manual"
+
 
 class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Guide the user from an empty form to a working entry."""
@@ -103,7 +109,25 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Scan the network, then let the user pick or type an address."""
+        """Ask how the unit is to be found, before anything goes on the network.
+
+        Searching asks every address of Home Assistant's own networks for the
+        display's settings file on port 80. On a shared network that is a port
+        scan, so it runs only once somebody has chosen it; typing the address
+        in never sweeps at all. The menu's text also says what is switched on
+        from the start, since a new installation never sees the options form
+        that explains it.
+        """
+        return self.async_show_menu(
+            step_id="user",
+            menu_options=[STEP_SCAN, STEP_MANUAL],
+            description_placeholders=STATS_PLACEHOLDERS,
+        )
+
+    async def async_step_scan(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Sweep the network, then let the user pick or type an address."""
         if user_input is not None:
             picked = user_input[CONF_PICKED]
             if picked == MANUAL:
@@ -124,7 +148,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._found = []
 
         if not self._found:
-            return await self.async_step_manual()
+            return await self.async_step_manual(errors={"base": "nothing_found"})
 
         options = [
             selector.SelectOptionDict(value=display.host, label=display.label)
@@ -142,13 +166,19 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             }
         )
-        return self.async_show_form(step_id="user", data_schema=schema)
+        return self.async_show_form(
+            step_id="scan",
+            data_schema=schema,
+            description_placeholders={"count": str(len(self._found))},
+        )
 
     async def async_step_manual(
-        self, user_input: dict[str, Any] | None = None
+        self,
+        user_input: dict[str, Any] | None = None,
+        errors: dict[str, str] | None = None,
     ) -> FlowResult:
-        """Ask for the address by hand when the sweep found nothing."""
-        errors: dict[str, str] = {}
+        """Ask for the address by hand: chosen, picked from the list, or after an empty sweep."""
+        errors = dict(errors or {})
         if user_input is not None:
             self._host = user_input[CONF_HOST].strip()
             self._modbus_port = user_input[CONF_MODBUS_PORT]
@@ -297,9 +327,12 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 DEFAULT_SLOW_INTERVAL,
                 True,
             ),
+            # The privacy page travels as a placeholder for the sentence on
+            # what is switched on from the start; see async_step_user.
             description_placeholders={
                 "model": self._model,
                 "count": str(len(self._pages)),
+                **STATS_PLACEHOLDERS,
             },
         )
 
@@ -328,14 +361,20 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Ask before adopting a unit that turned up by itself.
 
         Setting the entry up walks the panel through its menus, so a discovered
-        unit is never adopted silently.
+        unit is never adopted silently. A discovered unit never passes the menu
+        of async_step_user, so this text says what is switched on from the
+        start as well.
         """
         if user_input is not None:
             return await self.async_step_connect()
         self._set_confirm_only()
         return self.async_show_form(
             step_id="confirm",
-            description_placeholders={"model": self._model, "host": self._host or ""},
+            description_placeholders={
+                "model": self._model,
+                "host": self._host or "",
+                **STATS_PLACEHOLDERS,
+            },
         )
 
     @staticmethod
