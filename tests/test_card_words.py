@@ -28,9 +28,17 @@ PAGE = TESTS / "card_page.js"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 
-#: What dashboard_views.state_words gives a Swedish page.
-SV = {"on": "Till", "off": "Av", "problem_on": "Larm", "problem_off": "OK"}
-EN = {"on": "On", "off": "Off", "problem_on": "Alarm", "problem_off": "OK"}
+#: What dashboard_views.state_words gives a Swedish page, and an English one.
+SV = {
+    "on": "Till", "off": "Av", "problem_on": "Larm", "problem_off": "OK",
+    "unset": "ej satt", "unset_note": "Pumpen lämnar inte ut sitt eget värde här.",
+    "no_limit": "ingen gräns",
+}
+EN = {
+    "on": "On", "off": "Off", "problem_on": "Alarm", "problem_off": "OK",
+    "unset": "not set", "unset_note": "The pump does not give out its own value here.",
+    "no_limit": "no limit",
+}
 
 
 def _run(program: str):
@@ -127,7 +135,70 @@ def test_what_the_table_has_no_word_for_is_left_to_home_assistant():
     """) == [None] * 7
 
 
+def _number(state: str, **attributes) -> dict:
+    return {"state": state, "attributes": {"unit_of_measurement": "rps", **attributes}}
+
+
+def test_a_control_without_a_value_says_so_and_a_reading_without_one_is_left_alone():
+    # V2: the hot water setpoint has no mirror register and is unknown until
+    # written. A number or select in unknown is a control not set; a sensor in
+    # unknown is Home Assistant's to word (and R35's to explain).
+    assert _pure(f"""
+      const t = {json.dumps(SV)};
+      console.log(JSON.stringify([
+        c.ownWord("number.a", {json.dumps(_number("unknown"))}, t),
+        c.ownWord("select.a", {{state: "unknown", attributes: {{}}}}, t),
+        c.ownWord("sensor.a", {{state: "unknown", attributes: {{}}}}, t),
+        c.ownWord("number.a", {json.dumps(_number("unavailable"))}, t),
+        c.ownWord("number.a", {json.dumps(_number("unknown"))}, {{on: "Till"}}),
+      ].map((v) => (v === undefined ? null : v))));
+    """) == ["ej satt", "ej satt", None, None, None]
+
+
+def test_a_zero_the_pump_means_as_no_limit_is_a_word_for_the_pumps_own_value_only():
+    # The compressor's top speed: 0 in the stored setting means no limit, and
+    # the control mirrors it while nothing is written. A 0 written through the
+    # control ("styrning aktiv": "ja") is shown as the 0 it is, and a key the
+    # page did not mark keeps its number.
+    assert _pure(f"""
+      const t = {json.dumps(SV)};
+      const mirrored = {json.dumps(_number("0.0", **{"styrning aktiv": "nej"}))};
+      const written = {json.dumps(_number("0.0", **{"styrning aktiv": "ja"}))};
+      console.log(JSON.stringify([
+        c.ownWord("number.a", mirrored, t, "no_limit"),
+        c.ownWord("number.a", written, t, "no_limit"),
+        c.ownWord("sensor.a", {json.dumps(_number("0"))}, t, "no_limit"),
+        c.ownWord("sensor.a", {json.dumps(_number("50.0"))}, t, "no_limit"),
+        c.ownWord("sensor.a", {json.dumps(_number("0"))}, t, undefined),
+        c.ownWord("sensor.a", {json.dumps(_number("0"))}, {{on: "Till"}}, "no_limit"),
+      ].map((v) => (v === undefined ? null : v))));
+    """) == ["ingen gräns", None, "ingen gräns", None, None, None]
+
+
 # ---------------------------------------------------------------- the cards
+
+
+def test_the_list_says_not_set_and_no_limit_in_the_pages_words():
+    # Alla värden carries the controls and the stored settings as rows.
+    states = {
+        "number.dhw": _number("unknown"),
+        "sensor.max_rps": _number("0.0"),
+        "sensor.rps": _number("50.0"),
+    }
+    config = {
+        "rows": [
+            {"entity": "number.dhw", "name": "Varmvattenbörvärde"},
+            {"entity": "sensor.max_rps", "name": "Inställt max varvtal", "zero_means": "no_limit"},
+            {"entity": "sensor.rps", "name": "Varvtal", "zero_means": "no_limit"},
+        ],
+        "states": SV,
+    }
+    assert _node(f"""
+      const card = page.mountCard(CARD, "ctc-ecozenith-rows", {json.dumps(config)},
+                                  {json.dumps(states)});
+      const values = page.all(card, (e) => e.className === "value");
+      console.log(JSON.stringify(values.map((e) => e.textContent)));
+    """) == ["ej satt", "ingen gräns", "50.0 rps"]
 
 
 @pytest.mark.parametrize(
