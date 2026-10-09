@@ -252,16 +252,26 @@ def test_fourteen_months_is_not_a_year(cop):
     assert tracker.result(22421, 9088, today=today).basis == "lifetime"
 
 
-def test_the_commissioning_day_counts_as_a_zero_sample(cop):
+def test_the_commissioning_day_serves_the_first_year_not_the_rolling_year(cop):
     # CTC's counters start from nothing the day the unit is commissioned, so a
-    # year after that the whole lifetime is exactly one year.
+    # year after that the whole lifetime is exactly one year. That figure is
+    # the first year's, kept for good once a sample from the anniversary
+    # exists. It used to pass for the rolling year as well, for the fifteen
+    # days the anchor lay inside the year's band, after which the yearly
+    # sensor went empty until the tracker's own samples reached a year.
     tracker = cop.CopTracker(FakeStore())
     commissioned = date(2025, 10, 10)
     run(tracker.async_set_anchor(commissioned))
     anniversary = commissioned + timedelta(days=366)
     result = tracker.result(24000, 9700, today=anniversary)
-    assert result.basis == "year"
-    assert result.value == pytest.approx(24000 / 9700, abs=0.01)
+    assert result.basis == "lifetime"
+    assert tracker.result_year(24000, 9700, today=anniversary).value is None
+
+    run(tracker.async_record(24000, 9700, today=anniversary))
+    first = tracker.result_first_year()
+    assert first.basis == "first_year"
+    assert first.value == pytest.approx(24000 / 9700, abs=0.01)
+    assert tracker.result_year(24000, 9700, today=anniversary).value is None
 
 
 def test_the_anchor_is_only_moved_earlier(cop):

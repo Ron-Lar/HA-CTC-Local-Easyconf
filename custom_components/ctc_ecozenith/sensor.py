@@ -27,11 +27,11 @@ from homeassistant.const import EntityCategory
 from . import CtcConfigEntry
 from .catalogue import display_state_class
 from .cop import (
-    cop_reason,
     current_totals,
-    lifetime_ratio,
+    display_silence,
     modbus_consumption_answered,
     powered_on_hours,
+    reason_for,
 )
 from .const import (
     DOMAIN,
@@ -376,19 +376,32 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = runtime.device
 
     def _result(self):
+        """The tracker's answer for this span, and nothing but this span."""
+        tracker = self._runtime.cop
         out, consumed = current_totals(self._runtime)
         if self._span == "day":
-            return self._runtime.cop.result_day(out, consumed)
+            return tracker.result_day(out, consumed)
         if self._span == "first_year":
-            return self._runtime.cop.result_first_year()
-        return self._runtime.cop.result(out, consumed)
+            return tracker.result_first_year()
+        if self._span == "lifetime":
+            return tracker.result_lifetime(out, consumed)
+        return tracker.result_year(out, consumed)
+
+    def _silence(self) -> str | None:
+        """What a quiet display does to this figure: the notice, or None.
+
+        The first year is stored once and for all, so a display that has gone
+        quiet cannot age it. Every other span is a difference against counters
+        that are no longer being read, and shows nothing but the notice.
+        """
+        if self._span == "first_year":
+            return None
+        return display_silence(self._runtime.web)
 
     @property
     def native_value(self) -> float | None:
-        if self._span == "lifetime":
-            # The whole life, whatever the rolling window has to say: the tracker
-            # answers with the yearly figure as soon as it has one.
-            return lifetime_ratio(*current_totals(self._runtime))
+        if self._silence() is not None:
+            return None
         result = self._result()
         # Reporting one span's figure under another span's name would be a
         # different number wearing the wrong label.
@@ -401,28 +414,31 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
         attributes["tillförd energi ur"] = (
             "displayen" if self._runtime.energy_in is not None else "Modbus 62341"
         )
-        if self.native_value is None:
-            # An empty figure that says nothing is the thing people ask about.
-            out, consumed = current_totals(self._runtime)
-            basis = "lifetime" if self._span == "lifetime" else result.basis
-            reason = cop_reason(
-                None,
-                basis,
-                out if self._span == "lifetime" else result.energy_out,
-                consumed if self._span == "lifetime" else result.energy_in,
-                powered_on_hours(self._runtime),
-                # Only the Modbus route can be waiting on a register; the
-                # display's own counter is a row that was recognised.
-                modbus_answered=self._runtime.energy_in is not None
-                or modbus_consumption_answered(self._runtime.modbus.answered),
-            )
-            if reason:
-                attributes["skäl"] = reason
+        # An empty figure that says nothing is the thing people ask about.
+        out, consumed = current_totals(self._runtime)
+        reason = reason_for(
+            result,
+            out,
+            consumed,
+            powered_on_hours(self._runtime),
+            # Only the Modbus route can be waiting on a register; the
+            # display's own counter is a row that was recognised.
+            modbus_answered=self._runtime.energy_in is not None
+            or modbus_consumption_answered(self._runtime.modbus.answered),
+            display=self._silence(),
+        )
+        if reason:
+            attributes["skäl"] = reason
         return attributes
 
     @property
     def available(self) -> bool:
         # Available without a figure, on purpose: an unavailable entity shows no
         # attributes, and the attributes are where the reason for the empty
-        # figure is written.
-        return self.coordinator.last_update_success
+        # figure is written. The day is the exception: it is a difference
+        # against the counters as they stand now, so a display that has gone
+        # quiet takes it with it, as it takes the display's own sensors. The
+        # other spans rest on stored samples and say that the display is quiet.
+        if self._span == "day":
+            return self.coordinator.last_update_success
+        return True
