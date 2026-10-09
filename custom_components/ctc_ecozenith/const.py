@@ -34,6 +34,10 @@ CONF_SLAVE: Final = "slave"
 #: (roadmap R11). Entries made before the key existed lack it, and all of
 #: them have a display; see has_display.
 CONF_DISPLAY: Final = "display"
+#: Entry data: the family part of the display's settings file, "ezi2xx" of
+#: settings_ezi2xx.bin, kept by entries made from here on (roadmap R19).
+#: Older entries have only "settings_name", from which it can be taken.
+CONF_SETTINGS_STEM: Final = "settings_stem"
 CONF_LANGUAGE: Final = "language"
 CONF_SLOW_PAGES: Final = "slow_pages"
 #: The whole menu as it was last read, not only the pages being harvested, so

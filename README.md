@@ -215,6 +215,12 @@ every form of them, on both models tested.
    want. For the coefficient of performance, keep the page with the stored or
    historical operation data.
 
+The display names its family by a settings file, `settings_ezi2xx.bin` on an
+i255, and that decides the model the device is given. A file the integration
+does not know yet gives *EcoZenith* followed by the family part of its name,
+EcoZenith (ezi4xx) for instance, so the device is called CTC EcoZenith
+(ezi4xx).
+
 Four things are switched on from the start, and the set-up says so on its way:
 control of the heat pump, the walk to the System information page described
 below, the anonymous statistics and the daily check for a new release. All four
