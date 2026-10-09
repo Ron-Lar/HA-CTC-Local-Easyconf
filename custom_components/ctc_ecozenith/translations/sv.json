@@ -12,7 +12,7 @@
       },
       "scan": {
         "title": "Välj värmepump",
-        "description": "CTC-displayer hittade i Home Assistants egna nät: {count}. Adresser som redan är tillagda visas inte.",
+        "description": "Hittade CTC-displayer i Home Assistants egna nät: {count}. Adresser som redan är tillagda visas inte.",
         "data": {
           "picked": "Hittade enheter"
         }

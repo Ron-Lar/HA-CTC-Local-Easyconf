@@ -182,38 +182,40 @@ every form of them, on both models tested.
    Only the networks Home Assistant itself is attached to are searched, never
    the operating system's guess, which inside a container is the docker
    bridge. A network of more than 1024 addresses, a /16 for instance, is
-   searched as the /24 around Home Assistant's own address on it.
-   **Enter an address** skips the search. If yours is on another subnet, or the
-   search finds nothing, type the address instead. Addresses that already
-   have an entry are left out of the list. When the display answers and Modbus
-   does not, a step of its own says where on the panel Modbus TCP is turned on,
-   and takes the address again.
-   The controller takes one Modbus client at a time, and when another one
-   holds the place it accepts the connection and drops it at the first
-   request, which the Modbus library reports like a pump that is switched off.
-   So when Modbus fails, and only then, with the integration's own connection
-   closed and the controller's settle time waited out, the integration opens
-   the port once more with a plain socket and asks for one register. A
-   connection dropped like that gets a step of its own, **Modbus is taken**,
-   that names the usual culprits: a `modbus:` block in `configuration.yaml`
-   pointing at the same unit, a test tool, or a session that was never let go.
-   The same probe runs when an entry cannot read a register at start-up: the
-   entry's retry reason names the cause, and a taken place is also said in the
-   repairs view until the first reading that works. A verdict is reused for
-   ten minutes, so Home Assistant's retries do not knock twice as often.
-   A typed address whose web interface does not answer at all, with Web
-   switched off, an older display, or a firewall that lets 502 through and
-   nothing else, is added on **Modbus alone** if Modbus answers. Such an entry
-   has no display pages, no coefficient of performance and no serial number;
-   it reads no menu and walks no panel, and the repairs view says nothing about
-   pages or the serial number. Turn the web interface on and tick *Read the
-   display's menu again* under Configure, and it becomes an entry with a
-   display. A unit found by the search or by DHCP always has its display.
+   searched as the /24 around Home Assistant's own address on it. Addresses
+   that already have an entry are left out of the list. **Enter an address**
+   skips the search; use it if yours is on another subnet, or the search finds
+   nothing.
 3. Tick the display pages you want harvested. The menu is read from the unit
    itself, so the list matches your model and your installed options, in your
    own language. Everything is ticked to begin with; switch off what you do not
    want. For the coefficient of performance, keep the page with the stored or
    historical operation data.
+
+**When Modbus does not answer.** If the display answers and Modbus does not, a
+step of its own says where on the panel Modbus TCP is turned on, and takes the
+address again. The controller takes one Modbus client at a time, and when
+another one holds the place it accepts the connection and drops it at the first
+request, which the Modbus library reports like a pump that is switched off. So
+when Modbus fails, and only then, with the integration's own connection closed
+and the controller's settle time waited out, the integration opens the port once
+more with a plain socket and asks for one register. A connection dropped like
+that gets a step of its own, **Modbus is taken**, that names the usual culprits:
+a `modbus:` block in `configuration.yaml` pointing at the same unit, a test
+tool, or a session that was never let go. The same probe runs when an entry
+cannot read a register at start-up: the entry's retry reason names the cause,
+and a taken place is also said in the repairs view until the first reading that
+works. A verdict is reused for ten minutes, so Home Assistant's retries do not
+knock twice as often.
+
+**A display without its web interface.** A typed address whose web interface
+does not answer at all, with Web switched off, an older display, or a firewall
+that lets 502 through and nothing else, is added on Modbus alone if Modbus
+answers. Such an entry has no display pages, no coefficient of performance and
+no serial number; it reads no menu and walks no panel, and the repairs view says
+nothing about pages or the serial number. Turn the web interface on and tick
+*Read the display's menu again* under Configure, and it becomes an entry with a
+display. A unit found by the search or by DHCP always has its display.
 
 The display names its family by a settings file, `settings_ezi2xx.bin` on an
 i255, and that decides the model the device is given. A file the integration
