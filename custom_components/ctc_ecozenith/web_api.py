@@ -792,8 +792,14 @@ class CtcWebClient:
         """Press the chrome's back button until ``target`` is showing.
 
         The button at the top right steps back inside a submenu, but on the home
-        screen the same spot is a tile of its own. Revisiting a page therefore
-        means backing out is going in circles, and the walk stops.
+        screen the same spot is a button of its own, the quick menu on an i550
+        Pro. So a home screen this client has recognised ends the walk without
+        a press, as it does in _async_back_to_root and async_goto_home: a
+        target that lies above the home screen, a page somebody parked the
+        panel on before the harvest went ahead anyway, is not reached this
+        way, and the caller leaves the panel on the home screen instead.
+        Revisiting a page means backing out is going in circles, and the walk
+        stops there too.
         """
         page_map = await self.async_screen_map()
         seen: set[int] = set()
@@ -801,7 +807,7 @@ class CtcWebClient:
             here = await self.async_current_page()
             if here == target:
                 return True
-            if here in seen:
+            if here == self._home or here in seen:
                 return False
             seen.add(here)
             await self.async_click(page_map.get(here, []), *BACK_BUTTON)
