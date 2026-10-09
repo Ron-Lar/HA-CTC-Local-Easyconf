@@ -36,7 +36,13 @@ from homeassistant.helpers.json import json_bytes, json_fragment
 
 from . import dashboard_views as views
 from .card import async_register_card
-from .const import CONF_LANGUAGE, DOMAIN, LANG_SWEDISH
+from .const import (
+    CONF_LANGUAGE,
+    CONF_SLOW_INTERVAL,
+    DEFAULT_SLOW_INTERVAL,
+    DOMAIN,
+    LANG_SWEDISH,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -102,15 +108,35 @@ def _collect(hass: HomeAssistant) -> list[dict[str, Any]]:
             "energy_in": getattr(runtime.energy_in, "key", None),
             "unused": sorted(unused),
             "control_enabled": bool(runtime.control_enabled),
+            # The configured interval, not the coordinator's own, which is
+            # five minutes while the display is being retried and shorter
+            # still before the first harvest after a start: the source line
+            # says how often the page is read, not how the last read went.
             "display_interval": (
-                int(runtime.web.update_interval.total_seconds())
-                if runtime.web is not None and runtime.web.update_interval else None
+                int(entry.options.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL))
+                if runtime.web is not None else None
             ),
             # The tiles carry the integration's Swedish names and the display
             # rows the panel's own language, so the headings follow the panel.
             "language": "sv" if display_language == LANG_SWEDISH else "en",
         })
     return pumps
+
+
+@callback
+def _waiting(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """The pumps Home Assistant is retrying, with the reason it gives.
+
+    A pump that did not answer at set-up sits in setup_retry until it does,
+    and used to look exactly like no pump at all on the page. A reload passes
+    through the same state for a moment, which is also worth a word rather
+    than "nothing is running".
+    """
+    return [
+        {"name": entry.title, "reason": entry.reason}
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if entry.state is ConfigEntryState.SETUP_RETRY
+    ]
 
 
 def _panel_language(hass: HomeAssistant) -> str:
@@ -126,7 +152,10 @@ def build_config(hass: HomeAssistant) -> dict[str, Any]:
     """The page as it should look right now. Never raises: a broken page says so."""
     try:
         return views.build_dashboard(
-            _collect(hass), _panel_language(hass), (MAJOR_VERSION, MINOR_VERSION)
+            _collect(hass),
+            _panel_language(hass),
+            (MAJOR_VERSION, MINOR_VERSION),
+            waiting=_waiting(hass),
         )
     except Exception:  # noqa: BLE001 - the page must never break the frontend
         _LOGGER.exception("Could not build the CTC page")

@@ -537,6 +537,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         # well and the entry can never recover on its own. Shut down rather
         # than closed: nothing of this attempt may connect again.
         await modbus_client.async_shutdown()
+        # The page says the pump is being retried, and why, rather than that
+        # nothing is running. Announced here, since the entry is in
+        # setup_retry by the time an open page asks for its layout again.
+        dashboard.async_announce_change(hass)
         raise
 
     web_client = CtcWebClient(

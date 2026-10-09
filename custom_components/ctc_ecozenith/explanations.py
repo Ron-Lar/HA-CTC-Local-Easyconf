@@ -212,6 +212,17 @@ DERIVED: dict[str, str] = {
     ),
 }
 
+#: The integration's own account of how it reads the display.
+HARVEST: dict[str, str] = {
+    "display_harvest": (
+        "När displayens sidor senast lästes. Integrationen bläddrar till de valda sidorna "
+        "var 30:e minut som förval, hoppar över varvet om någon står vid panelen och försöker "
+        "om efter fem minuter när displayen inte svarar. Attributen säger hur många varv i rad "
+        "som hoppats över eller misslyckats, när nästa försök görs, vilket skälet var och "
+        "vilka sidor som lästes och missades senast."
+    ),
+}
+
 #: What the display says about the unit itself.
 IDENTITY: dict[str, str] = {
     "hp_model": "Värmepumpens modell, som displayen visar den.",
@@ -341,7 +352,7 @@ def display_explanation(label: str | None, page_title: str | None = None) -> str
 
 def explain(key: str) -> str | None:
     """The explanation for anything but a display row, or None for an unknown key."""
-    for table in (MODBUS, CONTROL, DERIVED, IDENTITY):
+    for table in (MODBUS, CONTROL, DERIVED, IDENTITY, HARVEST):
         if key in table:
             return table[key]
     return None
@@ -370,6 +381,8 @@ def source(key: str, pages: list[Mapping[str, Any]] | None = None, interval: int
         return "Räknas ur serienumret"
     if key in IDENTITY:
         return "Displayens systeminformation"
+    if key in HARVEST:
+        return "Integrationens egen bokföring av displayskörden"
     for page in pages or []:
         if any(value.get("key") == key for value in page.get("values") or []):
             every = f", hämtas var {max(1, round(interval / 60))}:e minut" if interval else ""
