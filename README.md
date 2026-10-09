@@ -84,6 +84,11 @@ So the display is treated as a supplement, not the base:
   and presses.
 - If the panel is not where the integration left it, somebody is standing at it,
   and that cycle is skipped.
+- The device's diagnostic sensor *Senaste displayskörd* says when the display
+  was last read, and in its attributes how many harvests in a row were skipped
+  or failed, when the next attempt is, the reason for the last empty one, and
+  which pages were read and missed. The CTC page names a pump that Home
+  Assistant is retrying, with the reason, instead of saying that nothing runs.
 - Reading the menu again from Configure takes the same turn at the panel as
   the harvest and the walk to the system information page, so two of them can
   never walk it at once. Is the panel busy when you ask, the dialog says so and

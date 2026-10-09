@@ -77,6 +77,7 @@ async def async_setup_entry(
         for page in runtime.pages:
             for value in page.values:
                 entities.append(CtcDisplaySensor(runtime, page.title, value))
+        entities.append(CtcHarvestSensor(runtime))
 
     # What the unit is: read once from the display and then unchanging.
     for key, name, value, icon in (
@@ -212,6 +213,68 @@ class CtcDisplaySensor(CoordinatorEntity, SensorEntity):
         if read_at is not None:
             attributes["senast läst"] = read_at.isoformat(timespec="seconds")
         return attributes
+
+
+class CtcHarvestSensor(CoordinatorEntity, SensorEntity):
+    """When the display was last read, and how the reading of it is going.
+
+    The harvest walks the physical panel, so it runs rarely, gives way to
+    whoever stands at the panel and keeps trying quietly when the display is
+    slow. All of that was in the log and nowhere else: a value twenty minutes
+    old looked like one two days old, and a panel somebody had left on the
+    wrong page skipped every harvest without a word on the device page. This
+    is the device's own account of it: the moment of the last harvest that
+    read a page, and in the attributes how many harvests in a row were skipped
+    or failed, when the next attempt is, and why the last one gave nothing.
+
+    Available whatever the display does: a harvest that fails is exactly what
+    it is there to show, and an unavailable entity shows no attributes.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:clock-check-outline"
+    _attr_name = "Senaste displayskörd"
+
+    def __init__(self, runtime) -> None:
+        super().__init__(runtime.web)
+        host = next(iter(runtime.device["identifiers"]))[1]
+        self._attr_unique_id = f"{DOMAIN}_{host}_display_harvest"
+        self._attr_device_info = runtime.device
+
+    @property
+    def native_value(self):
+        return getattr(self.coordinator, "last_harvest", None)
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        """How the harvesting is going, in words that stand on their own.
+
+        The counters are read with defaults: the skip rule and its tally live
+        on the coordinator and have grown in steps, and the account here must
+        not break because one of them is not there yet.
+        """
+        coordinator = self.coordinator
+        patience = getattr(coordinator, "patience", None)
+        next_attempt = getattr(coordinator, "next_attempt", None)
+        reason = getattr(coordinator, "last_skip_reason", None) or getattr(
+            coordinator, "last_failure", None
+        )
+        return {
+            "hoppade över i rad": int(getattr(coordinator, "skipped_in_a_row", 0) or 0),
+            "misslyckade i rad": int(getattr(patience, "failures", 0) or 0),
+            "nästa försök": (
+                next_attempt.isoformat(timespec="seconds") if next_attempt is not None else None
+            ),
+            "senaste skäl": reason,
+            "sidor lästa": list(getattr(coordinator, "pages_read", []) or []),
+            "sidor missade": list(getattr(coordinator, "pages_missed", []) or []),
+        }
 
 
 class CtcIdentitySensor(SensorEntity):

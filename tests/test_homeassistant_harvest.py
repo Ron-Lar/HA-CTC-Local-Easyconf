@@ -1,4 +1,4 @@
-"""The display across a restart, under a real Home Assistant core (R5, R6).
+"""The display across a restart, under a real Home Assistant core (R5, R6, R34).
 
 Set-up used to harvest the display inside itself, so every restart walked the
 panel before the platforms existed and the display sensors stood unavailable
@@ -8,7 +8,8 @@ first harvest follows a few seconds later on the coordinator's own clock,
 with a recent store the sensors come up with the stored values and the first
 harvest waits out the rest of the interval, and with an old store the values
 are too old to show and the harvest is early. The store is written after a
-harvest and goes with the entry.
+harvest and goes with the entry. The diagnostic sensor gives the device's own
+account of all this, and the page names a pump being retried.
 
 Shares the stand-ins and fixtures of test_homeassistant.py and runs the same
 way, from a virtual environment that has Home Assistant and
@@ -31,12 +32,15 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     HOST,
     IDENTITY,
     MODEL,
+    DeadModbus,
     FakePanel,
     _entity_id,
     _needs_auto_asyncio_mode,
     stubs,
 )
 from test_homeassistant_menu import VSH  # noqa: E402
+
+from unittest.mock import patch  # noqa: E402
 
 from homeassistant.config_entries import ConfigEntryState  # noqa: E402
 from homeassistant.const import CONF_HOST  # noqa: E402
@@ -260,6 +264,85 @@ async def test_an_old_store_shows_nothing_as_now_and_harvests_early(hass, hass_s
     await _fire(hass, MIN_FIRST_DELAY + 1)
     assert panel.walked == [page.page for page in VSH]
     assert _state(hass, "p21_utetemperatur").state == "7.2"
+
+
+# ------------------------------------------------------ the harvest sensor
+
+
+async def test_the_harvest_sensor_accounts_for_the_walks(hass, hass_storage, stubs):
+    entry = await _vsh_entry(hass)
+    await _set_up(hass, entry)
+    sensor = _entity_id(hass, "sensor", "display_harvest")
+    state = hass.states.get(sensor)
+    # Nothing harvested yet: unknown, never unavailable, and the next attempt named.
+    assert state.state == "unknown"
+    assert state.attributes["device_class"] == "timestamp"
+    assert state.attributes["misslyckade i rad"] == 0
+    assert state.attributes["hoppade över i rad"] == 0
+    assert state.attributes["senaste skäl"] is None
+    next_attempt = dt_util.parse_datetime(state.attributes["nästa försök"])
+    assert next_attempt is not None
+    assert 0 <= (next_attempt - dt_util.utcnow()).total_seconds() <= MIN_FIRST_DELAY + 1
+    from homeassistant.helpers import entity_registry as er
+
+    assert er.async_get(hass).async_get(sensor).entity_category == er.EntityCategory.DIAGNOSTIC
+
+    await _fire(hass, MIN_FIRST_DELAY + 1)
+    state = hass.states.get(sensor)
+    harvested = dt_util.parse_datetime(state.state)
+    assert harvested is not None and abs((dt_util.utcnow() - harvested).total_seconds()) < 60
+    assert state.attributes["sidor lästa"] == [page.page for page in VSH]
+    assert state.attributes["sidor missade"] == []
+    # The next attempt is an interval on, on the configured pace.
+    next_attempt = dt_util.parse_datetime(state.attributes["nästa försök"])
+    assert INTERVAL - 60 <= (next_attempt - dt_util.utcnow()).total_seconds() <= INTERVAL + 60
+
+
+async def test_the_harvest_sensor_comes_up_with_the_stored_moment(hass, hass_storage, stubs):
+    read = (dt_util.utcnow() - timedelta(minutes=10)).replace(microsecond=0)
+    entry = await _vsh_entry(hass)
+    _prefill(hass_storage, entry, read, {"p21_utetemperatur": 7.2})
+    await _set_up(hass, entry)
+    state = hass.states.get(_entity_id(hass, "sensor", "display_harvest"))
+    assert dt_util.parse_datetime(state.state) == read
+
+
+async def test_a_display_that_will_not_answer_is_shown_as_such(hass, hass_storage, stubs):
+    """The refusing panel of the shared stubs: every question raises."""
+    entry = await _vsh_entry(hass)
+    with patch(f"custom_components.{DOMAIN}.CtcWebClient", FakePanel):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        await _fire(hass, MIN_FIRST_DELAY + 1)
+    sensor = _entity_id(hass, "sensor", "display_harvest")
+    state = hass.states.get(sensor)
+    assert state.state == "unknown", "ingen skörd har lyckats, men entiteten står kvar"
+    assert state.attributes["misslyckade i rad"] == 1
+    assert "could not read the panel state" in state.attributes["senaste skäl"]
+    # The display sensors themselves are unavailable, as before.
+    assert _state(hass, "p21_utetemperatur").state == "unavailable"
+
+
+# ----------------------------------------------------------- the empty page
+
+
+async def test_the_page_names_a_pump_being_retried_and_why(hass, hass_storage, stubs):
+    from custom_components.ctc_ecozenith import dashboard
+
+    entry = await _vsh_entry(hass)
+    with patch(f"custom_components.{DOMAIN}.CtcModbusClient", DeadModbus):
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    config = dashboard.build_config(hass)
+    (view,) = config["views"]
+    (section,) = view["sections"]
+    note = section["cards"][-1]["content"]
+    assert note.startswith(f"{entry.title} svarar inte just nu (")
+    assert entry.reason in note
+    assert "försöker igen" in note
 
 
 # --------------------------------------------------------- the entry goes

@@ -150,7 +150,7 @@ _TECHNICAL = (
       "set_max_rps_1", "set_max_immersion_lower", "set_max_immersion_upper")),
     ("unit", "mdi:information-outline",
      ("hp_model", "made", "serial", "display_fw", "hp_fw", "bootloader",
-      "control_sw", "control_sw_year")),
+      "control_sw", "control_sw_year", "display_harvest")),
 )
 
 #: The graphs, in the order performance shows them: (id, kind, keys). A graph
@@ -231,6 +231,10 @@ TEXT = {
             "Ingen CTC-värmepump är igång just nu. Sidan fylls i av sig själv när "
             "integrationen har startat."
         ),
+        "setup_retry": (
+            "{name} svarar inte just nu{reason}. Home Assistant försöker igen av sig "
+            "själv, och sidan fylls i när värmepumpen har kommit igång."
+        ),
         "failed": "Sidan kunde inte byggas. Detaljerna står i Home Assistants logg.",
         "more_info": "Mer info",
         "explain": "Förklaring",
@@ -280,6 +284,10 @@ TEXT = {
         "not_running": (
             "No CTC heat pump is running right now. The page fills in by itself once "
             "the integration has started."
+        ),
+        "setup_retry": (
+            "{name} is not answering right now{reason}. Home Assistant retries by "
+            "itself, and the page fills in once the heat pump is back."
         ),
         "failed": "The page could not be built. The details are in Home Assistant's log.",
         "more_info": "More info",
@@ -673,17 +681,41 @@ def _sort(pumps: Iterable[Any]) -> list[Mapping[str, Any]]:
     return sorted(wanted, key=lambda p: str(p.get("name") or "").casefold())
 
 
+def waiting_message(waiting: Iterable[Mapping[str, Any]], text: Mapping[str, str]) -> str:
+    """What the page says while no pump runs: why, when a pump is being retried.
+
+    A pump in setup_retry is not a pump that is switched off, it is one that
+    did not answer, and Home Assistant says in what words (the entry's
+    reason). Several pumps give one line each; none at all gives the plain
+    note.
+    """
+    lines = []
+    for pump in waiting or []:
+        if not isinstance(pump, Mapping):
+            continue
+        name = str(pump.get("name") or TITLE)
+        reason = str(pump.get("reason") or "").strip()
+        lines.append(text["setup_retry"].format(name=name, reason=f" ({reason})" if reason else ""))
+    return "\n\n".join(lines) if lines else text["not_running"]
+
+
 def build_dashboard(
     pumps: Iterable[Mapping[str, Any]],
     fallback_language: str | None,
     ha_version: tuple[int, int],
+    waiting: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
-    """The whole page: four tabs per heat pump, in the order the questions come."""
+    """The whole page: four tabs per heat pump, in the order the questions come.
+
+    ``waiting`` names the pumps Home Assistant is retrying, with the reason it
+    gives, so that a page with no running pump can say why rather than that
+    nothing is running.
+    """
     pumps = _sort(pumps)
     lang = language(pumps[0].get("language") if pumps else fallback_language)
     text = TEXT[lang]
     if not pumps:
-        return message_dashboard(text["not_running"], lang)
+        return message_dashboard(waiting_message(waiting, text), lang)
 
     several = len(pumps) > 1
     views: list[dict[str, Any]] = []
