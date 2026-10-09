@@ -44,6 +44,11 @@ MODEL_NAMES = {
     "ecologic": "EcoLogic",
 }
 
+#: The model of a heat pump whose display has not said which one it is: set up
+#: on Modbus alone (roadmap R11). The device is then called "CTC EcoZenith",
+#: where the bare manufacturer would have made it "CTC CTC".
+FAMILY = "EcoZenith"
+
 
 @dataclass
 class DiscoveredDisplay:
@@ -83,23 +88,50 @@ async def _port_open(host: str, port: int, timeout: float = PORT_TIMEOUT) -> boo
     return True
 
 
-async def async_probe_host(
+@dataclass
+class WebProbe:
+    """What one host said on its web port when asked for the settings file."""
+
+    #: The display, when the answer was a CTC settings file name.
+    display: DiscoveredDisplay | None
+    #: Whether anything answered on the port at all. A host that answers with
+    #: something else is not a CTC display; one that does not answer may still
+    #: be a CTC whose web interface is switched off (roadmap R11).
+    answered: bool
+
+
+async def async_probe_web(
     session: aiohttp.ClientSession, host: str, port: int = 80
-) -> DiscoveredDisplay | None:
-    """Ask one host whether it is a CTC display."""
+) -> WebProbe:
+    """Ask one host whether it is a CTC display, and tell silence from a no.
+
+    Silence is a refused or unreachable port, or no answer in time. Anything
+    else that comes back, a status other than 200, a body that is not a
+    settings file name, a connection dropped halfway through the answer, is
+    something answering that is not a CTC display.
+    """
     url = f"http://{host}:{port}/settings/name"
     try:
         async with session.get(
             url, timeout=aiohttp.ClientTimeout(total=PROBE_TIMEOUT)
         ) as response:
             if response.status != 200:
-                return None
+                return WebProbe(None, answered=True)
             body = (await response.text()).strip()
-    except (aiohttp.ClientError, asyncio.TimeoutError, UnicodeDecodeError):
-        return None
+    except (aiohttp.ClientConnectorError, asyncio.TimeoutError):
+        return WebProbe(None, answered=False)
+    except (aiohttp.ClientError, UnicodeDecodeError):
+        return WebProbe(None, answered=True)
     if body.startswith("settings_") and body.endswith(".bin"):
-        return DiscoveredDisplay(host=host, settings_name=body)
-    return None
+        return WebProbe(DiscoveredDisplay(host=host, settings_name=body), answered=True)
+    return WebProbe(None, answered=True)
+
+
+async def async_probe_host(
+    session: aiohttp.ClientSession, host: str, port: int = 80
+) -> DiscoveredDisplay | None:
+    """Ask one host whether it is a CTC display."""
+    return (await async_probe_web(session, host, port)).display
 
 
 def networks_from_adapters(

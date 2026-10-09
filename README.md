@@ -172,7 +172,9 @@ every form of them, on both models tested.
 
 1. On the panel, go to Installer, Define, Remote control and set **Ethernet** to
    **Modbus TCP**. The port row only appears once that is done. Note that this
-   is reported to be mutually exclusive with the cloud connection.
+   is reported to be mutually exclusive with the cloud connection. For the
+   display's values, its web interface has to be on as well: Advanced, Define,
+   Communication, **Web** = Yes.
 2. Add the integration. It first asks how to find the unit, and nothing goes on
    the network before you have chosen. **Search the network** asks every
    address on Home Assistant's own networks for `/settings/name` on port 80,
@@ -186,6 +188,14 @@ every form of them, on both models tested.
    have an entry are left out of the list. When the display answers and Modbus
    does not, a step of its own says where on the panel Modbus TCP is turned on,
    and takes the address again.
+   A typed address whose web interface does not answer at all, with Web
+   switched off, an older display, or a firewall that lets 502 through and
+   nothing else, is added on **Modbus alone** if Modbus answers. Such an entry
+   has no display pages, no coefficient of performance and no serial number;
+   it reads no menu and walks no panel, and the repairs view says nothing about
+   pages or the serial number. Turn the web interface on and tick *Read the
+   display's menu again* under Configure, and it becomes an entry with a
+   display. A unit found by the search or by DHCP always has its display.
 3. Tick the display pages you want harvested. The menu is read from the unit
    itself, so the list matches your model and your installed options, in your
    own language. Everything is ticked to begin with; switch off what you do not

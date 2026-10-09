@@ -14,7 +14,7 @@ Two transports are used side by side:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Any, Final
 
 DOMAIN: Final = "ctc_ecozenith"
 
@@ -29,6 +29,11 @@ DEFAULT_SLAVE: Final = 1
 CONF_MODBUS_PORT: Final = "modbus_port"
 CONF_WEB_PORT: Final = "web_port"
 CONF_SLAVE: Final = "slave"
+#: Entry data: False for a heat pump set up on Modbus alone, because its
+#: display's web interface did not answer when the address was typed in
+#: (roadmap R11). Entries made before the key existed lack it, and all of
+#: them have a display; see has_display.
+CONF_DISPLAY: Final = "display"
 CONF_LANGUAGE: Final = "language"
 CONF_SLOW_PAGES: Final = "slow_pages"
 #: The whole menu as it was last read, not only the pages being harvested, so
@@ -146,6 +151,16 @@ PLATFORMS: Final = ["sensor", "binary_sensor", "number", "select", "button", "ev
 
 CONF_READ_TOTALS: Final = "read_totals"
 CONF_IDENTITY: Final = "identity"
+
+
+def has_display(data: Any) -> bool:
+    """Whether an entry has the display's web interface to read at all.
+
+    Only an entry that says False does not: one set up on Modbus alone,
+    because nothing answered on the web port. A missing key is an entry from
+    before the key, and every one of those was set up through its display.
+    """
+    return data.get(CONF_DISPLAY, True) is not False
 
 
 def identity_signal(entry_id: str) -> str:

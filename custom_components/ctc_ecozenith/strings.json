@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Find the heat pump",
-        "description": "Search the network asks every address on Home Assistant's own networks, on port 80, whether it is a CTC display, and changes nothing anywhere. Enter an address skips the search.\n\nFrom the start, control of the heat pump, the walk to System information, the anonymous statistics and the check for new releases are switched on; all four are changed under Configure. What the statistics send: {privacy_url}",
+        "description": "Search the network asks every address on Home Assistant's own networks, on port 80, whether it is a CTC display, and changes nothing anywhere. Enter an address skips the search, and is also the way in for a display whose web interface is switched off.\n\nFrom the start, control of the heat pump, the walk to System information, the anonymous statistics and the check for new releases are switched on; all four are changed under Configure. What the statistics send: {privacy_url}",
         "menu_options": {
           "scan": "Search the network",
           "manual": "Enter an address"
@@ -19,7 +19,7 @@
       },
       "manual": {
         "title": "Enter address",
-        "description": "Type the display's address. It is shown on the panel under Installer, Settings, Communication, Ethernet.",
+        "description": "Type the display's address. It is shown on the panel under Installer, Settings, Communication, Ethernet. Where the display's web interface does not answer, the heat pump is added on Modbus alone: no display pages, no coefficient of performance and no serial number, until the web interface is turned on and the menu is read again under Configure.",
         "data": {
           "host": "IP address",
           "modbus_port": "Modbus TCP port",
@@ -52,7 +52,7 @@
       }
     },
     "error": {
-      "not_a_ctc": "That address answers, but it is not a CTC display.",
+      "not_a_ctc": "That address does not answer as a CTC display. Check the address. The display's web interface is turned on at the panel under Advanced, Define, Communication, Web = Yes; without it the heat pump is added on Modbus alone, and then Modbus has to answer.",
       "modbus_failed": "Modbus did not answer this time either.",
       "nothing_found": "The search found no CTC display. Type the display's address instead; a display on another network is not reached by the search."
     },
