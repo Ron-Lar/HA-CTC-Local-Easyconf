@@ -516,6 +516,20 @@ class ConsumptionSnapshot:
         self.value: float | None = None
         self._read_at: Any = None
 
+    def seed(self, read_at: Any, value: float | None) -> None:
+        """Start from a pair written down before a restart.
+
+        The display value comes back from its store with the moment it was
+        read, and the Modbus reading that was taken at that moment comes back
+        here, so the pair is the same pair; a fresh Modbus reading paired with
+        the old display value would be off by however long Home Assistant
+        was away.
+        """
+        if read_at is None:
+            return
+        self._read_at = read_at
+        self.value = value
+
     def update(self, read_at: Any, modbus_data: dict[str, Any] | None) -> None:
         """Take the Modbus reading if the display has been read since last time."""
         if read_at is None or read_at == self._read_at:

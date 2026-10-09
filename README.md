@@ -68,6 +68,12 @@ So the display is treated as a supplement, not the base:
   that lands while the panel is busy is tried again five minutes later, three
   times in all, and the log says so when they are spent.
 - They are polled on a slow interval, thirty minutes by default.
+- A restart of Home Assistant costs the panel nothing. The last harvest is
+  kept, values and the moment each was read, so the sensors come up with it,
+  and the next harvest is made when it would have been made anyway, one
+  interval after the last one. Only an installation that has never harvested
+  walks a few seconds after start. The serial number and the firmware versions
+  are read in the background too, never during set-up.
 - The panel is put back where it was afterwards.
 - If the panel is not where the integration left it, somebody is standing at it,
   and that cycle is skipped.

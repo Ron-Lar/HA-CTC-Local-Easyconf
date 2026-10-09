@@ -21,7 +21,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .catalogue import numeric_value
-from .harvest import is_fresh, stale_after, utcnow
+from .harvest import StoredHarvest, first_harvest_delay, is_fresh, stale_after, utcnow
 from .const import (
     HARVEST_PATIENCE,
     RETRY_INTERVAL,
@@ -203,6 +203,7 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         restore_page: bool = True,
         home_page: int | None = None,
         on_home_page_found: Any = None,
+        stored: StoredHarvest | None = None,
     ) -> None:
         super().__init__(
             hass,
@@ -236,8 +237,25 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.last_harvest: datetime | None = None
         self.pages_read: list[int] = []
         self.pages_missed: list[int] = []
+        #: When the display was last attempted, and when it will be next: the
+        #: coordinator's own schedule is private, so the moments are kept here
+        #: for the diagnostic sensor to show.
+        self.last_attempt: datetime | None = None
+        self.next_attempt: datetime | None = None
         #: A display that is merely slow should not take every reading with it.
         self.patience = Patience(interval, RETRY_INTERVAL, HARVEST_PATIENCE)
+        # What the last harvest before the restart left, as old as it is: the
+        # sensors come up with it, judged by its age like any other reading,
+        # and the first harvest is owed one interval after it rather than now.
+        # The panel is not moved by a restart.
+        if stored is not None:
+            self.data = dict(stored.values)
+            self.read_at = dict(stored.read_at)
+            self.last_harvest = stored.harvested_at
+        now = utcnow()
+        wait = first_harvest_delay(stored, interval, now)
+        self.update_interval = timedelta(seconds=wait)
+        self.next_attempt = now + timedelta(seconds=wait)
 
     # ------------------------------------------------------------ the age
 
@@ -272,13 +290,14 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         if not self.pages:
             return {}
+        self.last_attempt = utcnow()
         async with self.client.panel:
             try:
                 data = await self._async_harvest()
             except UpdateFailed as err:
                 self.last_failure = str(err)
                 shown = self.patience.failed(bool(self.data))
-                self.update_interval = timedelta(seconds=self.patience.seconds)
+                self._reschedule()
                 if shown:
                     raise
                 _LOGGER.debug("Display harvest failed (%s), keeping what we have: %s",
@@ -286,8 +305,13 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return dict(self.data or {})
         self.last_failure = None
         self.patience.worked()
-        self.update_interval = timedelta(seconds=self.patience.seconds)
+        self._reschedule()
         return data
+
+    def _reschedule(self) -> None:
+        """The pace from here: the interval, or the retry pace after a failure."""
+        self.update_interval = timedelta(seconds=self.patience.seconds)
+        self.next_attempt = utcnow() + self.update_interval
 
     async def _async_harvest(self) -> dict[str, Any]:
         """One walk over the selected pages, in named steps.
