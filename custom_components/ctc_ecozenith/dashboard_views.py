@@ -148,13 +148,13 @@ _KEY_READINGS = (
     "hp1_rps", HEAT_POWER, SUPPLIED_POWER, "cop_day", "cop_week", "cop_month",
     "degree_minutes",
 )
-#: Keys the page has a place for before the integration makes the entity: the
-#: week's and the month's coefficient of performance (R25, built in another
-#: track). The builder leaves out what has no entity, so nothing shows until the
-#: sensor exists; the catalogue test (tests/test_dashboard.py) allows exactly
-#: these to be known here and not made, and asks for the set to be emptied the
-#: day the integration has caught up.
-AHEAD_OF_THE_INTEGRATION = frozenset({"cop_week", "cop_month"})
+#: Keys the page may have a place for before the integration makes the entity,
+#: when a page change and a sensor are built apart. The builder leaves out what
+#: has no entity, so nothing shows until the sensor exists; the catalogue test
+#: (tests/test_dashboard.py) allows exactly these to be known here and not made,
+#: and asks for the set to be emptied the day the integration has caught up.
+#: Empty now: the week's and the month's coefficient of performance exist.
+AHEAD_OF_THE_INTEGRATION: frozenset[str] = frozenset()
 #: The controls the overview carries, in the order they matter to someone
 #: standing in the house. The rest are one tab away.
 _QUICK_CONTROLS = ("ctl_room_setpoint_1", "ctl_dhw_mode", "ctl_extra_dhw", "ctl_price_mode")

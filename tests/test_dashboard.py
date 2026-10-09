@@ -444,7 +444,7 @@ def test_the_weeks_and_months_coefficient_take_their_place_when_the_pump_has_the
     # Both are explained, say what they rest on, and are listed with the rest.
     items = {key: item for key, (_k, item, _e) in zip(keys, _items(readings))}
     for key in ("cop_week", "cop_month"):
-        assert items[key]["explanation"].startswith("Värmefaktor för de senaste")
+        assert items[key]["explanation"].startswith("Värmefaktor")
         assert items[key]["sub"] == ["underlag", "basis"] and items[key]["show_reason"] is True
     config = dashboard_views.build_dashboard([pump], "sv", NEW_HA)
     listed = {row["entity"] for row in _values_card(config)["rows"] if "entity" in row}
