@@ -104,6 +104,14 @@ def test_the_english_consent_text_names_what_the_report_carries():
             "devices",
             "hash",
             "warnings and errors",
+            # stats.py's own fields, which build_extra never sees: the random
+            # id that keeps one installation's reports apart (and that the
+            # forget-me request is made in the name of).
+            "random id",
+            # Every flag in FEATURE_KEYS by name: history_page means the row
+            # with the operating hours was recognised, not that the page is
+            # harvested.
+            "operating hours",
             "{endpoint}",
             "{privacy_url}",
         ):
@@ -122,6 +130,8 @@ def test_the_swedish_consent_text_names_what_the_report_carries():
         "enheter",
         "hash",
         "varningar och fel",
+        "slumpat id",
+        "drifttid",
         "{endpoint}",
         "{privacy_url}",
     ):
@@ -145,6 +155,8 @@ def test_the_readme_tells_the_same_story():
         "devices",
         "hash",
         "warnings and errors",
+        "random id",
+        "operating hours",
         "FEATURE_KEYS",
         "METRIC_KEYS",
         "only when it is wrong",
