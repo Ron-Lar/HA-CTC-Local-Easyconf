@@ -175,20 +175,34 @@ def cop_reason(
         return None
     if energy_in is None and not modbus_answered:
         return "registret 62341 har inte svarat, så tillförd energi saknas"
-    if basis == "first_year" and not energy_in:
+    # Only no sample at all means the first year is unfinished: a sample with
+    # nothing consumed in it is a counter that stood still for a year.
+    if basis == "first_year" and energy_in is None:
         return "första året är inte fullt ännu"
     if energy_out is None or energy_in is None:
         if basis == "day":
             return "väntar på ett prov som är 20 till 30 timmar gammalt"
         return "räknarna har inte lästs"
-    fault = counter_fault(energy_out, energy_in, hours)
+    floor = MIN_CONSUMPTION_KWH_DAY if basis == "day" else MIN_CONSUMPTION_KWH
+    too_little = f"för lite energi ännu, {energy_in:.1f} av {floor:.0f} kWh"
+    if basis == "day":
+        # A day's deltas are not the lifetime totals, so the lifetime rules do
+        # not apply to them. Deltas of nothing are a day the compressor did not
+        # run, not a counter the controller never writes, and below the floor
+        # the pair is rounding noise, since the display counts whole kilowatt
+        # hours and rounds the two counters independently: nothing is judged on
+        # it. Above the floor a pair no heat pump could produce is still said so.
+        if energy_in < floor:
+            return too_little
+        fault = counter_fault(energy_out, energy_in, None)
+    else:
+        fault = counter_fault(energy_out, energy_in, hours)
     if fault == "stuck":
         return "räknaren står på noll fast enheten varit igång, styrenheten fyller den inte"
     if fault == "implausible":
         return f"kvoten {round(energy_out / energy_in, 2)} är orimlig, räknarna hör inte ihop"
-    floor = MIN_CONSUMPTION_KWH_DAY if basis == "day" else MIN_CONSUMPTION_KWH
     if energy_in < floor:
-        return f"för lite energi ännu, {energy_in:.1f} av {floor:.0f} kWh"
+        return too_little
     return None
 
 
