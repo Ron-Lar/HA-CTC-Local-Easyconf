@@ -107,6 +107,10 @@ def test_every_repair_message_has_its_texts():
     source = (root / "__init__.py").read_text(encoding="utf-8")
     keys = set(re.findall(r'^ISSUE_\w+ = "([a-z_]+)"', source, re.M))
     assert keys, "inga meddelanden hittades i __init__.py"
+    # pages_missing is an id only since R12: the issue shows one of two texts
+    # under it, pages_unticked or menu_unread, which are checked like the rest.
+    assert {"pages_unticked", "menu_unread"} <= keys
+    keys.discard("pages_missing")
     for name in ("strings.json", "translations/en.json", "translations/sv.json"):
         issues = json.loads((root / name).read_text(encoding="utf-8")).get("issues", {})
         for key in keys:
