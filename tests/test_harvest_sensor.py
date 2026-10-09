@@ -104,7 +104,7 @@ def test_the_harvest_sensor_reads_its_tallies_with_defaults():
                  '"sidor lästa"', '"sidor missade"'):
         assert name in attributes, name
     for read in (
-        'getattr(coordinator, "skipped_in_a_row", 0)',
+        'getattr(coordinator, "skips_in_a_row", 0)',
         'getattr(coordinator, "last_skip_reason", None)',
         'coordinator, "last_failure", None',
         'getattr(patience, "failures", 0)',

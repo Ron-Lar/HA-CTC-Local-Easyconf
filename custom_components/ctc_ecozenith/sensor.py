@@ -384,7 +384,7 @@ class CtcHarvestSensor(CoordinatorEntity, SensorEntity):
             coordinator, "last_failure", None
         )
         return {
-            "hoppade över i rad": int(getattr(coordinator, "skipped_in_a_row", 0) or 0),
+            "hoppade över i rad": int(getattr(coordinator, "skips_in_a_row", 0) or 0),
             "misslyckade i rad": int(getattr(patience, "failures", 0) or 0),
             "nästa försök": (
                 next_attempt.isoformat(timespec="seconds") if next_attempt is not None else None
