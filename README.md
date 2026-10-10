@@ -189,10 +189,11 @@ every form of them, on both models tested.
 
 ## Setup
 
-1. On the panel, go to Installer, Define, Remote control and set **Ethernet** to
+1. On the panel, go to Installer (Advanced on some displays, Avancerat on a
+   Swedish one), Define, Remote control and set **Ethernet** to
    **Modbus TCP**. The port row only appears once that is done. Note that this
    is reported to be mutually exclusive with the cloud connection. For the
-   display's values, its web interface has to be on as well: Advanced, Define,
+   display's values, its web interface has to be on as well: Installer, Define,
    Communication, **Web** = Yes. What the two open on your network, and how to
    fence them in, is under [Network and exposure](#network-and-exposure).
 2. Add the integration. It first asks how to find the unit, and nothing goes on
