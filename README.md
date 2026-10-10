@@ -204,9 +204,10 @@ every form of them, on both models tested.
    the operating system's guess, which inside a container is the docker
    bridge. A network of more than 1024 addresses, a /16 for instance, is
    searched as the /24 around Home Assistant's own address on it. Addresses
-   that already have an entry are left out of the list. **Enter an address**
-   skips the search; use it if yours is on another subnet, or the search finds
-   nothing.
+   that already have an entry are left out of the list, and a search that
+   found nothing else says so rather than that it found nothing. **Enter an
+   address** skips the search; use it if yours is on another subnet, or the
+   search finds nothing.
 3. Tick the display pages you want harvested. The menu is read from the unit
    itself, so the list matches your model and your installed options, in your
    own language. Everything is ticked to begin with; switch off what you do not

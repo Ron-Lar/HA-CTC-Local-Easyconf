@@ -210,14 +210,15 @@ async def test_an_address_already_set_up_is_left_out_of_the_list(hass, stubs, sw
     assert _listed(result) == [OTHER.host, "manual"]
     assert result["description_placeholders"]["count"] == "1"
 
-    # And with nothing new on the network, the address form says so.
+    # And with nothing new on the network, the address form says that what
+    # it found is set up already, not that it found nothing (F5.8).
     discover.return_value = [FOUND]
     result = await _start(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"next_step_id": "scan"}
     )
     assert result["step_id"] == "manual"
-    assert result["errors"] == {"base": "nothing_found"}
+    assert result["errors"] == {"base": "only_configured"}
 
 
 async def test_a_unit_whose_card_waits_cannot_be_added_twice_and_says_where_it_is(
