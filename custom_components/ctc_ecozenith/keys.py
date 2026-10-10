@@ -13,7 +13,9 @@ with: that keeps every unique_id an existing installation has exactly as it
 was, and an entry from before the key existed reads its address in its place,
 which comes to the same. When the DHCP flow then finds the unit at a new
 address by its MAC, it moves the address and pins the key first (moved_data),
-so the device and every entity stay what they were.
+so the device and every entity stay what they were. An entry set up with a
+host name is never moved, since the name follows the unit already
+(leased_address).
 
 A display row's key follows the same thought (roadmap L2). It used to be built
 from the row's name, so every time the parser read a name better, "Energi
@@ -32,6 +34,7 @@ own, and the platforms, the page and the registry tidy-up all ask here.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from dataclasses import dataclass, replace
 from typing import Any, Iterable, Mapping
@@ -124,19 +127,44 @@ def match_discovery(
 
     The MAC decides first, since it follows the unit and the address does
     not: a configured unit whose MAC turns up at another address has moved.
-    An entry whose MAC has never been read can only be recognised by its
-    address. Anything else is a unit nobody has configured yet.
+    Only an entry set up with the kind of address a lease hands out can have
+    moved, though. One set up with a host name, "CTC8489" or a name of the
+    router's DNS, already follows the unit wherever its lease goes, and one
+    set up with an IPv6 address is not reached through the lease at all:
+    either is the unit where it already is, and is left on what somebody
+    chose rather than moved to the lease's address and reloaded there (see
+    leased_address). An entry whose MAC has never been read can only be
+    recognised by its address. Anything else is a unit nobody has configured
+    yet.
     """
     entries = list(known)
     wanted = mac_hex(mac)
     if wanted is not None:
         for item in entries:
             if mac_hex(item.mac) == wanted:
-                return (KNOWN if item.host == ip else MOVED), item.entry_id
+                if item.host == ip or not leased_address(item.host, ip):
+                    return KNOWN, item.entry_id
+                return MOVED, item.entry_id
     for item in entries:
         if item.host == ip:
             return KNOWN, item.entry_id
     return NEW, None
+
+
+def leased_address(host: Any, ip: str) -> bool:
+    """Whether an entry's ``host`` is the kind of address the lease of ``ip`` hands out.
+
+    An IP address of the same version as the one DHCP saw, and so one a new
+    lease takes away. A host name is not: DNS follows the unit, and moving the
+    entry off it would close the session on the name and open one on the
+    address in the same breath, two clients of the one pump, which is what the
+    controller answers with a reset. Neither is an address of the other
+    version, which the lease does not hand out.
+    """
+    try:
+        return ipaddress.ip_address(host).version == ipaddress.ip_address(ip).version
+    except (TypeError, ValueError):
+        return False
 
 
 def moved_data(data: Mapping[str, Any], host: str) -> dict[str, Any]:

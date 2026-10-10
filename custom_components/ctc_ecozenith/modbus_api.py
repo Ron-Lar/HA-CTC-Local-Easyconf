@@ -75,6 +75,12 @@ CLOSE_SETTLE = 10.0
 #: client, since a reload builds a new client for the same pump.
 _CLOSED_AT: dict[tuple[str, int], float] = {}
 
+#: The address each unit was reached at before the DHCP flow moved its entry,
+#: by the address it is reached at now (roadmap R20). The move reloads the
+#: entry: the old client closes on the old address and the new one knocks on
+#: the new address in the same breath, and both are the one pump.
+_MOVED_FROM: dict[tuple[str, int], str] = {}
+
 #: The outdoor temperature, the one register every CTC model answers: what the
 #: set-up flow asks for to see that Modbus is there, and what a poll round asks
 #: for first, so that a controller that answers nothing at all is found out at
@@ -92,12 +98,27 @@ def note_close(host: str, port: int, now: float) -> None:
     _CLOSED_AT[(host, port)] = now
 
 
+def note_moved(old: str, new: str, port: int) -> None:
+    """Remember that the unit reached at ``old`` is reached at ``new`` from now on.
+
+    A close on the old address then holds back a connection to the new one
+    too, the close the reload after the move makes included, which comes
+    after this is said.
+    """
+    if old and old != new:
+        _MOVED_FROM[(new, port)] = old
+
+
 def settle_wait(host: str, port: int, now: float) -> float:
     """How long a new connection to this unit should wait before knocking."""
-    closed = _CLOSED_AT.get((host, port))
-    if closed is None:
+    closes = [_CLOSED_AT.get((host, port))]
+    old = _MOVED_FROM.get((host, port))
+    if old is not None:
+        closes.append(_CLOSED_AT.get((old, port)))
+    known = [closed for closed in closes if closed is not None]
+    if not known:
         return 0.0
-    return max(0.0, CLOSE_SETTLE - (now - closed))
+    return max(0.0, CLOSE_SETTLE - (now - max(known)))
 
 
 #: The logger pymodbus writes to, and the start of the line it writes, at

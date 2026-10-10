@@ -124,6 +124,49 @@ def test_the_mac_decides_before_the_address():
     assert keys.match_discovery(known, HOST, "020000000002") == (keys.MOVED, "b")
 
 
+@pytest.mark.parametrize("host", ["ctc8489.lan", "CTC8489", "varmepump.hemma.se", "fd00::1234"])
+def test_an_entry_set_up_by_name_or_ipv6_is_where_it_is(host):
+    # DNS follows the unit, and DHCP hands out no IPv6 address: the lease's
+    # address is no news, and moving the entry there would reload it with a
+    # second client knocking on the same pump.
+    known = [keys.Known("e1", host, "02:00:00:00:84:89")]
+    assert keys.match_discovery(known, "192.0.2.77", "020000008489") == (keys.KNOWN, "e1")
+
+
+def test_only_an_address_of_the_leases_kind_follows_the_lease():
+    assert keys.leased_address(HOST, MOVED_TO)
+    assert not keys.leased_address("ctc8489.lan", MOVED_TO)
+    assert not keys.leased_address("fd00::1234", MOVED_TO)
+    assert keys.leased_address("fd00::1234", "fd00::5678")
+    assert not keys.leased_address(None, MOVED_TO)
+    assert not keys.leased_address("", MOVED_TO)
+    assert not keys.leased_address(HOST, "inte en adress")
+
+
+# ------------------------------------------------- the settle after a move
+
+
+def test_a_connection_at_the_new_address_waits_out_the_close_at_the_old(modbus_api, monkeypatch):
+    # The move reloads the entry: the old client closes on the old address
+    # after the move is said, and the new one is the same pump.
+    monkeypatch.setattr(modbus_api, "_CLOSED_AT", {})
+    monkeypatch.setattr(modbus_api, "_MOVED_FROM", {})
+    modbus_api.note_moved("ctc8489.lan", MOVED_TO, 502)
+    assert modbus_api.settle_wait(MOVED_TO, 502, 1000.0) == 0.0
+    modbus_api.note_close("ctc8489.lan", 502, 1000.0)
+    assert modbus_api.settle_wait(MOVED_TO, 502, 1000.0) == modbus_api.CLOSE_SETTLE
+    assert modbus_api.settle_wait(MOVED_TO, 502, 1004.0) == modbus_api.CLOSE_SETTLE - 4.0
+    # The newest close of the two counts.
+    modbus_api.note_close(MOVED_TO, 502, 995.0)
+    assert modbus_api.settle_wait(MOVED_TO, 502, 1004.0) == modbus_api.CLOSE_SETTLE - 4.0
+    # Another port, and an address nothing moved to, are not held back.
+    assert modbus_api.settle_wait(MOVED_TO, 503, 1000.0) == 0.0
+    assert modbus_api.settle_wait("192.0.2.99", 502, 1000.0) == 0.0
+    # Moving nowhere says nothing.
+    modbus_api.note_moved(HOST, HOST, 502)
+    assert (HOST, 502) not in modbus_api._MOVED_FROM
+
+
 # ------------------------------------------------------- one place for all
 
 

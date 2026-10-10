@@ -5,8 +5,10 @@ every unique_id it had and gets the display's MAC on its device; the DHCP flow
 recognises the unit by that MAC at a new address and moves the entry there,
 the key pinned first, so the device, the entities and their entity ids stay
 what they were and the entry is reloaded against the new address, from
-setup_retry as well; an address another entry has moved away from is not taken
-back; and a new entry writes its key at creation.
+setup_retry as well, with the Modbus side told to wait out the old address's
+close; an entry set up with a host name is not moved, since the name follows
+the unit; an address another entry has moved away from is not taken back; and
+a new entry writes its key at creation.
 
 Shares the stand-ins and fixtures of test_homeassistant.py and runs the same
 way, from a virtual environment that has Home Assistant and
@@ -44,11 +46,16 @@ from homeassistant.const import CONF_HOST  # noqa: E402
 from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
 from homeassistant.helpers import device_registry as dr, entity_registry as er  # noqa: E402
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo  # noqa: E402
+from homeassistant.loader import async_get_integration  # noqa: E402
+from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
+
+from custom_components.ctc_ecozenith import modbus_api  # noqa: E402
 
 from custom_components.ctc_ecozenith.catalogue import MenuReading  # noqa: E402
 from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_DEVICE_KEY,
     CONF_IDENTITY,
+    CONF_MENU_VERSION,
     CONF_MODBUS_PORT,
     CONF_SLAVE,
     CONF_WEB_PORT,
@@ -59,6 +66,8 @@ from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
 
 #: Where the unit turns up after a new lease, a documentation address too.
 MOVED_TO = "192.0.2.77"
+#: The display's own host name, the way the router's DNS may give it.
+HOST_NAME = "ctc8489.lan"
 #: The stand-in display's MAC, as IDENTITY has it, the way DHCP hands it over.
 MAC = IDENTITY["mac"].replace(":", "")
 OTHER_MAC = "020000000002"
@@ -151,6 +160,58 @@ async def test_the_unit_at_a_new_address_moves_its_entry_and_keeps_everything(ha
     assert _the_device(hass, entry).identifiers == {(DOMAIN, HOST)}
     assert hass.states.get(outdoor).state == "7.2"
     assert _the_device(hass, entry).configuration_url == f"http://{MOVED_TO}/main.html"
+
+
+async def test_a_move_has_the_new_address_wait_out_the_close_at_the_old(hass, monkeypatch):
+    """The reload after a move is a second client of the same pump (F2.1).
+
+    The settle book is kept per address, so the old client's close is noted on
+    the old address and the new client would knock on the new one at once.
+    The move says first that the two are one unit.
+    """
+    monkeypatch.setattr(modbus_api, "_MOVED_FROM", {})
+    await _set_up(hass)
+    await _discover(hass, MOVED_TO, MAC)
+    await hass.async_block_till_done()
+    assert modbus_api._MOVED_FROM == {(MOVED_TO, 502): HOST}
+
+
+async def test_an_entry_set_up_by_host_name_stays_on_it(hass):
+    """DNS follows the unit, so the lease's address is no news (F2.1).
+
+    Home Assistant's DHCP watcher forgets what it has seen at every restart,
+    and the device carries the MAC, so the first observation after each start
+    asks about the unit. An entry set up by the display's host name used to be
+    moved to the address, its name lost, and reloaded with a second client
+    knocking on the same pump.
+    """
+    version = str((await async_get_integration(hass, DOMAIN)).version)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=f"{DOMAIN}_{HOST_NAME}",
+        title=f"{MODEL} ({HOST_NAME})",
+        data={
+            CONF_HOST: HOST_NAME,
+            CONF_DEVICE_KEY: HOST_NAME,
+            CONF_MODBUS_PORT: 502,
+            CONF_WEB_PORT: 80,
+            CONF_SLAVE: 1,
+            "model": MODEL,
+        },
+        options={CONF_MENU_VERSION: version, CONF_IDENTITY: IDENTITY},
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+
+    result = await _discover(hass, MOVED_TO, MAC)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    await hass.async_block_till_done()
+    assert entry.data[CONF_HOST] == HOST_NAME
+    assert entry.title == f"{MODEL} ({HOST_NAME})"
+    assert [client.host for client in FakeModbus.instances] == [HOST_NAME], "ingen omladdning"
 
 
 async def test_the_unit_where_it_already_is_changes_nothing(hass):
