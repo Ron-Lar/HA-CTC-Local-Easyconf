@@ -60,6 +60,16 @@ _POLL_SECONDS = f"{DEFAULT_FAST_INTERVAL}:e sekund"
 _HARVEST_MINUTES = f"{DEFAULT_SLOW_INTERVAL // 60}:e minut"
 _SKIPS = {1: "ett varv", 2: "två varv", 3: "tre varv"}.get(HARVEST_SKIP_LIMIT, f"{HARVEST_SKIP_LIMIT} varv")
 
+#: When the day's starts and defrosts begin again from nought. The watch that
+#: counts them is built anew by every set-up and keeps nothing on disk, so a
+#: reload of the entry clears them as a restart does: saved options, the menu
+#: written after an update, Home Assistant's reload after entities were
+#: switched on. tests/test_explanation_numbers.py holds this to the code.
+_COUNT_RESETS = (
+    "Nollas vid midnatt och när posten laddas om, till exempel vid omstart av Home "
+    "Assistant eller när alternativen sparas; attributet räknas sedan säger från när."
+)
+
 #: The Modbus registers the integration reads, by key.
 MODBUS: dict[str, str] = {
     "outdoor_temp": "Utetemperaturen från pumpens utegivare. Värmekurvan räknar framledningens börvärde ur den.",
@@ -268,8 +278,8 @@ DERIVED: dict[str, str] = {
     "starts_today": (
         "Antal kompressorstarter sedan midnatt, räknade ur övergångarna i Värmepump status "
         f"var {_POLL_SECONDS} som förval. En avfrostning mitt i en körning räknas inte som ett "
-        "stopp och en ny start. Nollas vid midnatt och vid omstart av Home Assistant; attributet räknas sedan "
-        "säger från när. Många korta körningar är pendling som sliter på kompressorn."
+        f"stopp och en ny start. {_COUNT_RESETS} Många korta körningar är pendling som sliter "
+        "på kompressorn."
     ),
     "last_run": (
         "Hur många minuter kompressorns senaste avslutade körning varade, från start till stopp, "
@@ -285,8 +295,7 @@ DERIVED: dict[str, str] = {
     "defrosts_today": (
         "Antal avfrostningar sedan midnatt, räknade ur övergångarna i Värmepump status. Gäller "
         "luft/vattenpumpar. Många avfrostningar en kall och fuktig dag är normalt; många en torr "
-        "dag kan betyda en igenisad förångare. Nollas vid midnatt och vid omstart av Home "
-        "Assistant; attributet räknas sedan säger från när."
+        f"dag kan betyda en igenisad förångare. {_COUNT_RESETS}"
     ),
     "last_defrost": (
         "När värmepumpen senast började avfrosta. Längden i minuter, utetemperaturen vid starten "
