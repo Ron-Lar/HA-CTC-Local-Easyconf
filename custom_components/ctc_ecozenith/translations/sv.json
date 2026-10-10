@@ -65,6 +65,7 @@
     },
     "abort": {
       "already_configured": "Den här värmepumpen är redan tillagd.",
+      "already_in_progress": "Den här värmepumpen håller redan på att läggas till. Gör klart det från dess kort under Upptäckta i Inställningar, Enheter och tjänster, eller vänta tills den andra uppsättningen är klar.",
       "not_a_ctc": "Enheten är ingen CTC-display."
     }
   },
