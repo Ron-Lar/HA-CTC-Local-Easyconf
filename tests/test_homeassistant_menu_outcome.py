@@ -1,8 +1,10 @@
 """How far the walk through the menu got, under a real Home Assistant core (L6).
 
 The background reading after an update keeps the walk's steps for this run,
-on the runtime and outside it, the daily report carries them, and the warning
-that ends the tries says at which step the walk stopped. A walk the display
+on the runtime and outside it, the daily report carries them, and the line
+that ends the tries says at which step the walk stopped, on info where the
+real walk has said it on warning already, so a menu that cannot be read is one
+warning per start (F3.3). A walk the display
 cut short still skips the rest of the round, as it did when the error was
 raised from the walk itself, and a walk made from the options form replaces
 what the report says. Shares the stand-ins and fixtures of
@@ -14,6 +16,9 @@ has Home Assistant and pytest-homeassistant-custom-component installed:
 
 from __future__ import annotations
 
+import asyncio
+import logging
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -29,10 +34,12 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 from test_homeassistant_menu import VSH  # noqa: E402
+from test_menu_root import FakeMenu  # noqa: E402
 
 from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
 
 import custom_components.ctc_ecozenith as integration  # noqa: E402
+from custom_components.ctc_ecozenith import catalogue, web_api  # noqa: E402
 from custom_components.ctc_ecozenith.catalogue import (  # noqa: E402
     MenuReading,
     pages_to_storage,
@@ -130,3 +137,69 @@ async def test_a_walk_from_the_options_replaces_what_the_report_says(hass, stubs
     assert entry.runtime_data.menu_outcome["root_entered"] is True
     assert entry.runtime_data.menu_outcome["pages"] == len(VSH)
     assert integration._stats_extra_for(hass, entry)["features"]["menu_root"] is True
+
+
+# ------------------------------------------- one warning per start (F3.3)
+
+
+class _NoTilePanel(FakeMenu):
+    """The real walk on an i360 as it may stand: home found, no operation data tile."""
+
+    base_url = "http://192.0.2.10:80"
+    tile_found = None
+
+    def __init__(self) -> None:
+        super().__init__(web_api, tabs={20: [21, 22]}, root=20, start=20)
+        self.panel = asyncio.Lock()
+
+    async def async_goto_operation_root(self):
+        if await self.async_goto_home() is None:
+            return False
+        self.tile_found = False
+        return False
+
+
+async def _three_tries(stubs, monkeypatch, caplog, options):
+    """The background reading's three tries in one run, through the real walk."""
+    # The real walk in place of the stand-in, so its own warning is counted.
+    stubs.discover.side_effect = catalogue.async_discover_pages
+    monkeypatch.setattr(catalogue, "_SAID", set())
+    monkeypatch.setattr(integration, "_MENU_TRIES", {})
+    monkeypatch.setattr(integration, "_MENU_OUTCOME", {})
+    caplog.set_level(logging.DEBUG, logger=f"custom_components.{DOMAIN}")
+    entry = SimpleNamespace(entry_id="f33", options=options)
+    for tries in range(1, integration.MENU_READ_TRIES + 1):
+        integration._MENU_TRIES[entry.entry_id] = tries
+        assert await integration._async_reread_menu(_NoTilePanel(), entry, "0.19.0") == {}
+    return [
+        record
+        for record in caplog.records
+        if record.name.startswith(f"custom_components.{DOMAIN}")
+    ]
+
+
+async def test_a_menu_that_cannot_be_read_is_one_warning_per_start(stubs, monkeypatch, caplog):
+    records = await _three_tries(stubs, monkeypatch, caplog, {})
+    warnings = [r.getMessage() for r in records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1, warnings
+    assert "tile on it was not" in warnings[0], "varningen säger var vandringen stannade"
+    # The tries spent are still said, on info, and without a menu stored the
+    # line does not speak of one kept.
+    ending = [r.getMessage() for r in records if "in 3 attempts" in r.getMessage()]
+    assert len(ending) == 1 and records[-1].levelno == logging.INFO
+    assert "no menu has been read before" in ending[0]
+    assert "stored by an earlier version" not in ending[0]
+
+
+async def test_the_line_that_ends_the_tries_speaks_of_a_stored_menu_only_where_there_is_one(
+    stubs, monkeypatch, caplog
+):
+    stored = pages_to_storage(VSH)
+    records = await _three_tries(
+        stubs, monkeypatch, caplog, {CONF_MENU: stored, CONF_SLOW_PAGES: stored}
+    )
+    assert len([r for r in records if r.levelno == logging.WARNING]) == 1
+    ending = [r.getMessage() for r in records if "in 3 attempts" in r.getMessage()]
+    assert len(ending) == 1
+    assert "the menu stored by an earlier version is kept" in ending[0]
+
