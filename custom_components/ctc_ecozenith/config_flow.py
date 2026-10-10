@@ -75,6 +75,8 @@ from .keys import (
     MOVED,
     NEW,
     Known,
+    device_key,
+    free_key,
     match_discovery,
     moved_data,
     moved_title,
@@ -116,6 +118,9 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._host: str | None = None
+        #: The key the new entry's device and entities are known by, its
+        #: address unless a moved entry still has that (keys.free_key).
+        self._key: str | None = None
         self._modbus_port = DEFAULT_MODBUS_PORT
         self._web_port = DEFAULT_WEB_PORT
         self._slave = DEFAULT_SLAVE
@@ -221,6 +226,23 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={"count": str(len(self._found))},
         )
 
+    def _free_key(self, host: str) -> str:
+        """The key a new entry at ``host`` is to be known by (keys.free_key).
+
+        Taken is every key an entry is known by, which for an entry that has
+        moved is the address it was created with, and the key in every
+        entry's unique_id. An ignored discovery takes nothing: adding its
+        unit by hand replaces it, as Home Assistant has it.
+        """
+        taken: set[str] = set()
+        prefix = f"{DOMAIN}_"
+        for entry in self._async_current_entries(include_ignore=False):
+            if entry.data.get(CONF_DEVICE_KEY) or entry.data.get(CONF_HOST):
+                taken.add(device_key(entry.data))
+            if entry.unique_id and entry.unique_id.startswith(prefix):
+                taken.add(entry.unique_id[len(prefix):])
+        return free_key(host, taken)
+
     def _configured_hosts(self) -> set[str]:
         """The addresses that already have an entry, ignored discoveries aside."""
         return {
@@ -313,9 +335,13 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Check that Modbus answers before going any further."""
         assert self._host is not None
         # An entry that has moved here keeps the unique_id of the address it
-        # was created with, so the address itself is asked about as well.
+        # was created with, so the address itself is asked about as well. One
+        # that has moved away keeps this address's key, and the unit that
+        # took the address up is given a key of its own rather than being
+        # told it is set up already.
         self._async_abort_entries_match({CONF_HOST: self._host})
-        await self.async_set_unique_id(f"{DOMAIN}_{self._host}")
+        self._key = self._free_key(self._host)
+        await self.async_set_unique_id(f"{DOMAIN}_{self._key}")
         self._abort_if_unique_id_configured()
 
         client = CtcModbusClient(self._host, self._modbus_port, self._slave)
@@ -413,10 +439,12 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         The key its device and entities are known by is the address the entry
         is created with, the same value every entry before it was known by, and
         it stays when the DHCP flow later moves the address (keys.py, R20).
+        Only where a moved entry still has that address's key is it another
+        one, chosen in async_step_connect.
         """
         data: dict[str, Any] = {
             CONF_HOST: self._host,
-            CONF_DEVICE_KEY: self._host,
+            CONF_DEVICE_KEY: self._key or self._host,
             CONF_MODBUS_PORT: self._modbus_port,
             CONF_WEB_PORT: self._web_port,
             CONF_SLAVE: self._slave,
@@ -568,7 +596,9 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="already_configured")
         # No updates here: an entry known by this address that has moved away
         # is not the unit at it now, and its address must not be taken back.
-        await self.async_set_unique_id(f"{DOMAIN}_{host}")
+        # The unit at it now is given a key of its own instead, so it is
+        # offered like any other; an ignored discovery is still asked about.
+        await self.async_set_unique_id(f"{DOMAIN}_{self._free_key(host)}")
         self._abort_if_unique_id_configured()
 
         session = async_get_clientsession(self.hass)

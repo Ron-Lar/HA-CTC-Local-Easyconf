@@ -7,8 +7,9 @@ the key pinned first, so the device, the entities and their entity ids stay
 what they were and the entry is reloaded against the new address, from
 setup_retry as well, with the Modbus side told to wait out the old address's
 close; an entry set up with a host name is not moved, since the name follows
-the unit; an address another entry has moved away from is not taken back; and
-a new entry writes its key at creation.
+the unit; an address another entry has moved away from is not taken back, and
+a second unit that takes it up is set up with a key of its own; and a new
+entry writes its key at creation.
 
 Shares the stand-ins and fixtures of test_homeassistant.py and runs the same
 way, from a virtual environment that has Home Assistant and
@@ -236,6 +237,107 @@ async def test_an_address_a_moved_entry_left_is_not_taken_back(hass):
     assert result["type"] is FlowResultType.ABORT
     await hass.async_block_till_done()
     assert entry.data[CONF_HOST] == MOVED_TO
+
+
+def _display_flow_patches(display: DiscoveredDisplay):
+    """A display that answers at ``display.host``, and a menu reading that finds nothing."""
+    return (
+        patch(f"{FLOW}.async_probe_host", AsyncMock(return_value=display)),
+        patch(f"{FLOW}.async_probe_web", AsyncMock(return_value=WebProbe(display, answered=True))),
+        patch(f"{FLOW}.async_discover_pages", AsyncMock(return_value=MenuReading())),
+        patch(f"{FLOW}.CtcWebClient", FakePanel),
+    )
+
+
+def _own_key_holds(hass, first, second) -> None:
+    """The second unit has a key, a device and unique_ids of its own, beside the first's."""
+    key = f"{HOST}#2"
+    assert second.data[CONF_HOST] == HOST
+    assert second.data[CONF_DEVICE_KEY] == key
+    assert second.unique_id == f"{DOMAIN}_{key}"
+    assert first.data[CONF_DEVICE_KEY] == HOST and first.unique_id == f"{DOMAIN}_{HOST}"
+    assert second.state is ConfigEntryState.LOADED
+    assert first.state is ConfigEntryState.LOADED
+    assert _the_device(hass, second).identifiers == {(DOMAIN, key)}
+    assert _the_device(hass, first).identifiers == {(DOMAIN, HOST)}
+    registry = er.async_get(hass)
+    ours = [item.unique_id for item in er.async_entries_for_config_entry(registry, second.entry_id)]
+    theirs = [item.unique_id for item in er.async_entries_for_config_entry(registry, first.entry_id)]
+    assert ours and theirs
+    assert all(unique.startswith(f"{DOMAIN}_{key}_") for unique in ours)
+    assert all(unique.startswith(f"{DOMAIN}_{HOST}_") for unique in theirs)
+    assert f"{DOMAIN}_{key}_outdoor_temp" in ours
+    assert f"{DOMAIN}_{HOST}_outdoor_temp" in theirs
+
+
+async def test_a_second_unit_found_at_the_moved_entrys_first_address_gets_its_own_key(hass):
+    """DHCP finds another CTC where a moved entry was created (F2.3).
+
+    The moved entry keeps that address's key and unique_id, so the second
+    unit was told it was set up already, and would have had the first one's
+    device and unique_ids had it got through.
+    """
+    first = await _set_up(hass)
+    await _discover(hass, MOVED_TO, MAC)
+    await hass.async_block_till_done()
+    assert first.data[CONF_HOST] == MOVED_TO
+
+    display = DiscoveredDisplay(HOST, "settings_ezi2xx.bin")
+    probe, web, pages, panel = _display_flow_patches(display)
+    with probe, web, pages, panel:
+        result = await _discover(hass, HOST, OTHER_MAC)
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "confirm"
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done()
+    (second,) = [entry for entry in hass.config_entries.async_entries(DOMAIN) if entry is not first]
+    _own_key_holds(hass, first, second)
+
+
+async def test_a_second_unit_typed_at_the_moved_entrys_first_address_gets_its_own_key(hass):
+    first = await _set_up(hass)
+    await _discover(hass, MOVED_TO, MAC)
+    await hass.async_block_till_done()
+
+    display = DiscoveredDisplay(HOST, "settings_ezi2xx.bin")
+    probe, web, pages, panel = _display_flow_patches(display)
+    with probe, web, pages, panel:
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "manual"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1},
+        )
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done()
+    (second,) = [entry for entry in hass.config_entries.async_entries(DOMAIN) if entry is not first]
+    _own_key_holds(hass, first, second)
+
+
+async def test_a_second_unit_ignored_at_the_moved_entrys_first_address_stays_ignored(hass):
+    """Its own key is the same at every discovery, so ignoring it holds."""
+    await _set_up(hass)
+    await _discover(hass, MOVED_TO, MAC)
+    await hass.async_block_till_done()
+
+    display = DiscoveredDisplay(HOST, "settings_ezi2xx.bin")
+    with patch(f"{FLOW}.async_probe_host", AsyncMock(return_value=display)):
+        result = await _discover(hass, HOST, OTHER_MAC)
+        assert result["step_id"] == "confirm"
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_IGNORE},
+            data={"unique_id": f"{DOMAIN}_{HOST}#2", "title": "CTC"},
+        )
+        await hass.async_block_till_done()
+        result = await _discover(hass, HOST, OTHER_MAC)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
 
 
 async def test_an_unknown_unit_is_still_offered(hass):
