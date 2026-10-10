@@ -303,8 +303,13 @@ reported as zero. Switch off what you do not want, per entity on the device page
 or, for control as a whole, under the integration's options. An installation
 from before 0.14.0, when part of this was created switched off, has those
 entities switched on at the first start of a newer version, with one line in
-the log, and Home Assistant reloads the entry once about thirty seconds later.
-Whatever you switched off yourself stays off.
+the log, and Home Assistant reloads the entry once about thirty seconds later;
+the panel is left where it is until then. A display row that only gets its
+entity later, once it first reads as a number, is switched on at the start
+after that. Whatever you switched off yourself stays off, and so does
+everything while the entry's system option **Enable newly added entities** is
+off: Home Assistant then registers every new entity switched off on your
+behalf, and the integration leaves that choice alone.
 
 ## Network and exposure
 

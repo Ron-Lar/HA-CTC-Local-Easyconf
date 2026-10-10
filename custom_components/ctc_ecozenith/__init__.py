@@ -193,6 +193,16 @@ _MENU_LAST: dict[str, float] = {}
 MENU_READ_TRIES = 3
 MENU_READ_RETRY = timedelta(minutes=5)
 
+#: How long the catch-up task holds the panel after a set-up that switched on
+#: what an earlier version had switched off (entity.py, roadmap R21). Home
+#: Assistant reloads the entry RELOAD_AFTER_UPDATE_DELAY, thirty seconds,
+#: after the last such change, and cancels the entry's tasks as it does: a
+#: menu reading cut short there costs one of its tries, and the walk to the
+#: system information page its only one. Fifteen seconds over, for a busy
+#: core; a reload that comes in time finds nothing begun, and one that does
+#: not come at all only puts the walks off by this much.
+SWITCH_ON_HOLD = timedelta(seconds=45)
+
 #: How each entry's last walk through the menu in this run went, as
 #: MenuReading.outcome gives it, empty before the first (roadmap L6). Kept
 #: outside the entry like the tries, since a reload follows every menu that is
@@ -456,7 +466,23 @@ async def _async_catch_up(
     restarted Home Assistant, with a single debug line as the only trace. The walk
     to the system information page keeps its one attempt: where it gives up, the
     menu itself has no way there, so repeating it would only move the panel.
+
+    A set-up that switched on what an earlier version had switched off is
+    followed by Home Assistant's reload half a minute later, which cancels
+    this task and the harvest wherever they stand. So such a set-up holds the
+    panel first, for SWITCH_ON_HOLD, before anything is counted or walked:
+    the first harvest queues behind it, and the reload finds neither begun.
+    The lock is taken before this task first yields, since it starts eagerly,
+    so no harvest gets in ahead of it.
     """
+    if getattr(runtime, "switched_on", 0) and has_display(entry.data):
+        _LOGGER.debug(
+            "Holding the panel for %s s, until the reload that switching entities on "
+            "brings",
+            int(SWITCH_ON_HOLD.total_seconds()),
+        )
+        async with client.panel:
+            await asyncio.sleep(SWITCH_ON_HOLD.total_seconds())
     await _async_check_release(hass, entry, version)
     if not has_display(entry.data):
         # On Modbus alone (roadmap R11): no menu to read, no identity on a
@@ -921,6 +947,11 @@ class CtcRuntime:
     #: How the last walk through the menu in this run went, empty before the
     #: first: the entry's own dictionary in _MENU_OUTCOME, shared, not copied.
     menu_outcome: dict[str, Any] = field(default_factory=dict)
+    #: How many entities this set-up switched on that an earlier version had
+    #: created switched off (entity.py). Home Assistant reloads the entry
+    #: half a minute after that, and _async_catch_up holds the panel until it
+    #: has, rather than start a walk the reload would cut short.
+    switched_on: int = 0
 
 
 type CtcConfigEntry = ConfigEntry[CtcRuntime]
