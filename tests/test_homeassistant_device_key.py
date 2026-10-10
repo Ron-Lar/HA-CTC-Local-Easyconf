@@ -340,6 +340,51 @@ async def test_a_second_unit_ignored_at_the_moved_entrys_first_address_stays_ign
     assert result["reason"] == "already_configured"
 
 
+def _entry_at(hass, host: str) -> MockConfigEntry:
+    """An entry for the stand-in unit at ``host``, with its MAC read, not set up."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=f"{DOMAIN}_{host}",
+        title=f"{MODEL} ({host})",
+        data={
+            CONF_HOST: host,
+            CONF_DEVICE_KEY: host,
+            CONF_MODBUS_PORT: 502,
+            CONF_WEB_PORT: 80,
+            CONF_SLAVE: 1,
+            "model": MODEL,
+        },
+        options={CONF_IDENTITY: IDENTITY},
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_the_same_unit_set_up_twice_is_never_put_on_one_address(hass, caplog):
+    """A waits at the address the unit left, B was added where it went (R20).
+
+    Moving A to B's address would give the controller two Modbus clients, and
+    the panel two display clients. A stays where it is, and the log says which
+    entry to look at.
+    """
+    left = _entry_at(hass, HOST)
+    there = _entry_at(hass, MOVED_TO)
+
+    result = await _discover(hass, MOVED_TO, MAC)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    await hass.async_block_till_done()
+
+    assert left.data[CONF_HOST] == HOST, "posten flyttas inte till en adress en annan post har"
+    assert left.title == f"{MODEL} ({HOST})"
+    assert there.data[CONF_HOST] == MOVED_TO
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any(
+        f"{MODEL} ({HOST})" in message and f"{MODEL} ({MOVED_TO})" in message
+        for message in warnings
+    ), warnings
+
+
 async def test_an_unknown_unit_is_still_offered(hass):
     await _set_up(hass)
     display = DiscoveredDisplay(MOVED_TO, "settings_ezi2xx.bin")
