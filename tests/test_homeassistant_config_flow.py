@@ -3,7 +3,10 @@
 The ordinary suite can only read the flow as source, since config_flow.py
 imports Home Assistant and voluptuous at the top. Here the flow is driven from
 the first screen: nothing goes on the network before somebody has chosen to
-search (R70), and only Home Assistant's own networks are searched (L8).
+search (R70), and only Home Assistant's own networks are searched (L8). The
+step with the display's pages is driven too, from a search and from DHCP, to
+the entry it makes and its set-up (F6.4): until then every flow here met a
+menu that read as nothing and was made an entry without the step.
 
 Shares the stand-ins and fixtures of test_homeassistant.py and runs the same
 way, from a virtual environment that has Home Assistant and
@@ -36,16 +39,24 @@ from homeassistant.const import CONF_HOST  # noqa: E402
 from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
 from homeassistant.helpers import device_registry as dr, issue_registry as ir  # noqa: E402
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo  # noqa: E402
+from homeassistant.loader import async_get_integration  # noqa: E402
 from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
 
 from custom_components.ctc_ecozenith.catalogue import MenuReading  # noqa: E402
+from custom_components.ctc_ecozenith.catalogue import pages_from_storage  # noqa: E402
 from custom_components.ctc_ecozenith.const import (  # noqa: E402
+    CONF_DEVICE_KEY,
     CONF_DISPLAY,
     CONF_MENU,
+    CONF_MENU_ROOT,
+    CONF_MENU_VERSION,
     CONF_MODBUS_PORT,
+    CONF_SETTINGS_STEM,
     CONF_SLAVE,
+    CONF_SLOW_INTERVAL,
     CONF_SLOW_PAGES,
     CONF_WEB_PORT,
+    DEFAULT_SLOW_INTERVAL,
     DOMAIN,
 )
 from custom_components.ctc_ecozenith.discovery import DiscoveredDisplay, WebProbe  # noqa: E402
@@ -497,3 +508,102 @@ async def test_a_new_address_whose_display_answers_stays_on_the_modbus_step(
     assert result["step_id"] == "modbus_failed"
     assert result["errors"] == {"base": "modbus_failed"}
     assert result["description_placeholders"]["host"] == OTHER.host
+
+
+# --------------------------------------------- the step with the pages (F6.4)
+
+#: The operation data root of VSH's menu, where every recorded route starts.
+ROOT_PAGE = 20
+#: Three of VSH's pages, ticked in these tests.
+TICKED = ["20", "21", "22"]
+
+
+def _menu(complete: bool = True) -> AsyncMock:
+    return AsyncMock(return_value=MenuReading(pages=VSH, complete=complete, root=ROOT_PAGE))
+
+
+def _offered(result) -> list[str]:
+    """The pages offered as tick boxes on the step, by number."""
+    for key, field in result["data_schema"].schema.items():
+        if str(key) == CONF_SLOW_PAGES:
+            return [option["value"] for option in field.config["options"]]
+    raise AssertionError("no tick boxes for the pages")
+
+
+async def _tick(hass, result) -> dict:
+    """The step with the pages as a stranger meets it, and three of them ticked."""
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "slow"
+    assert _offered(result) == [str(page.page) for page in VSH]
+    assert result["description_placeholders"]["count"] == str(len(VSH))
+    # The sentence on what is switched on from the start links the privacy page (R70).
+    assert "privacy_url" in result["description_placeholders"]
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SLOW_PAGES: TICKED}
+    )
+
+
+async def _the_entry_it_made(hass, result) -> MockConfigEntry:
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == f"EcoZenith i255 ({FOUND.host})"
+    data, options = result["data"], result["options"]
+    assert data[CONF_HOST] == FOUND.host
+    assert data[CONF_DEVICE_KEY] == FOUND.host, "enhetsnyckeln sparas vid skapandet (R20)"
+    assert data[CONF_DISPLAY] is True
+    assert data[CONF_SETTINGS_STEM] == "ezi2xx"
+    assert [page.page for page in pages_from_storage(options[CONF_SLOW_PAGES])] == [20, 21, 22]
+    assert [page.page for page in pages_from_storage(options[CONF_MENU])] == [
+        page.page for page in VSH
+    ]
+    assert options[CONF_MENU_ROOT] == ROOT_PAGE
+    assert options[CONF_SLOW_INTERVAL] == DEFAULT_SLOW_INTERVAL
+    await hass.async_block_till_done()
+    await _let_the_background_run(hass)
+    entry = result["result"]
+    assert entry.state is ConfigEntryState.LOADED
+    assert [page.page for page in entry.runtime_data.pages] == [20, 21, 22]
+    return entry
+
+
+async def test_a_unit_found_by_a_search_is_made_an_entry_with_the_pages_ticked(
+    hass, stubs, sweep, display
+):
+    version = str((await async_get_integration(hass, DOMAIN)).version)
+    with patch(f"{FLOW}.async_discover_pages", _menu()) as discover_pages:
+        result = await _pick_the_found_unit(hass)
+        discover_pages.assert_awaited_once()
+        result = await _tick(hass, result)
+    entry = await _the_entry_it_made(hass, result)
+    # The whole menu was read, so it is stamped, and the catch-up owes nothing.
+    assert entry.options[CONF_MENU_VERSION] == version
+    stubs.discover.assert_not_awaited()
+
+
+async def test_a_unit_found_by_dhcp_is_confirmed_ticked_and_made_an_entry(hass, stubs, display):
+    discovery = DhcpServiceInfo(ip=FOUND.host, hostname="", macaddress="020000000001")
+    with patch(f"{FLOW}.async_discover_pages", _menu()):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "dhcp"}, data=discovery
+        )
+        assert result["step_id"] == "confirm"
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        result = await _tick(hass, result)
+    entry = await _the_entry_it_made(hass, result)
+    assert CONF_MENU_VERSION in entry.options
+
+    # The same unit turning up again is the entry it already has.
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "dhcp"}, data=discovery
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_a_menu_read_only_in_part_is_offered_but_left_unstamped(hass, stubs, sweep, display):
+    """The entry is owed a reading, and the catch-up reads the menu again."""
+    with patch(f"{FLOW}.async_discover_pages", _menu(complete=False)):
+        result = await _pick_the_found_unit(hass)
+        result = await _tick(hass, result)
+    entry = await _the_entry_it_made(hass, result)
+    assert CONF_MENU_VERSION not in entry.options
+    stubs.discover.assert_awaited_once()
