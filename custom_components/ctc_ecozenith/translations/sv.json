@@ -29,7 +29,7 @@
       },
       "modbus_failed": {
         "title": "Modbus svarar inte",
-        "description": "Displayen på {host} svarar, men Modbus gör det inte. Slå på det vid panelen under Installatör, Definiera, Fjärrstyrning, där Ethernet ska stå på Modbus TCP; raden för porten visas först när det är gjort. Försök sedan igen, med samma adress eller en rättad.",
+        "description": "Displayen på {host} svarar, men Modbus gör det inte. Slå på det vid panelen under Avancerat, Definiera, Fjärrstyrning, där Ethernet ska stå på Modbus TCP; raden för porten visas först när det är gjort. Försök sedan igen, med samma adress eller en rättad.",
         "data": {
           "host": "IP-adress",
           "modbus_port": "Modbus TCP-port",

@@ -139,7 +139,7 @@ def test_the_way_to_the_address_form_is_labelled_in_every_language(name):
     [
         ("strings.json", ("Installer, Define, Remote control", "Modbus TCP")),
         ("translations/en.json", ("Installer, Define, Remote control", "Modbus TCP")),
-        ("translations/sv.json", ("Installatör, Definiera, Fjärrstyrning", "Modbus TCP")),
+        ("translations/sv.json", ("Avancerat, Definiera, Fjärrstyrning", "Modbus TCP")),
     ],
 )
 def test_modbus_that_does_not_answer_has_a_step_of_its_own(name, menus):
@@ -174,6 +174,44 @@ def test_a_unit_already_being_added_has_a_text_of_its_own(name, words):
     text = _texts(name)["config"]["abort"]["already_in_progress"]
     for word in words:
         assert word in text
+
+
+def _all_strings(node):
+    if isinstance(node, dict):
+        for value in node.values():
+            yield from _all_strings(value)
+    elif isinstance(node, str):
+        yield node
+
+
+@pytest.mark.parametrize(
+    ("name", "menu", "other"),
+    [
+        ("strings.json", "Installer, ", "Advanced, "),
+        ("translations/en.json", "Installer, ", "Advanced, "),
+        ("translations/sv.json", "Avancerat, ", "Installatör"),
+    ],
+)
+def test_the_installer_menu_has_one_name_per_language_in_the_flow(name, menu, other):
+    """A Swedish panel says Avancerat and an English one Installer, and the steps
+    that send somebody to the panel all say the same (F5.4). "Installatör" was
+    never on a Swedish panel; it came with the step for a silent Modbus."""
+    config = _texts(name)["config"]
+    texts = list(_all_strings(config))
+    assert not [text for text in texts if other in text], f"{other!r} står kvar i {name}"
+    for text in (
+        config["step"]["manual"]["description"],
+        config["step"]["modbus_failed"]["description"],
+        config["error"]["not_a_ctc"],
+    ):
+        assert menu in text
+
+
+def test_the_readme_setup_names_the_installer_menu_the_same_way():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    first = " ".join(readme.split("## Setup")[1].split("\n2. ")[0].split())
+    assert "Installer, Define, Communication, **Web** = Yes" in first
+    assert "Advanced, Define" not in first
 
 
 def test_addresses_already_set_up_are_left_out_of_the_list():
