@@ -7,16 +7,20 @@ named the docker bridge's /24, a sweep of nothing useful. And an adapter on a
 Now a large network is swept as the /24 around Home Assistant's own address,
 and no adapter means no sweep at all, so the flow goes to the address form.
 
-Addresses here are private ranges no house uses.
+Addresses here are private ranges no house uses, except where a test is about
+an address on the internet; nothing here is ever asked of the network.
 """
 
 from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import socket
 
 import pytest
+
+from conftest import COMPONENT, ROOT
 
 
 def _adapter(*addresses: tuple[str, int], enabled: bool = True) -> dict:
@@ -114,3 +118,50 @@ def test_the_module_no_longer_looks_up_its_own_address():
 def test_any_network_beyond_the_limit_becomes_one_24(discovery, prefix):
     (network,) = discovery.networks_from_adapters([_adapter(("172.20.30.40", prefix))])
     assert network == _net("172.20.30.0/24")
+
+
+# ------------------------------------------------ never a stranger's network
+
+
+def test_an_address_on_the_internet_is_never_swept(discovery):
+    # Home Assistant on a rented server, whose eth0 has a public /20, or
+    # straight on a fibre line that hands out a public /22: a sweep there is
+    # a port scan of a provider's other customers. The /22 used to be swept
+    # whole and the /20 as the /24 around Home Assistant.
+    adapters = [_adapter(("164.90.140.12", 20)), _adapter(("85.229.10.12", 22))]
+    assert discovery.networks_from_adapters(adapters) == []
+
+
+def test_a_server_sweeps_its_private_network_and_not_its_public_one(discovery):
+    adapters = [_adapter(("164.90.140.12", 20), ("172.16.4.9", 24))]
+    assert discovery.networks_from_adapters(adapters) == [_net("172.16.4.0/24")]
+
+
+def test_the_shared_range_of_carrier_grade_nat_and_tailscale_is_swept(discovery):
+    # 100.64.0.0/10 is neither private nor global; a house behind an
+    # operator's NAT, or reached over Tailscale, is still a house.
+    assert discovery.networks_from_adapters([_adapter(("100.101.20.30", 10))]) == [
+        _net("100.101.20.0/24")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("name", "words"),
+    [
+        ("strings.json", ("private networks", "public addresses is never searched")),
+        ("translations/en.json", ("private networks", "public addresses is never searched")),
+        ("translations/sv.json", ("privata nät", "publika adresser genomsöks aldrig")),
+    ],
+)
+def test_the_first_step_says_only_private_networks_are_searched(name, words):
+    texts = json.loads((COMPONENT / name).read_text(encoding="utf-8"))
+    first = texts["config"]["step"]["user"]["description"].split("\n\n")[0]
+    for word in words:
+        assert word in first, f"{word!r} saknas i {name}"
+
+
+def test_the_readme_says_only_private_networks_are_searched():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    setup = " ".join(readme.split("## Setup")[1].split("\n## ")[0].split())
+    assert "only the private ones" in setup
+    assert "public addresses" in setup and "never searched" in setup

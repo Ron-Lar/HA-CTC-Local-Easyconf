@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Hitta värmepumpen",
-        "description": "Sök på nätverket frågar varje adress i Home Assistants egna nät, på port 80, om den är en CTC-display, och ändrar ingenting någonstans. Ange adress hoppar över sökningen, och är också vägen in för en display vars webbgränssnitt är avslaget.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}",
+        "description": "Sök på nätverket frågar varje adress i Home Assistants egna privata nät, på port 80, om den är en CTC-display, och ändrar ingenting någonstans; ett nät med publika adresser genomsöks aldrig. Ange adress hoppar över sökningen, och är också vägen in för en display vars webbgränssnitt är avslaget.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}",
         "menu_options": {
           "scan": "Sök på nätverket",
           "manual": "Ange adress"
