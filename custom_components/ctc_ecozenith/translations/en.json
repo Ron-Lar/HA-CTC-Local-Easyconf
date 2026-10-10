@@ -59,6 +59,7 @@
       "not_a_ctc": "That address does not answer as a CTC display. Check the address. The display's web interface is turned on at the panel under Advanced, Define, Communication, Web = Yes; without it the heat pump is added on Modbus alone, and then Modbus has to answer.",
       "modbus_failed": "Modbus did not answer this time either.",
       "modbus_transient": "Modbus did not answer a moment ago and answers now, so it was a passing hiccup. Try again.",
+      "modbus_rejected": "Something answers on that Modbus TCP port, but not as the heat pump: with a Modbus error, or as a device that does not speak Modbus at all. Check the Modbus TCP port, 502 unless it was changed at the panel, and the Modbus address, normally 1.",
       "modbus_busy": "The place is still taken.",
       "nothing_found": "The search found no CTC display. Type the display's address instead; a display on another network is not reached by the search."
     },

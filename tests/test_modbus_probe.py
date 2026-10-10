@@ -12,6 +12,7 @@ the next real client waits in turn.
 from __future__ import annotations
 
 import asyncio
+import errno
 import socket
 import struct
 import time
@@ -88,6 +89,32 @@ class Controller:
             pdu = struct.pack(">BBBH", unit, function, 2, 72)
             writer.write(struct.pack(">HHH", tid, 0, len(pdu)) + pdu)
             await writer.drain()
+        elif self.behaviour == "split":
+            # The same answer in two segments, the header first.
+            tid, _protocol, _length, unit, function = struct.unpack(">HHHBB", request[:8])
+            pdu = struct.pack(">BBBH", unit, function, 2, 72)
+            frame = struct.pack(">HHH", tid, 0, len(pdu)) + pdu
+            writer.write(frame[:5])
+            await writer.drain()
+            await asyncio.sleep(0.05)
+            writer.write(frame[5:])
+            await writer.drain()
+        elif self.behaviour == "exception":
+            # Illegal data address: what a Modbus device says to a read it refuses.
+            tid, _protocol, _length, unit, function = struct.unpack(">HHHBB", request[:8])
+            pdu = struct.pack(">BBB", unit, function | 0x80, 2)
+            writer.write(struct.pack(">HHH", tid, 0, len(pdu)) + pdu)
+            await writer.drain()
+        elif self.behaviour == "other_transaction":
+            _tid, _protocol, _length, unit, function = struct.unpack(">HHHBB", request[:8])
+            pdu = struct.pack(">BBBH", unit, function, 2, 72)
+            writer.write(struct.pack(">HHH", 4711, 0, len(pdu)) + pdu)
+            await writer.drain()
+        elif self.behaviour == "http":
+            # A web server on the port typed for Modbus.
+            writer.write(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
+            await writer.drain()
+            writer.close()
         # "silent" holds the line and says nothing.
 
     async def stop(self) -> None:
@@ -152,6 +179,85 @@ def test_a_port_that_refuses_is_closed():
     assert verdict == probe.CLOSED
     # Nothing was connected, so nothing is owed a settle time.
     assert ("127.0.0.1", port) not in modbus_api._CLOSED_AT
+
+
+# ----------------------------- a reset that surfaces from the connect itself
+
+
+def _connect_fails_with(monkeypatch, error: BaseException) -> None:
+    async def open_connection(host, port, *args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(probe.asyncio, "open_connection", open_connection)
+
+
+def test_a_reset_reported_by_the_connect_is_a_busy_place(monkeypatch):
+    """The houses' own line: "Connect call failed [Errno 104]" while 502 stood open.
+
+    When the controller resets a second client right after the handshake,
+    before asyncio has told the connection made, asyncio raises the reset
+    from open_connection itself. It is the taken place all the same, and the
+    controller saw a connection, so it is owed its settle time.
+    """
+    error = OSError(errno.ECONNRESET, "Connect call failed ('192.0.2.1', 502)")
+    assert isinstance(error, ConnectionResetError), "asyncio:s fel är ett ConnectionResetError"
+    _connect_fails_with(monkeypatch, error)
+    verdict = asyncio.run(probe.async_classify("192.0.2.1", 502, timeout=1.0))
+    assert verdict == probe.BUSY
+    assert ("192.0.2.1", 502) in modbus_api._CLOSED_AT
+
+
+def test_an_aborted_connect_is_a_busy_place_too(monkeypatch):
+    _connect_fails_with(monkeypatch, OSError(errno.ECONNABORTED, "Connect call failed"))
+    assert asyncio.run(probe.async_classify("192.0.2.1", 502, timeout=1.0)) == probe.BUSY
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        OSError(errno.ECONNREFUSED, "Connect call failed"),
+        OSError(errno.EHOSTUNREACH, "Connect call failed"),
+        asyncio.TimeoutError(),
+    ],
+    ids=["refused", "unreachable", "timeout"],
+)
+def test_a_refused_or_unanswered_handshake_stays_closed(monkeypatch, error):
+    _connect_fails_with(monkeypatch, error)
+    assert asyncio.run(probe.async_classify("192.0.2.1", 502, timeout=1.0)) == probe.CLOSED
+    assert ("192.0.2.1", 502) not in modbus_api._CLOSED_AT
+
+
+# ----------------------------------- an answer that is not the register's
+
+
+@pytest.mark.parametrize("behaviour", ["exception", "other_transaction", "http"])
+def test_an_answer_that_is_not_the_register_is_rejected(behaviour):
+    """A Modbus exception, an answer to another request, or no Modbus at all.
+
+    The integration's own client has already failed on each of them, so
+    calling them a passing hiccup sent the owner round the same try again.
+    """
+    verdict, _ = _classify(behaviour)
+    assert verdict == probe.REJECTED
+
+
+def test_an_answer_split_over_two_segments_is_still_an_answer():
+    verdict, _ = _classify("split")
+    assert verdict == probe.ANSWERED
+
+
+def test_the_verdict_of_the_bytes_alone():
+    unit = 1
+    good = struct.pack(">HHHBBBH", 1, 0, 5, unit, 3, 2, 72)
+    assert probe.verdict_of_answer(good, 1) == probe.ANSWERED
+    # Another unit number on an answer to this very request is still an answer.
+    assert probe.verdict_of_answer(struct.pack(">HHHBBBH", 1, 0, 5, 7, 3, 2, 72), 1) == probe.ANSWERED
+    assert probe.verdict_of_answer(b"", 1) == probe.BUSY
+    assert probe.verdict_of_answer(good[:8], 1) == probe.REJECTED
+    assert probe.verdict_of_answer(struct.pack(">HHHBBB", 1, 0, 3, unit, 0x83, 2), 1) == probe.REJECTED
+    assert probe.verdict_of_answer(struct.pack(">HHHBBBH", 1, 1, 5, unit, 3, 2, 72), 1) == probe.REJECTED
+    assert probe.verdict_of_answer(struct.pack(">HHHBBBH", 2, 0, 5, unit, 3, 2, 72), 1) == probe.REJECTED
+    assert probe.verdict_of_answer(b"HTTP/1.1 400 Bad Request\r\n", 1) == probe.REJECTED
 
 
 # ------------------------------------------------- the settle time, both ways
@@ -267,3 +373,23 @@ def test_every_text_the_probe_needs_is_there(name):
     assert texts["issues"]["modbus_busy"]["title"]
     for key in ("modbus_busy", "modbus_closed"):
         assert texts["exceptions"][key]["message"]
+
+
+@pytest.mark.parametrize(
+    ("name", "words"),
+    [
+        ("strings.json", ("Modbus TCP port", "Modbus address", "502")),
+        ("translations/en.json", ("Modbus TCP port", "Modbus address", "502")),
+        ("translations/sv.json", ("Modbus TCP-porten", "Modbus-adressen", "502")),
+    ],
+)
+def test_a_rejected_answer_points_at_the_port_and_the_modbus_address(name, words):
+    import json
+
+    text = json.loads(_source(name))["config"]["error"]["modbus_rejected"]
+    for word in words:
+        assert word in text
+    flow = _source("config_flow.py")
+    failed = flow.split("async def _async_modbus_failed(")[1].split("\n    async def ")[0]
+    rejected = failed.split("if verdict == REJECTED:")[1].split("\n        if ")[0]
+    assert '"modbus_rejected"' in rejected and "modbus_transient" not in rejected

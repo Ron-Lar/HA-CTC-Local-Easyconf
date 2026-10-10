@@ -81,7 +81,7 @@ from .keys import (
     with_previous_keys,
 )
 from .modbus_api import CtcModbusClient, CtcModbusError
-from .modbus_probe import ANSWERED, BUSY, SILENT, async_classify
+from .modbus_probe import ANSWERED, BUSY, REJECTED, SILENT, async_classify
 from .web_api import CtcWebClient, CtcWebError
 
 _LOGGER = logging.getLogger(__name__)
@@ -354,6 +354,10 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if verdict == ANSWERED:
             # It answers now: a passing hiccup, and the form to try again.
             return self._address_form(self._origin or STEP_MANUAL, {"base": "modbus_transient"})
+        if verdict == REJECTED:
+            # Something speaks on the port, and not as the heat pump: a wrong
+            # port or Modbus address, which another try would only repeat.
+            return self._address_form(STEP_MANUAL, {"base": "modbus_rejected"})
         if not self._display:
             # Neither the web port nor Modbus answered: no CTC at that
             # address, as far as can be told, which the text explains.

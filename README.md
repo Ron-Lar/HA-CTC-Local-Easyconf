@@ -212,7 +212,11 @@ and the controller's settle time waited out, the integration opens the port once
 more with a plain socket and asks for one register. A connection dropped like
 that gets a step of its own, **Modbus is taken**, that names the usual culprits:
 a `modbus:` block in `configuration.yaml` pointing at the same unit, a test
-tool, or a session that was never let go. The same probe runs when an entry
+tool, or a session that was never let go. A reset that comes before the
+request, logged as `Connect call failed [Errno 104]`, counts as a taken place
+too. Something that answers on the port but not with the register, a Modbus
+error or a web server on the port typed for Modbus, sends the address form back
+with the port and the Modbus address to check. The same probe runs when an entry
 cannot read a register at start-up: the entry's retry reason names the cause,
 and a taken place is also said in the repairs view until the first reading that
 works. A verdict is reused for ten minutes, so Home Assistant's retries do not
