@@ -15,7 +15,7 @@ import re
 
 import pytest
 
-from conftest import COMPONENT
+from conftest import COMPONENT, ROOT
 
 FLOW = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
 FILES = ("strings.json", "translations/en.json", "translations/sv.json")
@@ -77,10 +77,44 @@ def test_every_way_in_says_what_is_on_from_the_start(name):
 
 def test_the_privacy_page_travels_as_a_placeholder_to_every_step_that_names_it():
     # hassfest refuses a URL in strings.json, so the address must be handed in.
-    assert "description_placeholders=STATS_PLACEHOLDERS" in _method("async_step_user")
+    assert "**STATS_PLACEHOLDERS" in _method("async_step_user")
     assert "**STATS_PLACEHOLDERS" in _method("async_step_confirm")
     slow = FLOW.split("async def async_step_slow(")[1].split("async def async_step_dhcp(")[0]
     assert "**STATS_PLACEHOLDERS" in slow
+
+
+#: What the sentence on the two open ports says, in each language (R71): both
+#: ports, no login, only Home Assistant, never the internet, and the link.
+EXPOSURE = {
+    "en": ("port 80", "port 502", "no login", "only Home Assistant", "internet", "{exposure_url}"),
+    "sv": ("port 80", "port 502", "saknar inloggning", "bara Home Assistant", "internet", "{exposure_url}"),
+}
+
+
+@pytest.mark.parametrize("name", FILES)
+def test_the_first_step_and_the_confirmation_say_the_ports_have_no_login(name):
+    """The confirmation is all a unit adopted from Home Assistant's discovery
+    card ever shows, and the menu is where a search or a typed address starts:
+    both carry the same paragraph, just before the one on what is switched on."""
+    language = "sv" if name.endswith("sv.json") else "en"
+    steps = _texts(name)["config"]["step"]
+    paragraphs = set()
+    for step in ("user", "confirm"):
+        paragraph = steps[step]["description"].split("\n\n")[-2]
+        for word in EXPOSURE[language]:
+            assert word in paragraph, f"{word!r} saknas i {step} i {name}"
+        paragraphs.add(paragraph)
+    assert len(paragraphs) == 1, f"stycket ska vara detsamma i båda stegen i {name}"
+
+
+def test_the_readme_section_travels_as_a_placeholder_to_both_steps():
+    assert "**EXPOSURE_PLACEHOLDERS" in _method("async_step_user")
+    assert "**EXPOSURE_PLACEHOLDERS" in _method("async_step_confirm")
+    assert re.search(
+        r'"exposure_url": "https://github\.com/beolink/HA-CTC-Local-Easyconf#network-and-exposure"',
+        FLOW,
+    )
+    assert "\n## Network and exposure\n" in (ROOT / "README.md").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("name", FILES)

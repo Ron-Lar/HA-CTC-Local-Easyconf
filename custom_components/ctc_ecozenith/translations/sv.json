@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Hitta värmepumpen",
-        "description": "Sök på nätverket frågar varje adress i Home Assistants egna privata nät, på port 80, om den är en CTC-display, och ändrar ingenting någonstans; ett nät med publika adresser genomsöks aldrig. Ange adress hoppar över sökningen, och är också vägen in för en display vars webbgränssnitt är avslaget.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}",
+        "description": "Sök på nätverket frågar varje adress i Home Assistants egna privata nät, på port 80, om den är en CTC-display, och ändrar ingenting någonstans; ett nät med publika adresser genomsöks aldrig. Ange adress hoppar över sökningen, och är också vägen in för en display vars webbgränssnitt är avslaget.\n\nDisplayens webbgränssnitt på port 80 och Modbus TCP på port 502 saknar inloggning: den som når dem på nätet kan trycka var som helst på panelen och skriva till värmepumpen. Låt bara Home Assistant nå dem, och öppna dem aldrig mot internet: {exposure_url}\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}",
         "menu_options": {
           "scan": "Sök på nätverket",
           "manual": "Ange adress"
@@ -52,7 +52,7 @@
       },
       "confirm": {
         "title": "Lägg till {model}?",
-        "description": "En CTC-display hittades på {host}. Uppsättningen bläddrar i pumpens meny för att se vilka värden den kan lämna, så panelen rör sig en stund.\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}"
+        "description": "En CTC-display hittades på {host}. Uppsättningen bläddrar i pumpens meny för att se vilka värden den kan lämna, så panelen rör sig en stund.\n\nDisplayens webbgränssnitt på port 80 och Modbus TCP på port 502 saknar inloggning: den som når dem på nätet kan trycka var som helst på panelen och skriva till värmepumpen. Låt bara Home Assistant nå dem, och öppna dem aldrig mot internet: {exposure_url}\n\nFrån början är styrning av värmepumpen, besöket på Systeminformation, den anonyma statistiken och kollen efter nya versioner påslagna; alla fyra ändras under Konfigurera. Vad statistiken skickar: {privacy_url}"
       }
     },
     "error": {
