@@ -403,6 +403,25 @@ def test_a_short_host_name_is_washed_as_a_word_only(diagnostics_data, const):
     assert found["entry"]["options"]["note"] == "ctc_ecozenith on **REDACTED**:80"
 
 
+@pytest.mark.parametrize(
+    "key", ["varmepump.hemma.se", "fd00::1234", f"{HOST}#2", "ctc8489.lan"]
+)
+def test_the_device_key_of_a_moved_entry_is_taken_out_as_well(diagnostics_data, const, key):
+    # After a move the host is the new address and the key the one the entry
+    # was created with: a name of the house's own DNS, an IPv6 address, or a
+    # key of its own beside an entry that moved away. Neither the IPv4 wash
+    # nor the host's own pattern catches the first two.
+    assert const.CONF_DEVICE_KEY in diagnostics_data.TO_REDACT
+    entry = {**data(const), "host": "192.0.2.77", const.CONF_DEVICE_KEY: key}
+    note = {"note": f"device {key} answered", "key": key}
+    found, text = dump(diagnostics_data, entry, note, None)
+    assert found["entry"]["data"][const.CONF_DEVICE_KEY] == "**REDACTED**"
+    assert found["entry"]["options"]["note"] == "device **REDACTED** answered"
+    assert found["entry"]["options"]["key"] == "**REDACTED**"
+    assert key not in text and key.lower() not in text.lower()
+    assert "192.0.2" not in text and "#2" not in text
+
+
 # ------------------------------------------------------------- the shell
 
 

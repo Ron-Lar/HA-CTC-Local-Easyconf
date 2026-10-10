@@ -12,13 +12,15 @@ issue.
 
 Redacting keys is not enough on its own. The host is also in the entry's
 title, in the device's identifiers and in the error a display client writes
-when it cannot reach the address; the serial number's sequence group, the one
-that identifies a machine, is also the tail of the display's MAC address and
-of its host name (CTC8489). So besides the keys Home Assistant redacts, every
-string is washed: any IPv4 address, any MAC address and the entry's own host
-become a placeholder, the display's host name loses its digits, and a serial
-number in any spelling is cut down to its product and week groups, which
-describe a production run rather than a machine (see stats_extra). Kept free
+when it cannot reach the address, and an entry the DHCP flow has moved keeps
+the address it was created with as its device key; the serial number's
+sequence group, the one that identifies a machine, is also the tail of the
+display's MAC address and of its host name (CTC8489). So besides the keys Home
+Assistant redacts, every string is washed: any IPv4 address, any MAC address
+and the entry's own host and device key become a placeholder, the display's
+host name loses its digits, and a serial number in any spelling is cut down to
+its product and week groups, which describe a production run rather than a
+machine (see stats_extra). Kept free
 of Home Assistant so a test can dump stand-ins and prove that nothing of the
 kind survives.
 
@@ -50,8 +52,11 @@ from .stats_extra import serial_made, serial_product
 REDACTED = "**REDACTED**"
 
 #: Keys whose values are taken out whole wherever they occur, by Home
-#: Assistant's async_redact_data in diagnostics.py.
-TO_REDACT = frozenset({"serial", "mac", "host", "title", "configuration_url", "identifiers"})
+#: Assistant's async_redact_data in diagnostics.py. The device key is the
+#: address the entry was created with, which after a move is not the host.
+TO_REDACT = frozenset(
+    {"serial", "mac", "host", "device_key", "title", "configuration_url", "identifiers"}
+)
 
 #: How many of the newest transitions and daily energy samples are shown. The
 #: tracker keeps a year of samples; the newest week says what a report needs.
@@ -76,12 +81,16 @@ _HOSTNAME = re.compile(r"(?<![A-Za-z0-9])CTC-?\d{4}(?!\d)", re.I)
 class Secrets:
     """The strings of one installation that name it, to be washed out of a dump."""
 
-    def __init__(self, host: Any = None, serial: Any = None, mac: Any = None) -> None:
+    def __init__(
+        self, host: Any = None, serial: Any = None, mac: Any = None, key: Any = None
+    ) -> None:
         self.patterns: list[re.Pattern[str]] = []
-        if host:
+        # The device key first: a key of its own is the address with a number
+        # after it, "192.0.2.55#2", and goes whole rather than leaving "#2".
+        for name in dict.fromkeys(str(found) for found in (key, host) if found):
             # As a whole token, so a short host name does not eat into words.
             self.patterns.append(
-                re.compile(r"(?<![\w.-])" + re.escape(str(host)) + r"(?![\w.-])", re.I)
+                re.compile(r"(?<![\w.-])" + re.escape(name) + r"(?![\w.-])", re.I)
             )
         if mac:
             hexes = re.sub(r"[^0-9A-Fa-f]", "", str(mac))
@@ -103,7 +112,7 @@ class Secrets:
 
 
 def secrets_for(data: Mapping[str, Any], options: Mapping[str, Any], runtime: Any = None) -> Secrets:
-    """What names this installation: its host, its serial number and its MAC address.
+    """What names this installation: its host and device key, its serial number and its MAC address.
 
     From the running identity where there is one, since it may hold what the
     options do not have yet, and from the options otherwise.
@@ -112,7 +121,7 @@ def secrets_for(data: Mapping[str, Any], options: Mapping[str, Any], runtime: An
     identity = getattr(runtime, "identity", None)
     serial = getattr(identity, "serial", None) or stored.get("serial")
     mac = getattr(identity, "mac", None) or stored.get("mac")
-    return Secrets(data.get("host"), serial, mac)
+    return Secrets(data.get("host"), serial, mac, data.get("device_key"))
 
 
 def wash(value: Any, secrets: Secrets) -> Any:
