@@ -204,6 +204,44 @@ async def test_an_entry_waiting_to_be_set_up_again_is_tried_at_its_new_address(h
     )
 
 
+@pytest.mark.parametrize("mac", [MAC, OTHER_MAC], ids=["by-mac", "by-address"])
+async def test_an_entry_waiting_to_be_set_up_again_is_tried_when_its_unit_asks_for_its_address(
+    hass, monkeypatch, mac
+):
+    """A power cut that brings Home Assistant up before the heat pump.
+
+    The entry waits out its back-off, up to ten minutes. The display's first
+    DHCP request says the unit is back where it was, and the entry is tried
+    at once, as Home Assistant does for a discovery of a unique_id it knows;
+    the flow that recognises the unit by its MAC or its address used to abort
+    before that rule was reached. A unit whose MAC was never read is
+    recognised by its address alone.
+    """
+    with patch(f"custom_components.{DOMAIN}.CtcModbusClient", DeadModbus):
+        identity = IDENTITY if mac == MAC else {k: v for k, v in IDENTITY.items() if k != "mac"}
+        entry = await _set_up(hass, **{CONF_IDENTITY: identity})
+        assert entry.state is ConfigEntryState.SETUP_RETRY
+        monkeypatch.setattr(DeadModbus, "answers", True)
+        result = await _discover(hass, HOST, mac)
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "already_configured"
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.data[CONF_HOST] == HOST
+    assert CONF_DEVICE_KEY not in entry.data, "posten flyttas inte, den väcks bara"
+
+
+async def test_a_loaded_entry_is_not_reloaded_when_its_unit_asks_for_its_address(hass):
+    entry = await _set_up(hass)
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        result = await _discover(hass, HOST, MAC)
+        await hass.async_block_till_done()
+    assert result["reason"] == "already_configured"
+    reload.assert_not_called()
+    assert entry.state is ConfigEntryState.LOADED
+    assert len(FakeModbus.instances) == 1
+
+
 # ------------------------------------------------------------- a new entry
 
 

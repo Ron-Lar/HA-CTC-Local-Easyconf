@@ -148,6 +148,24 @@ def test_the_device_is_identified_by_the_key_and_new_entries_write_it():
     assert "updates={CONF_HOST" not in flow
 
 
+def test_a_known_unit_wakes_an_entry_waiting_to_be_set_up_again():
+    """The DHCP flow aborts before Home Assistant's own rule, so it wakes the entry itself.
+
+    Home Assistant tries an entry in setup_retry at once when a discovery
+    finds its unique_id; the flow recognises a unit by its MAC or address and
+    aborts before that, the unit where it is as well as one that has moved.
+    """
+    flow = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
+    dhcp = flow.split("async def async_step_dhcp(")[1].split("\n    async def ")[0]
+    assert "elif verdict == KNOWN and entry_id is not None:\n            self._async_wake_entry(entry_id)" in dhcp
+    assert dhcp.index("self._async_wake_entry(entry_id)") < dhcp.index("if verdict != NEW:")
+    move = flow.split("def _async_move_entry(")[1].split("\n    @callback")[0]
+    assert "self._async_wake_entry(entry.entry_id)" in move
+    wake = flow.split("def _async_wake_entry(")[1].split("\n    async def ")[0]
+    assert "entry.state is config_entries.ConfigEntryState.SETUP_RETRY" in wake
+    assert "async_schedule_reload(entry_id)" in wake
+
+
 def test_the_manifest_asks_for_registered_devices():
     import json
 

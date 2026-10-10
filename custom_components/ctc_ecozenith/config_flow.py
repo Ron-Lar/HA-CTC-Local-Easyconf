@@ -71,6 +71,7 @@ from .discovery import (
     settings_stem,
 )
 from .keys import (
+    KNOWN,
     MOVED,
     NEW,
     Known,
@@ -543,7 +544,8 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         address its entry moves there: the address in the data changes, the
         device key stays, so the device and every entity keep their history
         (roadmap R20). A unit whose MAC has never been read is recognised by
-        its address alone. Only what is neither is offered as new.
+        its address alone. Either way, an entry waiting to be set up again is
+        tried at once. Only what is neither is offered as new.
         """
         host = discovery_info.ip
         verdict, entry_id = match_discovery(
@@ -560,6 +562,8 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
         if verdict == MOVED and entry_id is not None:
             self._async_move_entry(entry_id, host)
+        elif verdict == KNOWN and entry_id is not None:
+            self._async_wake_entry(entry_id)
         if verdict != NEW:
             return self.async_abort(reason="already_configured")
         # No updates here: an entry known by this address that has moved away
@@ -607,8 +611,23 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data=moved_data(entry.data, host),
             title=moved_title(entry.title, old, host),
         )
-        if entry.state is config_entries.ConfigEntryState.SETUP_RETRY:
-            self.hass.config_entries.async_schedule_reload(entry.entry_id)
+        self._async_wake_entry(entry.entry_id)
+
+    @callback
+    def _async_wake_entry(self, entry_id: str) -> None:
+        """Try an entry waiting out its back-off at once: its unit has just asked for an address.
+
+        Home Assistant does the same for a discovery of a unique_id it knows,
+        but this flow recognises a configured unit by its MAC or its address
+        and aborts before that rule is reached, so it says it here, for the
+        unit where it is as for one that has moved. After a power cut that
+        brings Home Assistant up before the heat pump, the display's first
+        DHCP request is what ends the wait, rather than the back-off of up to
+        ten minutes. A loaded entry is left alone.
+        """
+        entry = self.hass.config_entries.async_get_entry(entry_id)
+        if entry is not None and entry.state is config_entries.ConfigEntryState.SETUP_RETRY:
+            self.hass.config_entries.async_schedule_reload(entry_id)
 
     async def async_step_confirm(
         self, user_input: dict[str, Any] | None = None
