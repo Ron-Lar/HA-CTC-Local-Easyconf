@@ -202,12 +202,14 @@ every form of them, on both models tested.
    which is how a CTC display tells itself apart, and changes nothing anywhere.
    Only the networks Home Assistant itself is attached to are searched, never
    the operating system's guess, which inside a container is the docker
-   bridge. A network of more than 1024 addresses, a /16 for instance, is
-   searched as the /24 around Home Assistant's own address on it. Addresses
-   that already have an entry are left out of the list, and a search that
-   found nothing else says so rather than that it found nothing. **Enter an
-   address** skips the search; use it if yours is on another subnet, or the
-   search finds nothing.
+   bridge, and of those only the private ones: a network of public addresses,
+   Home Assistant on a rented server for instance, is never searched, since
+   that would be a port scan of strangers. A network of more than 1024
+   addresses, a /16 for instance, is searched as the /24 around Home
+   Assistant's own address on it. Addresses that already have an entry are
+   left out of the list, and a search that found nothing else says so rather
+   than that it found nothing. **Enter an address** skips the search; use it if
+   yours is on another subnet, or the search finds nothing.
 3. Tick the display pages you want harvested. The menu is read from the unit
    itself, so the list matches your model and your installed options, in your
    own language. Everything is ticked to begin with; switch off what you do not

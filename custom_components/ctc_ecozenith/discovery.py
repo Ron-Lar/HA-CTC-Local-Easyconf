@@ -8,8 +8,8 @@ on an EcoZenith i255 and ``settings_ezi5xx.bin`` on an i550 Pro.
 
 Scanning is therefore a two stage sweep: open the TCP port on every address in
 the candidate networks, then ask the ones that answer for that file name. The
-candidate networks are Home Assistant's own adapters and nothing else; see
-async_home_assistant_networks.
+candidate networks are the private networks of Home Assistant's own adapters
+and nothing else; see async_home_assistant_networks and networks_from_adapters.
 """
 
 from __future__ import annotations
@@ -177,6 +177,14 @@ def networks_from_adapters(
     as the /24 around Home Assistant's own address on it, where a heat pump on
     a home network is all but certain to be. Loopback and link local addresses
     are no network a display sits on and are left out.
+
+    So is an address on the internet. Home Assistant on a rented server, or
+    straight on a fibre line that hands out public addresses, would otherwise
+    sweep up to a thousand strangers' addresses on port 80, which a provider
+    reads as a port scan; such an installation types the display's address
+    instead. Private networks are swept, and so is the shared range that
+    carrier-grade NAT and Tailscale use (100.64.0.0/10), which is not global
+    either.
     """
     networks: list[ipaddress.IPv4Network] = []
     for adapter in adapters:
@@ -192,7 +200,7 @@ def networks_from_adapters(
                 candidate = ipaddress.IPv4Network(f"{ip}/{prefix}", strict=False)
             except ValueError:
                 continue
-            if own.is_loopback or own.is_link_local:
+            if own.is_loopback or own.is_link_local or own.is_global:
                 continue
             if candidate.num_addresses > MAX_SWEEP:
                 candidate = ipaddress.IPv4Network(f"{ip}/24", strict=False)

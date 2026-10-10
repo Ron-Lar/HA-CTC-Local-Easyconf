@@ -152,8 +152,8 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Ask how the unit is to be found, before anything goes on the network.
 
-        Searching asks every address of Home Assistant's own networks for the
-        display's settings file on port 80. On a shared network that is a port
+        Searching asks every address of Home Assistant's own private networks
+        for the display's settings file on port 80. On a shared network that is a port
         scan, so it runs only once somebody has chosen it; typing the address
         in never sweeps at all. The menu's text also says what is switched on
         from the start, since a new installation never sees the options form
