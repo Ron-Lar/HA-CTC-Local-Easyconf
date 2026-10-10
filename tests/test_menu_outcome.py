@@ -172,9 +172,58 @@ def test_a_display_that_does_not_answer_at_all(catalogue, web_api):
     panel = _menu(web_api, Silent)
     reading = run(catalogue.async_discover_pages(panel, require_root=True))
     assert reading.error == "/sm/all timed out"
-    assert _steps(reading) == (False, False, False)
+    # No step was tried, so none of them says no: a display that does not
+    # answer is not one whose home screen is not recognised (F3.1).
+    assert _steps(reading) == (None, None, None)
     assert "before the home screen was found" in reading.how_far()
     assert panel.taps == [], "inget trycktes"
+
+
+def test_a_display_that_goes_quiet_on_the_way_home_has_tried_no_step(catalogue, web_api):
+    class QuietOnBack(FakeMenu):
+        async def async_click(self, screens, x, y):
+            if (x, y) == (440, 23):
+                raise web_api.CtcWebError("/click/440 timed out")
+            return await super().async_click(screens, x, y)
+
+    reading = run(catalogue.async_discover_pages(_menu(web_api, QuietOnBack), require_root=True))
+    assert reading.error == "/click/440 timed out"
+    assert _steps(reading) == (None, None, None)
+    assert not reading.mapped
+
+
+def test_a_display_that_goes_quiet_after_the_home_screen_keeps_that_step(catalogue, web_api):
+    class QuietAtTile(FakeMenu):
+        async def async_goto_operation_root(self):
+            if await self.async_goto_home() is None:
+                return False
+            raise web_api.CtcWebError("/click/10 timed out")
+
+    reading = run(catalogue.async_discover_pages(_menu(web_api, QuietAtTile), require_root=True))
+    assert reading.error == "/click/10 timed out"
+    assert _steps(reading) == (True, None, None), "hemskärmen hittades, resten provades aldrig"
+    assert "after the home screen was found" in reading.how_far()
+
+
+def test_a_walk_that_went_its_whole_way_still_says_no(catalogue, web_api):
+    # Without the root the page on show is read on its own, and when that
+    # read is cut short the search for the root had already answered: its
+    # no stands, and the reading is still not taken for a menu.
+    class QuietOnThePage(NoTile):
+        asked = 0
+
+        async def async_current_page(self):
+            # The first answer is where the walk starts; after the search
+            # the display has gone quiet.
+            self.asked += 1
+            if self.asked > 1:
+                raise web_api.CtcWebError("/cp timed out")
+            return await super().async_current_page()
+
+    reading = run(catalogue.async_discover_pages(_menu(web_api, QuietOnThePage, start=HOME)))
+    assert reading.error == "/cp timed out"
+    assert _steps(reading) == (True, False, False)
+    assert not reading.mapped
 
 
 # ------------------------------------------------------------- the log
@@ -306,6 +355,44 @@ def test_the_report_tells_an_unread_menu_from_one_with_nothing_ticked(stats_extr
     assert unticked["pages"] == 0 and unticked["menu_pages"] == 6
     # No walk in this run: the two steps are left out, not sent as no.
     assert "menu_home" not in unticked and "menu_root" not in unticked
+
+
+def _reported(stats_extra, catalogue, panel):
+    """The report's features after one walk, as the integration hands them over."""
+    outcome = run(catalogue.async_discover_pages(panel, require_root=True)).outcome()
+    return _features(
+        stats_extra, menu_pages=0,
+        menu_home=outcome["home_found"], menu_root=outcome["root_entered"],
+    )
+
+
+def test_the_report_does_not_take_a_silent_display_for_a_missing_home_screen(
+    stats_extra, catalogue, web_api
+):
+    class Silent(FakeMenu):
+        async def async_screen_map(self, refresh=False):
+            raise web_api.CtcWebError("/sm/all timed out")
+
+    silent = _reported(stats_extra, catalogue, _menu(web_api, Silent))
+    assert "menu_home" not in silent and "menu_root" not in silent
+    unrecognised = _reported(stats_extra, catalogue, _menu(web_api, root=None))
+    assert unrecognised["menu_home"] is False and unrecognised["menu_root"] is False
+    assert silent != unrecognised, "de två fallen går att skilja i rapporten"
+
+
+def test_the_report_of_a_display_that_went_quiet_after_home_says_only_that(
+    stats_extra, catalogue, web_api
+):
+    class QuietAtTile(FakeMenu):
+        async def async_goto_operation_root(self):
+            if await self.async_goto_home() is None:
+                return False
+            raise web_api.CtcWebError("/click/10 timed out")
+
+    quiet = _reported(stats_extra, catalogue, _menu(web_api, QuietAtTile))
+    assert quiet["menu_home"] is True and "menu_root" not in quiet
+    no_tile = _reported(stats_extra, catalogue, _menu(web_api, NoTile))
+    assert no_tile["menu_home"] is True and no_tile["menu_root"] is False
 
 
 def test_the_menu_count_is_a_plain_count(stats_extra):

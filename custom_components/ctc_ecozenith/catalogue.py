@@ -548,7 +548,12 @@ class MenuReading:
     the same whichever step failed, which is how an i360 could stand without
     a page read through several releases with nobody able to say why. The
     steps are None on a reading the sweep did not make, such as the empty
-    one a caller puts in place of a walk that could not start.
+    one a caller puts in place of a walk that could not start, and a step is
+    None where the display stopped answering before the walk got to try it:
+    a display that does not answer is not one whose home screen or tile is
+    missing, and the report, which carries the steps but not the error, would
+    otherwise say the same no for both (F3.1). A walk that went its whole way
+    says no for a step it did not reach.
     """
 
     pages: list[SlowPage] = field(default_factory=list)
@@ -694,7 +699,9 @@ async def async_discover_pages(
         page_map = await client.async_screen_map(refresh=True)
         origin = await client.async_current_page()
     except CtcWebError as err:
-        # Nothing has been pressed, so there is nothing to put back.
+        # Nothing has been pressed, so there is nothing to put back, and no
+        # step was tried, so none of them says no.
+        reading.home_found = reading.tile_found = reading.root_entered = None
         reading.error = str(err)
         _say(client, reading)
         return reading
@@ -703,9 +710,11 @@ async def async_discover_pages(
     gaps: set[int] = set()
     complete = False
     found: tuple[int, int] | None = None
+    searched = False
 
     try:
         found = await _async_operation_root(client, page_map, origin, reading)
+        searched = True
         if found is None:
             if not require_root:
                 _LOGGER.debug(
@@ -727,6 +736,13 @@ async def async_discover_pages(
             )
     except CtcWebError as err:
         reading.error = str(err)
+        if not searched:
+            # The display went quiet during the search for the root: the
+            # steps it had reached stand, and the ones it had not are
+            # unknown rather than failed.
+            for step in ("home_found", "tile_found", "root_entered"):
+                if getattr(reading, step) is not True:
+                    setattr(reading, step, None)
     finally:
         await _async_restore(client, page_map, origin, found)
 
