@@ -45,9 +45,11 @@ body:
       label: Diagnostics
       description: >-
         Settings, Devices and services, CTC Local Easyconf, the three dots next
-        to the heat pump, Download diagnostics. It works while the integration is
-        still waiting for the heat pump to answer as well. Drag the downloaded
-        file into this box, or paste its content.
+        to the heat pump, Download diagnostics. Drag the downloaded file into
+        this box, or paste its content. Home Assistant offers the download only
+        while the integration is loaded; if it is still waiting for the heat
+        pump to answer, paste the reason shown under the entry here instead,
+        and add the log lines below.
   - type: textarea
     id: log
     attributes:

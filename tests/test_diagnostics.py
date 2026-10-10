@@ -452,3 +452,21 @@ def test_the_bug_report_form_asks_for_the_diagnostics_file():
     assert "id: diagnostics" in form
     assert "Download diagnostics" in form
     assert "CTC Local Easyconf" in form
+
+
+def test_the_texts_offer_the_download_only_where_home_assistant_does():
+    """No download in the menu of an entry still waiting for the heat pump (F6.3).
+
+    Home Assistant's frontend offers Download diagnostics only for a loaded
+    entry, so a promise that it works while the entry waits sends the user
+    looking for a menu item that is not there, in the very state a report is
+    most likely written from. The texts say what to send instead.
+    """
+    form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    flat = " ".join(readme.split())
+    for text in (" ".join(form.split()), flat):
+        assert "works while the integration is still waiting" not in text
+        assert "only while the" in text and "loaded" in text
+        assert "reason shown under the entry" in text
+    assert "/api/diagnostics/config_entry/" in flat

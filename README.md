@@ -681,8 +681,13 @@ logging is switched on for the integration.
 Open an issue on GitHub; the form asks for the diagnostics file, which is what
 makes a report answerable. Download it under *Settings, Devices and services,
 CTC Local Easyconf*, the three dots next to the heat pump, *Download
-diagnostics*. It also works while the integration is still waiting for the heat
-pump to answer. It holds the stored menu and which pages are ticked and
+diagnostics*. Home Assistant offers it only while the entry is loaded: while
+the integration is still waiting for the heat pump to answer, the menu has no
+such item. Copy the reason shown under the entry instead, which names a Modbus
+place held by another client, and add the log lines. With a long-lived access
+token the file can still be fetched from `/api/diagnostics/config_entry/`
+followed by the entry's id, since the integration builds it in that state too.
+It holds the stored menu and which pages are ticked and
 harvested, how many readings of the menu this run has spent and how far the last
 one got (the home screen recognised, the operation data tile found, the menu
 entered, or what the display said when it stopped answering), when each display
