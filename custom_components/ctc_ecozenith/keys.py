@@ -321,6 +321,43 @@ def migrate_keys(old: Iterable[SlowPage], new: Iterable[SlowPage]) -> dict[str, 
     return pairs
 
 
+def keep_hidden_rows(old: Iterable[SlowPage], new: Iterable[SlowPage]) -> list[SlowPage]:
+    """The new menu, with the rows a page showed before and hides now kept on it.
+
+    A display row is drawn or not depending on what the unit is doing: on an
+    i255's heat pump page one slot shows the compressor's speed while it runs
+    and a status while it stands still, two different variables. A reading of
+    the menu sees whichever the panel shows at that moment, so taken alone it
+    would drop the other row, and with it the row's entity, every time the
+    menu is read at the wrong moment. Since a row's key is its place (row_key),
+    a row the display has drawn once is still a place on that page: it is kept,
+    under its place, after the rows the new reading found, and it pairs with
+    its old self in migrate_keys like any row. Its variable is read like any
+    other, whether the slot shows it just now or not. A page the new reading
+    does not have is left to the caller (menu_after_rescan, merge_menu).
+    """
+    old_pages = list(old)
+    new_pages = list(new)
+    paired = migrate_keys(old_pages, new_pages)
+    hidden: dict[int, list[SlowValue]] = {}
+    for page in old_pages:
+        for value in page.values:
+            if value.key not in paired and value.var_indices:
+                hidden.setdefault(page.page, []).append(value)
+    result: list[SlowPage] = []
+    for page in new_pages:
+        keys = {value.key for value in page.values}
+        kept: list[SlowValue] = []
+        for value in hidden.get(page.page, []):
+            key = row_key(page.page, value.screen, value.var_indices[0])
+            if key in keys:
+                continue
+            keys.add(key)
+            kept.append(replace(value, key=key, page=page.page))
+        result.append(replace(page, values=list(page.values) + kept) if kept else page)
+    return result
+
+
 def _parent(row: SlowValue, parents: list[SlowValue]) -> SlowValue | None:
     """Of the old rows that pair with ``row``, the one it carries on from.
 

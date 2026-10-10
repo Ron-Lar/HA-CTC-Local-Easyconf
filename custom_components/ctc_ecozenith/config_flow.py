@@ -78,6 +78,7 @@ from .keys import (
     device_key,
     free_key,
     held_back,
+    keep_hidden_rows,
     match_discovery,
     moved_data,
     moved_title,
@@ -1044,7 +1045,10 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         # set-up the save brings moves its entity and stored values over
         # (roadmap L2). A page read whole is paired like the background's
         # reading; a stored page the reading did not reach pairs with itself.
-        self._pages = with_previous_keys(union_by_page(stored_menu, stored_selection), pages)
+        # A row the display hides just now stays on its page, as in the
+        # background's reading (keys.keep_hidden_rows).
+        before = union_by_page(stored_menu, stored_selection)
+        self._pages = with_previous_keys(before, keep_hidden_rows(before, pages))
         self._found = bool(reading.pages)
         self._root = reading.root
 
