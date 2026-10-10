@@ -81,7 +81,7 @@ from .keys import (
     union_by_page,
     with_previous_keys,
 )
-from .modbus_api import CtcModbusClient, CtcModbusError
+from .modbus_api import CtcModbusClient, CtcModbusError, note_moved
 from .modbus_probe import ANSWERED, BUSY, REJECTED, SILENT, async_classify
 from .web_api import CtcWebClient, CtcWebError
 
@@ -594,7 +594,10 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         A loaded entry is reloaded by its own update listener, which takes
         any change of the data for one; an entry waiting to be set up again
         has no listener, so it is asked to try at once rather than at the end
-        of its back-off, against an address that no longer answers.
+        of its back-off, against an address that no longer answers. Either
+        way the new client is a second knock on the same pump, so the Modbus
+        side is told first, and waits out the old address's close at the new
+        one (modbus_api.note_moved).
         """
         entry = self.hass.config_entries.async_get_entry(entry_id)
         if entry is None:
@@ -606,6 +609,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             host,
             old,
         )
+        note_moved(old, host, int(entry.data.get(CONF_MODBUS_PORT, DEFAULT_MODBUS_PORT)))
         self.hass.config_entries.async_update_entry(
             entry,
             data=moved_data(entry.data, host),
