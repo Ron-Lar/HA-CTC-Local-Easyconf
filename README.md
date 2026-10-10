@@ -665,11 +665,14 @@ the blocks your model turned out not to have, codes the integration has no
 label for, which controls are in force, the energy samples behind the
 coefficient of performance, the latest transitions and the alarm log.
 
-Before you get it, the address, the MAC address, the entry's title, the device's
-link and identifiers are taken out, every IP address and MAC address in any
-text is replaced, and the serial number is cut down to its product and week
-groups wherever it is spelt, the display's host name included. The code is
-`diagnostics_data.py`; read the file through before you attach it all the same.
+Before you get it, the address, the device key (the address the entry was set
+up with, which stays when the heat pump moves), the MAC address, the entry's
+title, the device's link and identifiers are taken out, the address and the
+device key are replaced wherever a text spells them, as is every IPv4 address
+and MAC address in any text, and the serial number is cut down to its product
+and week groups wherever it is spelt, the display's host name included. The
+code is `diagnostics_data.py`; read the file through before you attach it all
+the same.
 
 ## Tests
 
