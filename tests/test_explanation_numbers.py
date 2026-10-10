@@ -15,6 +15,8 @@ import re
 
 import pytest
 
+from conftest import COMPONENT
+
 #: The numbers the texts write out as words.
 WORDS = {"ett": 1, "en": 1, "två": 2, "tre": 3, "fem": 5, "tio": 10}
 
@@ -114,6 +116,30 @@ def test_the_volatile_controls_are_written_and_forgotten_as_the_manager_does(con
 
 def test_the_alarm_log_keeps_as_many_episodes_as_the_text_says(const, explanations):
     assert _one(r"de (\w+) senaste larm", explanations.explain("alarm")) == const.ALARM_EPISODES
+
+
+def test_the_days_counts_say_a_reload_clears_them_while_nothing_keeps_them(explanations):
+    """Starts and defrosts today begin again with every set-up (F4.4).
+
+    The watch that counts them is built anew in async_setup_entry and keeps
+    nothing on disk, so saved options, the menu written after an update and
+    Home Assistant's reload after entities were switched on clear them just as
+    a restart does. The texts said midnight and a restart only. Should the
+    watch ever be kept across a reload, this fails and the texts change with it.
+    """
+    transitions = (COMPONENT / "transitions.py").read_text(encoding="utf-8")
+    init = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
+    setup = init.split("async def async_setup_entry(")[1].split("\nasync def ")[0]
+    assert "TransitionWatch()" in setup, "byggs på nytt vid varje uppsättning"
+    sensors = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
+    for kept in ("Store(", "RestoreEntity", "RestoreSensor", "async_get_last"):
+        assert kept not in transitions, kept
+        assert kept not in sensors, kept
+    for key in ("starts_today", "defrosts_today"):
+        text = explanations.explain(key)
+        assert "Nollas vid midnatt och när posten laddas om" in text, key
+        assert "omstart av Home Assistant" in text and "alternativen sparas" in text, key
+        assert "räknas sedan" in text, key
 
 
 # --------------------------------------------------------------- registers

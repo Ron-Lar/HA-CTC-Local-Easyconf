@@ -70,8 +70,10 @@ since midnight, and how long the last run lasted. A defrost in the middle of a
 run is part of the run, not a stop and a start. The codes that say nothing about
 the compressor, a communication error among them, hold the last known state, so
 an error that comes and goes is not counted as starts. The first round after a
-start of Home Assistant is the baseline, and nothing is stored: the day's count
-starts over with Home Assistant and says from when it counts. Where the history
+start of Home Assistant, or a reload of the entry, is the baseline, and nothing
+is stored: the day's count starts over at midnight and whenever the entry is
+reloaded, a restart of Home Assistant or saved options among them, and says
+from when it counts. Where the history
 page is harvested, the day's compressor minutes from Modbus divided by the
 display's starts per day gives the mean run. The defrosts of an air to water
 unit are counted the same way: how many since midnight, and when the last one
