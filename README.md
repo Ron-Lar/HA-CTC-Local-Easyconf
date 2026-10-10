@@ -354,12 +354,18 @@ and it only talks to them. What it can do is ask you to keep them out of reach:
   its own for the heat pump, or a firewall rule that lets Home Assistant's
   address, and nothing else, reach ports 80 and 502 on the display. Give the
   display a fixed address, a DHCP reservation in the router, so the rule keeps
-  pointing at it.
+  pointing at it. Either way, the device's link on the device page then opens
+  the panel only on a computer the rule also lets through to port 80, or one
+  on the heat pump's VLAN; from any other, it does not answer.
 - **Never open port 80 or 502 to the internet.** No port forwarding, no DMZ,
   and no UPnP opening anything for the display. Anyone who found it there could
   steer the heat pump and walk its installer menus.
-- To reach the panel from away, go through Home Assistant's own remote access,
-  or through a VPN into your network, never straight to the display.
+- Home Assistant's own remote access, Home Assistant Cloud or a reverse proxy,
+  gives you the CTC page, the values and the controls from away, but not the
+  display's own page: the integration does not pass that page through Home
+  Assistant, and the device's link sends your browser straight to the
+  display's address on your network. To reach the panel's page from away, go
+  through a VPN into your network, never straight to the display.
 
 ## The CTC page
 
@@ -406,7 +412,10 @@ the left and value on the right, in as many columns as the screen has room for.
 
 The display's own web interface is one click away from the device page, under
 *Settings, Devices and services*: the device's link opens the panel's own page
-in a new tab. It is not on the CTC page, because a browser will not
+in a new tab, on a computer that reaches the display itself, at home and past
+any firewall rule that keeps the display for Home Assistant (see
+[Network and exposure](#network-and-exposure)); through Home Assistant's remote
+access it does not open. It is not on the CTC page, because a browser will not
 show an http page inside a Home Assistant reached over https, and because the
 panel answers it from the same small web server the integration harvests from.
 

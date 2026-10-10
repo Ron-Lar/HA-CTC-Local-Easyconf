@@ -40,6 +40,31 @@ def test_it_gives_the_advice_and_the_one_rule():
     assert "Never open port 80 or 502 to the internet" in section
 
 
+def _flat(text: str) -> str:
+    return " ".join(text.split())
+
+
+def test_remote_access_gives_the_values_and_not_the_displays_page():
+    # The integration has no view that passes the display through Home
+    # Assistant: the device's link is the display's own address on the house
+    # network. Remote access was once promised to reach the panel, which sent
+    # somebody looking for a way in to port 80.
+    section = _flat(_section())
+    assert "reach the panel from away, go through Home Assistant" not in section
+    assert "gives you the CTC page, the values and the controls from away" in section
+    assert "but not the display's own page" in section
+    assert "through a VPN into your network" in section
+
+
+def test_the_firewall_rule_says_what_it_does_to_the_devices_link():
+    section = _flat(_section())
+    assert "only on a computer the rule also lets through" in section
+    readme = _flat((ROOT / "README.md").read_text(encoding="utf-8"))
+    link = readme.split("The display's own web interface is one click away")[1].split("**")[0]
+    assert "past any firewall rule" in link and "(#network-and-exposure)" in link
+    assert "through Home Assistant's remote access it does not open" in link
+
+
 def test_setup_points_to_it():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     setup = readme.split("## Setup")[1].split("\n## ")[0]
