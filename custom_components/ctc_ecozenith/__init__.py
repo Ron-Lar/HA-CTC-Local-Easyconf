@@ -250,6 +250,15 @@ ISSUE_HISTORY_PAGE = "history_page_missing"
 ISSUE_IDENTITY = "identity_incomplete"
 ISSUE_UPDATE_AVAILABLE = "update_available"
 ISSUE_MODBUS_BUSY = "modbus_busy"
+#: Every issue id an entry can have, after its entry_id; the two texts of
+#: ISSUE_PAGES share its id. All of them go when the entry is removed.
+_ENTRY_ISSUES = (
+    ISSUE_PAGES,
+    ISSUE_HISTORY_PAGE,
+    ISSUE_IDENTITY,
+    ISSUE_UPDATE_AVAILABLE,
+    ISSUE_MODBUS_BUSY,
+)
 
 #: How often GitHub is asked. Rarely: a release is not news that cannot wait.
 UPDATE_CHECK_INTERVAL = timedelta(hours=24)
@@ -1355,7 +1364,12 @@ async def async_remove_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> None
     ]
     if not others:
         dashboard.async_unregister(hass)
-    ir.async_delete_issue(hass, DOMAIN, f"{entry.entry_id}_{ISSUE_MODBUS_BUSY}")
+    # Every notice of the entry's, since Home Assistant takes none of an
+    # integration's issues away with the entry: one left would stand in the
+    # repairs view for an entry that no longer exists, beside its twin if the
+    # unit is added again, until the next restart.
+    for key in _ENTRY_ISSUES:
+        ir.async_delete_issue(hass, DOMAIN, f"{entry.entry_id}_{key}")
     # What the unit was seen to have, what its display last gave, the energy
     # counters behind the coefficient of performance and what it alarmed
     # about belong to this entry alone, and go with it.
