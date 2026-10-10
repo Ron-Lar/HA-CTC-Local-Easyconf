@@ -61,7 +61,8 @@
       "modbus_transient": "Modbus svarade inte nyss men svarar nu, så det var en tillfällig störning. Försök igen.",
       "modbus_rejected": "Något svarar på den Modbus TCP-porten, men inte som värmepumpen: med ett Modbus-fel, eller som en enhet som inte talar Modbus alls. Kontrollera Modbus TCP-porten, 502 om den inte ändrats vid panelen, och Modbus-adressen, normalt 1.",
       "modbus_busy": "Platsen är fortfarande upptagen.",
-      "nothing_found": "Sökningen hittade ingen CTC-display. Skriv in displayens adress i stället; en display på ett annat nät nås inte av sökningen."
+      "nothing_found": "Sökningen hittade ingen CTC-display. Skriv in displayens adress i stället; en display på ett annat nät nås inte av sökningen.",
+      "only_configured": "Sökningen hittade bara displayer som redan är tillagda. Skriv in adressen till den nya värmepumpens display för att lägga till den; en display på ett annat nät nås inte av sökningen."
     },
     "abort": {
       "already_configured": "Den här värmepumpen är redan tillagd.",

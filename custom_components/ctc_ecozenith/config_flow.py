@@ -200,7 +200,11 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._found = [display for display in found if display.host not in configured]
 
         if not self._found:
-            return await self.async_step_manual(errors={"base": "nothing_found"})
+            # A sweep that found only units already set up did find something,
+            # and saying it found no display sends the owner of a second pump
+            # looking for a fault in the search.
+            error = "only_configured" if found else "nothing_found"
+            return await self.async_step_manual(errors={"base": error})
 
         options = [
             selector.SelectOptionDict(value=display.host, label=display.label)

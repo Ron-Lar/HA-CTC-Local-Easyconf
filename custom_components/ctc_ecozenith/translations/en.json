@@ -61,7 +61,8 @@
       "modbus_transient": "Modbus did not answer a moment ago and answers now, so it was a passing hiccup. Try again.",
       "modbus_rejected": "Something answers on that Modbus TCP port, but not as the heat pump: with a Modbus error, or as a device that does not speak Modbus at all. Check the Modbus TCP port, 502 unless it was changed at the panel, and the Modbus address, normally 1.",
       "modbus_busy": "The place is still taken.",
-      "nothing_found": "The search found no CTC display. Type the display's address instead; a display on another network is not reached by the search."
+      "nothing_found": "The search found no CTC display. Type the display's address instead; a display on another network is not reached by the search.",
+      "only_configured": "The search found only displays that are already set up. To add another heat pump, type its display's address; a display on another network is not reached by the search."
     },
     "abort": {
       "already_configured": "This heat pump is already set up.",

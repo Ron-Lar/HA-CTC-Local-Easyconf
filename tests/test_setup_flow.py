@@ -90,7 +90,7 @@ def test_the_address_form_no_longer_says_nothing_was_found(name):
     manual = config["step"]["manual"]["description"]
     assert "No CTC was found" not in manual and "Ingen CTC hittades" not in manual
     assert config["error"]["nothing_found"]
-    assert '{"base": "nothing_found"}' in FLOW
+    assert '"nothing_found"' in _method("async_step_scan")
 
 
 def test_the_swedish_flow_texts_use_no_dash_as_punctuation():
@@ -218,6 +218,25 @@ def test_addresses_already_set_up_are_left_out_of_the_list():
     scan = _method("async_step_scan")
     assert "self._configured_hosts()" in scan
     assert "display.host not in configured" in scan
+
+
+@pytest.mark.parametrize(
+    ("name", "words"),
+    [
+        ("strings.json", "already set up"),
+        ("translations/en.json", "already set up"),
+        ("translations/sv.json", "redan är tillagda"),
+    ],
+)
+def test_a_search_that_found_only_units_set_up_says_so_and_not_that_it_found_none(name, words):
+    """Leaving out what is set up could empty the list, and the address form
+    then said the search had found no CTC display at all (F5.8)."""
+    errors = _texts(name)["config"]["error"]
+    assert words in errors["only_configured"]
+    assert errors["only_configured"] != errors["nothing_found"]
+    scan = _method("async_step_scan")
+    assert 'error = "only_configured" if found else "nothing_found"' in scan
+    assert 'errors={"base": error}' in scan
 
 
 def _keys(node, prefix=""):
