@@ -156,6 +156,26 @@ def test_modbus_that_does_not_answer_has_a_step_of_its_own(name, menus):
     assert "return await self._async_modbus_failed()" in _method("async_step_connect")
 
 
+@pytest.mark.parametrize(
+    ("name", "words"),
+    [
+        ("strings.json", ("already being added", "Discovered")),
+        ("translations/en.json", ("already being added", "Discovered")),
+        ("translations/sv.json", ("redan på att läggas till", "Upptäckta")),
+    ],
+)
+def test_a_unit_already_being_added_has_a_text_of_its_own(name, words):
+    """async_set_unique_id aborts with already_in_progress while another flow has the unit.
+
+    The commonest way there: the display's DHCP card waits under Discovered,
+    and somebody adds the integration by hand and picks or types the same
+    address. Without the key the form showed the bare key.
+    """
+    text = _texts(name)["config"]["abort"]["already_in_progress"]
+    for word in words:
+        assert word in text
+
+
 def test_addresses_already_set_up_are_left_out_of_the_list():
     scan = _method("async_step_scan")
     assert "self._configured_hosts()" in scan

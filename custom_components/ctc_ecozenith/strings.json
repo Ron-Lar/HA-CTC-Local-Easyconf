@@ -65,6 +65,7 @@
     },
     "abort": {
       "already_configured": "This heat pump is already set up.",
+      "already_in_progress": "This heat pump is already being added. Finish it from its card under Discovered in Settings, Devices and services, or wait for the other set-up to end.",
       "not_a_ctc": "The device is not a CTC display."
     }
   },

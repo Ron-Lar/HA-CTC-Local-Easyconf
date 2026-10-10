@@ -220,6 +220,31 @@ async def test_an_address_already_set_up_is_left_out_of_the_list(hass, stubs, sw
     assert result["errors"] == {"base": "nothing_found"}
 
 
+async def test_a_unit_whose_card_waits_cannot_be_added_twice_and_says_where_it_is(
+    hass, stubs, sweep, display
+):
+    """The DHCP card waits under Discovered; somebody adds the same unit by hand.
+
+    Home Assistant aborts the second flow with already_in_progress, which now
+    has a text that sends the owner to the card.
+    """
+    card = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "dhcp"},
+        data=DhcpServiceInfo(ip=FOUND.host, hostname="", macaddress="020000000001"),
+    )
+    assert card["step_id"] == "confirm"
+    result = await _start(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "manual"}
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], ADDRESS)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_in_progress"
+    assert FakeModbus.instances == [], "Modbus frågas inte medan kortet väntar"
+    hass.config_entries.flow.async_abort(card["flow_id"])
+
+
 async def test_a_discovered_unit_carries_its_model_and_address_on_the_card(hass, stubs, display):
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
