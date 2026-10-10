@@ -143,6 +143,22 @@ def test_only_an_address_of_the_leases_kind_follows_the_lease():
     assert not keys.leased_address(HOST, "inte en adress")
 
 
+# ------------------------------------------------- a key for a new entry
+
+
+def test_a_new_entry_is_known_by_its_address_where_it_is_free():
+    assert keys.free_key(HOST, []) == HOST
+    assert keys.free_key(HOST, [MOVED_TO, "ctc8489.lan"]) == HOST
+
+
+def test_a_new_entry_at_an_address_a_moved_entry_was_created_with_gets_its_own_key():
+    assert keys.free_key(HOST, [HOST]) == f"{HOST}#2"
+    assert keys.free_key(HOST, [HOST, f"{HOST}#2"]) == f"{HOST}#3"
+    # Neither heat pump's unique_ids begin with the other's prefix.
+    first, second = keys.unique_prefix(HOST), keys.unique_prefix(keys.free_key(HOST, [HOST]))
+    assert not second.startswith(first) and not first.startswith(second)
+
+
 # ------------------------------------------------- the settle after a move
 
 
@@ -186,7 +202,9 @@ def test_the_device_is_identified_by_the_key_and_new_entries_write_it():
     assert "identifiers={(DOMAIN, key)}" in init
     assert "key = device_key(entry.data)" in init
     flow = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
-    assert "CONF_DEVICE_KEY: self._host," in flow
+    # The address, or where a moved entry still has its key, keys.free_key's.
+    assert "CONF_DEVICE_KEY: self._key or self._host," in flow
+    assert "self._key = self._free_key(self._host)" in flow
     # The unique_id abort takes no address back: a moved entry keeps its own.
     assert "updates={CONF_HOST" not in flow
 

@@ -15,7 +15,8 @@ which comes to the same. When the DHCP flow then finds the unit at a new
 address by its MAC, it moves the address and pins the key first (moved_data),
 so the device and every entity stay what they were. An entry set up with a
 host name is never moved, since the name follows the unit already
-(leased_address).
+(leased_address), and a new entry at an address a moved entry was created
+with is given a key of its own (free_key).
 
 A display row's key follows the same thought (roadmap L2). It used to be built
 from the row's name, so every time the parser read a name better, "Energi
@@ -165,6 +166,25 @@ def leased_address(host: Any, ip: str) -> bool:
         return ipaddress.ip_address(host).version == ipaddress.ip_address(ip).version
     except (TypeError, ValueError):
         return False
+
+
+def free_key(host: str, taken: Iterable[str]) -> str:
+    """The key a new entry at ``host`` is known by: its address, unless that is taken.
+
+    An entry the DHCP flow has moved keeps the key of the address it was
+    created with, so a second heat pump that later takes that address cannot
+    be known by it too: its device would be the first one's, and so would
+    every unique_id. It is given the address with a number after it,
+    "192.0.2.55#2", which no address and no host name can be, and with which
+    neither key's unique_ids begin with the other's prefix.
+    """
+    used = set(taken)
+    if host not in used:
+        return host
+    number = 2
+    while f"{host}#{number}" in used:
+        number += 1
+    return f"{host}#{number}"
 
 
 def moved_data(data: Mapping[str, Any], host: str) -> dict[str, Any]:

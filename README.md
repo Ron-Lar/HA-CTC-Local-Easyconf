@@ -258,10 +258,12 @@ entry set up with a host name rather than an address, the display's own CTC
 name or one your router's DNS gives it, is left on that name, which follows
 the display by itself. A move connects at the new address only once the
 controller's settle time after the old session has passed, as after any
-reload, since both sessions are to the same pump. The ports and the Modbus
-address are changed the same way, by removing the integration and adding it
-again: on a CTC they are 80 for the web interface, 502 for Modbus and address
-1, and have no reason to change, so there is no separate dialog for them.
+reload, since both sessions are to the same pump. A second heat pump that later
+gets the address the first one was set up with is added like any other, with a
+device and entities of its own. The ports and the Modbus address are changed
+the same way, by removing the integration and adding it again: on a CTC they
+are 80 for the web interface, 502 for Modbus and address 1, and have no reason
+to change, so there is no separate dialog for them.
 
 The serial number and the display's own software version are only written into
 the System information page while that page is shown on the panel. The
