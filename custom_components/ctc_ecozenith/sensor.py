@@ -109,10 +109,11 @@ async def async_setup_entry(
     """Create every sensor for this heat pump."""
     runtime = entry.runtime_data
 
-    def add(new: list[SensorEntity]) -> None:
-        # At set-up and for what turns up later alike: an entity an earlier
-        # version created switched off is switched on before it is added.
-        async_switch_on_new_defaults(hass, entry, "sensor", new)
+    def add_later(new: list[SensorEntity]) -> None:
+        # What turns up after set-up is added as the registry has it. An entity
+        # an earlier version created switched off is switched on at the next
+        # start instead (entity.py): switched on now, it would bring Home
+        # Assistant's reload at a moment nothing here holds the panel for.
         async_add_entities(new)
 
     entities: list[SensorEntity] = [
@@ -147,7 +148,7 @@ async def async_setup_entry(
                     "entities: %s",
                     ", ".join(due),
                 )
-                add([CtcDisplaySensor(runtime, page.title, value) for page, value in new])
+                add_later([CtcDisplaySensor(runtime, page.title, value) for page, value in new])
 
             entry.async_on_unload(web.async_add_listener(_add_rows_that_left_a_number))
         entities.append(CtcHarvestSensor(runtime))
@@ -184,12 +185,15 @@ async def async_setup_entry(
     if runtime.alarms is not None:
         entities.append(CtcLastAlarmSensor(runtime))
 
-    add(entities)
+    # At set-up, and only here: an entity an earlier version created switched
+    # off is switched on before it is added, so it comes up in this set-up.
+    async_switch_on_new_defaults(hass, entry, "sensor", entities)
+    async_add_entities(entities)
 
     @callback
     def _identity_filled_in() -> None:
         if new := identity_sensors():
-            add(new)
+            add_later(new)
 
     entry.async_on_unload(async_dispatcher_connect(hass, signal, _identity_filled_in))
 

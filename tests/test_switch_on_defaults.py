@@ -6,9 +6,11 @@ version created switched off, and only the two houses had theirs switched on,
 by hand. Each platform now switches on, before adding them, the entities whose
 registry entry the integration switched off, and leaves alone what somebody
 switched off. Here the rule runs against a registry stand-in, in both worlds,
-and the call sites are held in the source: every platform, every batch the
-sensor platform adds, both coordinators with the entry, and the identity read
-at every start. The run under a real core is test_homeassistant_switch_on.py.
+and the call sites are held in the source: every platform at set-up, and only
+there, both coordinators with the entry, the catch-up task holding the panel
+until the reload that follows, and the identity read at every start. The
+entry's option to switch off newly added entities is the owner's, and switches
+nothing on (F4.1). The run under a real core is test_homeassistant_switch_on.py.
 """
 
 from __future__ import annotations
@@ -79,10 +81,10 @@ def switch(monkeypatch):
         monkeypatch.setattr(er, "RegistryEntryDisabler", Disabler, raising=False)
     disabler = er.RegistryEntryDisabler
 
-    def run(items, platform, entities):
+    def run(items, platform, entities, entry=None):
         holder.registry = FakeRegistry(items)
         count = module.async_switch_on_new_defaults(
-            None, SimpleNamespace(entry_id="entry"), platform, entities
+            None, entry or SimpleNamespace(entry_id="entry"), platform, entities
         )
         return count, holder.registry
 
@@ -159,6 +161,41 @@ def test_another_entrys_entities_are_not_looked_at(switch):
     assert registry.updates == []
 
 
+def test_the_owners_option_to_switch_off_new_entities_switches_nothing_on(switch, caplog):
+    """Home Assistant registers every new entity as switched off by the integration
+    while the option is off, so the registry cannot tell it from an old default."""
+    d = switch.disabler
+    items = [
+        _item("sensor.ctc_new", "ctc_ecozenith_pump_hp1_fan", d.INTEGRATION),
+        _item("number.ctc_room", "ctc_ecozenith_pump_ctl_room_setpoint_1", d.INTEGRATION),
+    ]
+    runtime = SimpleNamespace(switched_on=0)
+    entry = SimpleNamespace(entry_id="entry", pref_disable_new_entities=True, runtime_data=runtime)
+    with caplog.at_level(logging.WARNING):
+        count, registry = switch(items, "sensor", [_entity("ctc_ecozenith_pump_hp1_fan")], entry)
+    assert count == 0
+    assert registry.updates == [], "ägarens systemval står"
+    assert runtime.switched_on == 0
+    assert not [r for r in caplog.records if "Switched on" in r.getMessage()]
+
+
+def test_what_is_switched_on_is_counted_on_the_runtime(switch):
+    """The catch-up task reads the count to hold the panel until the reload."""
+    d = switch.disabler
+    runtime = SimpleNamespace(switched_on=0)
+    entry = SimpleNamespace(entry_id="entry", pref_disable_new_entities=False, runtime_data=runtime)
+    items = [
+        _item("sensor.ctc_a", "ctc_ecozenith_pump_hp1_fan", d.INTEGRATION),
+        _item("number.ctc_room", "ctc_ecozenith_pump_ctl_room_setpoint_1", d.INTEGRATION),
+    ]
+    switch(items, "sensor", [_entity("ctc_ecozenith_pump_hp1_fan")], entry)
+    assert runtime.switched_on == 1
+    switch(items, "number", [_entity("ctc_ecozenith_pump_ctl_room_setpoint_1")], entry)
+    assert runtime.switched_on == 2, "plattformarna lägger ihop"
+    switch([], "select", [], entry)
+    assert runtime.switched_on == 2
+
+
 def test_nothing_to_switch_on_says_nothing(switch, caplog):
     items = [_item("sensor.ctc_on", "ctc_ecozenith_pump_hp1_out")]
     with caplog.at_level(logging.DEBUG):
@@ -182,16 +219,41 @@ def test_every_platform_switches_on_before_it_adds(platform):
     call = f'async_switch_on_new_defaults(hass, entry, "{platform}", '
     assert call in setup, f"{platform} slår inte på det som stängdes av"
     # Before the entities are added, so they come up in this very set-up.
-    assert setup.index(call) < setup.index("async_add_entities(")
+    assert setup.index(call) < setup.index("async_add_entities(entities)")
 
 
-def test_every_batch_the_sensor_platform_adds_goes_through_the_switch():
-    """At set-up, the rows that turn up later and the identity that fills in later."""
+def test_only_the_sensor_platforms_set_up_batch_goes_through_the_switch():
+    """Not the rows that turn up later, nor the identity that fills in later (F4.2).
+
+    Switched on there, each would restart Home Assistant's half minute before
+    its reload, at a moment the catch-up task no longer holds the panel for; an
+    entity such a batch adds switched off is switched on at the next start.
+    """
     setup = _setup_of("sensor")
-    helper = setup.split("def add(")[1].split("\n\n")[0]
-    assert "async_switch_on_new_defaults(" in helper
-    assert helper.index("async_switch_on_new_defaults(") < helper.index("async_add_entities(new)")
-    assert setup.count("async_add_entities(") == 1, "alla tillägg går via add()"
+    assert setup.count("async_switch_on_new_defaults(") == 1
+    call = setup.index('async_switch_on_new_defaults(hass, entry, "sensor", entities)')
+    assert call < setup.index("async_add_entities(entities)")
+    later = setup.split("def add_later(")[1].split("\n\n")[0]
+    assert "async_switch_on_new_defaults(" not in later
+    assert "async_add_entities(new)" in later
+    for listener in ("_add_rows_that_left_a_number", "_identity_filled_in"):
+        body = setup.split(f"def {listener}(")[1].split("entry.async_on_unload(")[0]
+        assert "add_later(" in body, listener
+        assert "async_switch_on_new_defaults(" not in body, listener
+    assert setup.count("async_add_entities(") == 2, "set-up och add_later, inget annat"
+
+
+def test_the_catch_up_task_holds_the_panel_before_it_counts_or_walks_anything():
+    """The reload that switching on brings cancels the entry's tasks (F4.2)."""
+    source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
+    code = source.split("async def _async_catch_up(")[1].split("\ndef ")[0].split('"""')[2]
+    hold = code.index("async with client.panel:")
+    assert "switched_on" in code[:hold], "bara efter en uppsättning som slog på något"
+    assert "has_display(entry.data)" in code[:hold], "en post utan display har ingen panel"
+    assert code.index("asyncio.sleep(SWITCH_ON_HOLD.total_seconds())") > hold
+    assert hold < code.index("_async_check_release(")
+    assert hold < code.index("_MENU_TRIES[entry.entry_id] =")
+    assert hold < code.index("_WALKED.add(")
 
 
 def test_both_coordinators_are_given_the_entry():
