@@ -269,6 +269,24 @@ async def test_a_discovered_unit_carries_its_model_and_address_on_the_card(hass,
     assert flow["context"]["title_placeholders"] == {"name": f"EcoZenith i255 ({FOUND.host})"}
 
 
+async def test_both_ways_in_link_the_readme_on_the_open_ports(hass, stubs, sweep, display):
+    """The menu and a discovered unit's confirmation both say port 80 and 502
+    have no login, and link the README's section on it (R71)."""
+    url = "https://github.com/beolink/HA-CTC-Local-Easyconf#network-and-exposure"
+    result = await _start(hass)
+    assert result["description_placeholders"]["exposure_url"] == url
+    hass.config_entries.flow.async_abort(result["flow_id"])
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "dhcp"},
+        data=DhcpServiceInfo(ip=FOUND.host, hostname="", macaddress="020000000001"),
+    )
+    assert result["step_id"] == "confirm"
+    assert result["description_placeholders"]["exposure_url"] == url
+    hass.config_entries.flow.async_abort(result["flow_id"])
+
+
 # ------------------------------------------------------- Modbus alone (R11)
 
 

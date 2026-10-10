@@ -98,6 +98,13 @@ STATS_PLACEHOLDERS = {
     "privacy_url": "https://stats.rnet.se/integritet",
 }
 
+#: Where the README says what port 80 and 502 open on the network and how to
+#: keep them for Home Assistant (roadmap R71). The first step and the
+#: confirmation of a discovered unit say it in one sentence and link here.
+EXPOSURE_PLACEHOLDERS = {
+    "exposure_url": "https://github.com/beolink/HA-CTC-Local-Easyconf#network-and-exposure",
+}
+
 CONF_PICKED = "picked"
 MANUAL = "manual"
 
@@ -158,12 +165,12 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         scan, so it runs only once somebody has chosen it; typing the address
         in never sweeps at all. The menu's text also says what is switched on
         from the start, since a new installation never sees the options form
-        that explains it.
+        that explains it, and that the two ports it needs have no login.
         """
         return self.async_show_menu(
             step_id="user",
             menu_options=[STEP_SCAN, STEP_MANUAL],
-            description_placeholders=STATS_PLACEHOLDERS,
+            description_placeholders={**STATS_PLACEHOLDERS, **EXPOSURE_PLACEHOLDERS},
         )
 
     async def async_step_scan(
@@ -694,7 +701,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         Setting the entry up walks the panel through its menus, so a discovered
         unit is never adopted silently. A discovered unit never passes the menu
         of async_step_user, so this text says what is switched on from the
-        start as well.
+        start as well, and that port 80 and 502 have no login (roadmap R71).
         """
         if user_input is not None:
             return await self.async_step_connect()
@@ -705,6 +712,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "model": self._model,
                 "host": self._host or "",
                 **STATS_PLACEHOLDERS,
+                **EXPOSURE_PLACEHOLDERS,
             },
         )
 
