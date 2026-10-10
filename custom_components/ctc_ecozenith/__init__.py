@@ -97,6 +97,7 @@ from .identity import (
 )
 from .keys import (
     device_key,
+    keep_hidden_rows,
     mac_address,
     previous_keys,
     union_by_page,
@@ -681,9 +682,12 @@ async def _async_reread_menu(
         [page.page for page in stored_selection],
         reading.pages,
     )
-    # Every row carries the key it had where that was another, so the set-up
-    # the write brings moves its entity and its stored values over (L2).
-    menu = with_previous_keys(union_by_page(stored_menu, stored_selection), menu)
+    # A row the display hides at this moment stays on its page (a slot that
+    # shows the compressor's speed or a status by turns), and every row
+    # carries the key it had where that was another, so the set-up the write
+    # brings moves its entity and its stored values over (L2).
+    before = union_by_page(stored_menu, stored_selection)
+    menu = with_previous_keys(before, keep_hidden_rows(before, menu))
     chosen = set(selected)
     changed = {
         CONF_MENU: pages_to_storage(menu),
