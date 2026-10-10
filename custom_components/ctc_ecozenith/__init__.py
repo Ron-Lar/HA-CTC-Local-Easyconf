@@ -38,6 +38,7 @@ from .catalogue import (
     merge_menu,
     pages_from_storage,
     pages_to_storage,
+    warned_of_no_menu,
 )
 from .cop import (
     MIN_CONSUMPTION_KWH,
@@ -582,9 +583,13 @@ async def _async_reread_menu(
     reading is tried again.
 
     How far the walk got is kept for the report and the diagnostics, and the
-    warning that ends the tries says it. A display that stopped answering
-    partway is raised once that is done, as it was before the walk gave it
-    back in the reading, so the rest of the round waits for the next one.
+    line that ends the tries says it. Where the walk found no menu it has
+    said so on warning itself, once this run, so that line is info then: the
+    log says a menu that cannot be read once per start (F3.3). It says no
+    menu has been read at all where none is stored, rather than that an
+    earlier one is kept. A display that stopped answering partway is raised
+    once that is done, as it was before the walk gave it back in the reading,
+    so the rest of the round waits for the next one.
     """
     options = entry.options
     async with client.panel:
@@ -604,20 +609,30 @@ async def _async_reread_menu(
             what = "Only part of the display's menu could be read"
         else:
             what = f"The display's menu could not be read ({reading.how_far()})"
+        stored = bool(pages_from_storage(options.get(CONF_MENU)))
         if spent >= MENU_READ_TRIES:
-            _LOGGER.warning(
-                "%s in %s attempts, so the menu stored by an earlier version is kept and "
-                "anything a newer one would make sense of is not harvested. Choose Read "
-                "the display's menu again under Configure to try again",
-                what,
-                MENU_READ_TRIES,
+            if stored:
+                kept = (
+                    "so the menu stored by an earlier version is kept and anything a "
+                    "newer one would make sense of is not harvested"
+                )
+            else:
+                kept = "and no menu has been read before, so no page of the display is harvested"
+            said = (
+                f"{what} in {MENU_READ_TRIES} attempts, {kept}. Choose Read the display's "
+                "menu again under Configure to try again"
             )
+            if not reading.pages and warned_of_no_menu(client):
+                _LOGGER.info("%s", said)
+            else:
+                _LOGGER.warning("%s", said)
         else:
             _LOGGER.debug(
-                "%s (attempt %s of %s); keeping the stored one and trying again in %s minutes",
+                "%s (attempt %s of %s); %s and trying again in %s minutes",
                 what,
                 spent,
                 MENU_READ_TRIES,
+                "keeping the stored one" if stored else "none is stored yet",
                 int(MENU_READ_RETRY.total_seconds() // 60),
             )
         if reading.error is not None:

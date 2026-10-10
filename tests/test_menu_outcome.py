@@ -258,6 +258,19 @@ def test_a_failure_is_one_warning_per_run_and_a_success_one_info_line(
     assert len(_said(caplog, logging.WARNING)) == 1, "ingen ny varning"
 
 
+def test_the_walk_says_whether_it_has_warned_of_no_menu_on_this_display(catalogue, web_api):
+    # The background reading asks, so the line that ends its tries is not a
+    # second warning of the same thing (F3.3).
+    assert not catalogue.warned_of_no_menu(_menu(web_api, AddressedNoTile))
+    run(catalogue.async_discover_pages(_menu(web_api, Addressed), require_root=True))
+    assert not catalogue.warned_of_no_menu(_menu(web_api, Addressed)), "en läst meny är ingen varning"
+    run(catalogue.async_discover_pages(_menu(web_api, AddressedNoTile), require_root=True))
+    assert catalogue.warned_of_no_menu(_menu(web_api, AddressedNoTile))
+    # Without an address there is no record to go by, and the line that ends
+    # the tries stays a warning rather than go unsaid.
+    assert not catalogue.warned_of_no_menu(_menu(web_api, NoTile))
+
+
 def test_two_displays_each_say_their_own(catalogue, web_api, caplog):
     class Other(AddressedNoTile):
         base_url = "http://192.0.2.11:80"

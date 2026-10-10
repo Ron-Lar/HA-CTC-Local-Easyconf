@@ -652,6 +652,17 @@ def _say(client: Any, reading: MenuReading) -> None:
     _LOGGER.log(level, "%s", reading.describe())
 
 
+def warned_of_no_menu(client: Any) -> bool:
+    """Whether a walk on this display has said on warning in this run that it found no menu.
+
+    The background reading after an update ends its tries with a line of its
+    own, and where the walk has said it already that line is not a second
+    warning: the log says a menu that cannot be read once per start.
+    """
+    where = getattr(client, "base_url", None)
+    return isinstance(where, str) and (where, True) in _SAID
+
+
 def menu_root(pages: list[SlowPage]) -> int | None:
     """The operation data root among stored pages: the one with an empty route.
 
