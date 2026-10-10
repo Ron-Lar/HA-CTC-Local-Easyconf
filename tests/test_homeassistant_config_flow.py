@@ -418,3 +418,56 @@ async def test_an_answer_that_is_not_the_register_points_at_the_port(hass, stubs
         result = await _type_the_address(hass, WebProbe(None, answered=False))
     assert result["step_id"] == "manual"
     assert result["errors"] == {"base": "modbus_rejected"}
+
+
+# ------------------- the step that says the display answers, only when it does
+
+
+async def _from_the_modbus_step(hass, web: WebProbe):
+    """Modbus off at a found unit, then another address typed into the step about it."""
+    with patch(f"{FLOW}.CtcModbusClient", DeadModbus):
+        result = await _pick_the_found_unit(hass)
+        assert result["step_id"] == "modbus_failed"
+        with patch(f"{FLOW}.async_probe_web", AsyncMock(return_value=web)):
+            return await hass.config_entries.flow.async_configure(
+                result["flow_id"], {**ADDRESS, CONF_HOST: OTHER.host}
+            )
+
+
+@pytest.mark.parametrize(
+    ("web", "verdict", "error"),
+    [
+        (WebProbe(None, answered=True), "closed", "not_a_ctc"),
+        (WebProbe(None, answered=False), "closed", "not_a_ctc"),
+        (WebProbe(None, answered=False), "silent", "not_a_ctc"),
+        (WebProbe(None, answered=False), "answered", "modbus_transient"),
+    ],
+    ids=["other-device-on-80", "nothing-answers", "silent", "modbus-alone-hiccup"],
+)
+async def test_a_new_address_without_a_display_leaves_the_modbus_step(
+    hass, stubs, sweep, display, web, verdict, error
+):
+    """The step modbus_failed says the display at {host} answers.
+
+    Typed into it, an address where no display answers used to come back on
+    the same step, with the new address in that sentence and an error beside
+    it saying the address does not answer as a CTC display. It goes to the
+    address form instead.
+    """
+    verdicts = iter(["closed", verdict])
+    stubs.modbus_probe.side_effect = lambda *args: next(verdicts)
+    result = await _from_the_modbus_step(hass, web)
+    assert result["step_id"] == "manual"
+    assert result["errors"] == {"base": error}
+    assert result["description_placeholders"]["host"] == OTHER.host
+
+
+async def test_a_new_address_whose_display_answers_stays_on_the_modbus_step(
+    hass, stubs, sweep, display
+):
+    stubs.modbus_probe.return_value = "closed"
+    other = WebProbe(OTHER, answered=True)
+    result = await _from_the_modbus_step(hass, other)
+    assert result["step_id"] == "modbus_failed"
+    assert result["errors"] == {"base": "modbus_failed"}
+    assert result["description_placeholders"]["host"] == OTHER.host
