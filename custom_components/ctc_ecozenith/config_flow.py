@@ -295,7 +295,9 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._model = probe.display.model
             self._settings_name = probe.display.settings_name
         elif probe.answered:
-            return self._address_form(step_id, {"base": "not_a_ctc"})
+            # On the address form whichever form it was typed into: the step
+            # modbus_failed says the display at the address answers.
+            return self._address_form(STEP_MANUAL, {"base": "not_a_ctc"})
         else:
             self._display = False
             self._model = FAMILY
@@ -353,19 +355,31 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self._busy_form({"base": "modbus_busy"} if retried_busy else None)
         if verdict == ANSWERED:
             # It answers now: a passing hiccup, and the form to try again.
-            return self._address_form(self._origin or STEP_MANUAL, {"base": "modbus_transient"})
+            return self._address_form(self._retry_step(), {"base": "modbus_transient"})
         if verdict == REJECTED:
             # Something speaks on the port, and not as the heat pump: a wrong
             # port or Modbus address, which another try would only repeat.
             return self._address_form(STEP_MANUAL, {"base": "modbus_rejected"})
         if not self._display:
             # Neither the web port nor Modbus answered: no CTC at that
-            # address, as far as can be told, which the text explains.
-            return self._address_form(self._origin or STEP_MANUAL, {"base": "not_a_ctc"})
+            # address, as far as can be told, which the text explains. On the
+            # address form, never on the step that says the display answers.
+            return self._address_form(STEP_MANUAL, {"base": "not_a_ctc"})
         # Tried from this very form before: say that it failed again, or the
         # same form coming back looks as if nothing had happened.
         again = self._origin == STEP_MODBUS_FAILED
         return self._address_form(STEP_MODBUS_FAILED, {"base": "modbus_failed"} if again else None)
+
+    def _retry_step(self) -> str:
+        """The form a try goes back to: the one it was typed into, while its text holds.
+
+        The step modbus_failed says that the display at the address answers, so
+        a try from it goes back there only when the display at the address it
+        took did answer; anything else goes back to the address form.
+        """
+        if self._origin == STEP_MODBUS_FAILED and self._display:
+            return STEP_MODBUS_FAILED
+        return STEP_MANUAL
 
     async def async_step_modbus_busy(
         self, user_input: dict[str, Any] | None = None
