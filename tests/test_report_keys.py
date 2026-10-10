@@ -199,6 +199,21 @@ def test_the_readme_tells_the_same_story():
         assert phrase in section, f"{phrase!r} saknas i README:s statistikavsnitt"
 
 
+def test_the_readme_names_the_one_key_outside_the_closed_lists(stats_extra):
+    """The paragraph on the closed lists said a key not on them fails a test,
+    while family_<stem> is sent beside them; it now names that key, when it is
+    sent, and the very pattern the code holds it to (F5.3)."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    section = readme[readme.index("## Anonymous statistics"):]
+    section = " ".join(section[: section.index("\n## ", 1)].split())
+    closed = section[section.index("two closed lists"):]
+    closed = closed[: closed.index("unnoticed")]
+    assert "one built key" in closed
+    assert "`family_`" in closed and '"other"' in closed
+    assert f"`{stats_extra.FAMILY_STEM.pattern}`" in closed
+    assert stats_extra.FAMILY_PREFIX == "family_"
+
+
 def test_the_draft_schema_that_said_nothing_was_implemented_is_gone():
     # docs/reporting.md was a public draft of a far larger report, with "nothing
     # here is implemented yet" at the top, next to a consent text describing

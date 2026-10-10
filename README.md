@@ -626,10 +626,14 @@ else; a known model sends no such flag.
 
 The flags and the numbers the report can carry are two closed lists next to
 the code that builds it, `FEATURE_KEYS` and `METRIC_KEYS` in `stats_extra.py`,
-and a test builds the report with everything set and fails the moment it grows
-a key that is not on them. This text, the consent text under Configure and the
-list at <https://stats.rnet.se/integritet> are kept to those lists, so the
-promise and the report cannot drift apart unnoticed.
+with one built key beside them: the `family_` flag above, sent only for a model
+reported as "other" and only when the code after `family_` matches
+`^[a-z0-9]{2,16}$`. A test builds the report with everything set and fails the
+moment it grows a key that is not on the two lists, and the family flag is held
+to that pattern by tests of its own. This text, the consent text under
+Configure and the list at <https://stats.rnet.se/integritet> are kept to the
+lists and the one built key, so the promise and the report cannot drift apart
+unnoticed.
 
 CTC writes a serial number as three groups of four digits: which product it is,
 the year and week it was made, and a sequence number. The first two groups are
