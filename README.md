@@ -138,7 +138,15 @@ So the display is treated as a supplement, not the base:
   entity over to the key of its place: only the entity's unique id changes,
   never its entity id, so dashboards and automations keep working, and what
   the integration remembers about each row moves with it. The log says on info
-  which entities were carried over.
+  which entities were carried over. The carrying over goes one way. Put 0.18.0
+  back after it, and 0.18.0 reads the menu again with its own parser, removes
+  the carried over entities from the registry and creates them anew: most come
+  back with the same entity id and their history, but what you set on them, a
+  name, an area, hidden or switched off, is lost, and so is an entity id you
+  changed yourself. Take a backup of Home Assistant before you update from
+  0.18.0, and go back by restoring it rather than by installing 0.18.0 again:
+  the backup puts the integration back together with the entity registry, the
+  entries and the integration's stored files as they were.
 - They are polled on a slow interval, thirty minutes by default.
 - A restart of Home Assistant costs the panel nothing. The last harvest is
   kept, values and the moment each was read, so the sensors come up with it,
