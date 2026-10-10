@@ -59,6 +59,7 @@
       "not_a_ctc": "Adressen svarar inte som en CTC-display. Kontrollera adressen. Displayens webbgränssnitt slås på vid panelen under Avancerat, Definiera, Kommunikation, Web = Ja; utan det läggs värmepumpen till på enbart Modbus, och då måste Modbus svara.",
       "modbus_failed": "Modbus svarade inte den här gången heller.",
       "modbus_transient": "Modbus svarade inte nyss men svarar nu, så det var en tillfällig störning. Försök igen.",
+      "modbus_rejected": "Något svarar på den Modbus TCP-porten, men inte som värmepumpen: med ett Modbus-fel, eller som en enhet som inte talar Modbus alls. Kontrollera Modbus TCP-porten, 502 om den inte ändrats vid panelen, och Modbus-adressen, normalt 1.",
       "modbus_busy": "Platsen är fortfarande upptagen.",
       "nothing_found": "Sökningen hittade ingen CTC-display. Skriv in displayens adress i stället; en display på ett annat nät nås inte av sökningen."
     },

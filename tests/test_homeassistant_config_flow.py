@@ -397,3 +397,24 @@ async def test_a_probe_that_breaks_leaves_the_flow_standing(hass, stubs, sweep, 
         result = await _pick_the_found_unit(hass)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "modbus_failed"
+
+
+async def test_an_answer_that_is_not_the_register_points_at_the_port(hass, stubs, sweep, display):
+    """Something speaks on the port, and not as the heat pump: no hiccup, no try again.
+
+    A Modbus exception or a web server on the port typed for Modbus used to
+    count as an answer, and the form said it was a passing hiccup at every
+    try. It goes back to the address form, which names the port and the
+    Modbus address, whatever form the address came from.
+    """
+    stubs.modbus_probe.return_value = "rejected"
+    with patch(f"{FLOW}.CtcModbusClient", DeadModbus):
+        result = await _pick_the_found_unit(hass)
+        assert result["step_id"] == "manual"
+        assert result["errors"] == {"base": "modbus_rejected"}
+        hass.config_entries.flow.async_abort(result["flow_id"])
+
+        # Typed, with the display silent this time: still the port.
+        result = await _type_the_address(hass, WebProbe(None, answered=False))
+    assert result["step_id"] == "manual"
+    assert result["errors"] == {"base": "modbus_rejected"}
