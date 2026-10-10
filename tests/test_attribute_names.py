@@ -1,7 +1,9 @@
 """The Swedish attribute names have English twins, both sent for a version (R22).
 
-Automations and the energy manager read skäl, underlag, kod, källa, sida,
-skärm, senast läst, senast skriven, gäller till, styrning aktiv and episoder.
+Automations and the energy manager read skäl, underlag, the four energy
+figures beside the coefficient of performance (dygn i underlaget, avgiven
+värme kWh, tillförd energi kWh, tillförd energi ur), kod, källa, sida, skärm,
+senast läst, senast skriven, gäller till, styrning aktiv and episoder.
 Each now has an English twin with the same value, except control_active,
 which is a boolean, and episodes, whose episodes carry English keys inside;
 the Swedish names go in the next major version, which the README says beside
@@ -29,6 +31,10 @@ from conftest import ROOT, load
 EXPECTED = {
     "skäl": "reason",
     "underlag": "basis",
+    "dygn i underlaget": "days_in_basis",
+    "avgiven värme kWh": "heat_out_kwh",
+    "tillförd energi kWh": "energy_in_kwh",
+    "tillförd energi ur": "energy_in_from",
     "kod": "code",
     "källa": "source",
     "sida": "page",
@@ -63,11 +69,11 @@ def test_the_twins_are_the_ones_r22_names(names):
 
 
 def test_a_twin_carries_the_same_value_beside_the_swedish_name(names):
-    shown = names.with_english({"skäl": "räknarna har inte lästs", "dygn i underlaget": 3})
+    shown = names.with_english({"skäl": "räknarna har inte lästs", "pågår": "ja"})
     assert shown == {
         "skäl": "räknarna har inte lästs",
         "reason": "räknarna har inte lästs",
-        "dygn i underlaget": 3,
+        "pågår": "ja",
     }, "bara namnen i tabellen får en tvilling"
 
 
@@ -146,6 +152,24 @@ def test_the_coefficient_of_performance_gives_basis_and_reason(stubbed, cop):
     lifetime = sensors["lifetime"].extra_state_attributes
     assert lifetime["basis"] == "hela livslängden"
     assert "reason" not in lifetime and "skäl" not in lifetime
+
+
+def test_the_energy_figures_beside_the_coefficient_of_performance_have_twins(stubbed, cop):
+    """R22 gave the five released names, underlag to tillförd energi ur, one
+    version side by side, so an energy manager moves once (F4.3)."""
+    from test_cop_sensor import _runtime, _sensors
+
+    sensor = load("sensor")
+    for span, attributes in _sensors(sensor, _runtime(cop)).items():
+        shown = attributes.extra_state_attributes
+        for swedish, english in (
+            ("dygn i underlaget", "days_in_basis"),
+            ("avgiven värme kWh", "heat_out_kwh"),
+            ("tillförd energi kWh", "energy_in_kwh"),
+            ("tillförd energi ur", "energy_in_from"),
+        ):
+            assert swedish in shown, (span, swedish)
+            assert shown[english] == shown[swedish], (span, swedish)
 
 
 class _Control:
