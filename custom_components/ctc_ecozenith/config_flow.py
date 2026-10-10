@@ -531,11 +531,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         session = async_get_clientsession(self.hass)
         client = CtcWebClient(session, self._host, self._web_port, LANG_SWEDISH)
-        try:
-            reading = await async_discover_pages(client)
-        except CtcWebError as err:
-            _LOGGER.warning("Could not read the display's menu: %s", err)
-            reading = MenuReading()
+        reading = MenuReading()  # no menu walk during setup: keeps the display free for myUplink
         self._pages = reading.pages
         self._complete = reading.complete
         self._root = reading.root

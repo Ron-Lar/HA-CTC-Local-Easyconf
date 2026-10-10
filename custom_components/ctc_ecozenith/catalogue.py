@@ -1282,6 +1282,8 @@ def merge_menu(
     has not offered before starts on, so a page a new version can use is used
     without a visit to the options, and the first reading switches everything on.
     """
+    if not previous_menu:
+        return discovered, [p.page for p in discovered if p.page in set(previous_selection)]
     known = {page.page for page in previous_menu}
     switched_off = known - set(previous_selection)
     selected = [page.page for page in discovered if page.page not in switched_off]

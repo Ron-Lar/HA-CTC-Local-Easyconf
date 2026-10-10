@@ -350,7 +350,7 @@ HARVEST: dict[str, str] = {
     "display_harvest": (
         "När displayens sidor senast lästes. Integrationen bläddrar till de valda sidorna "
         f"var {_HARVEST_MINUTES} som förval, hoppar över varvet om någon står vid panelen, högst "
-        f"{_SKIPS} i rad, och försöker om efter fem minuter när displayen inte svarar. Attributen "
+        f"{_SKIPS} i rad, och försöker om efter 30 minuter när displayen inte svarar. Attributen "
         "säger hur många varv i rad "
         "som hoppats över eller misslyckats, när nästa försök görs, vilket skälet var och "
         "vilka sidor som lästes och missades senast."

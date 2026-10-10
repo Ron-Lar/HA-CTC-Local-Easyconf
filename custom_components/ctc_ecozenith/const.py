@@ -145,7 +145,7 @@ SENTINELS: Final = frozenset({9999, -9999, 10000, -10000, 32767, -32768, 4294967
 WEB_MAX_CONCURRENCY: Final = 3
 #: How often to try again while the display is not answering, and how many
 #: harvests in a row may fail before its readings are called unavailable.
-RETRY_INTERVAL: Final = 300
+RETRY_INTERVAL: Final = 1800
 HARVEST_PATIENCE: Final = 3
 #: How many harvests in a row give way when the panel is not where the last
 #: one left it, before the harvest goes ahead anyway. Somebody using the panel
@@ -369,7 +369,7 @@ MODBUS_SENSORS: Final[tuple[ModbusSensor, ...]] = (
     ModbusSensor("tank_lower_setpoint", 62274, "Nedre tank börvärde", 0.1, "°C", _T),
     ModbusSensor("dhw_lower_temp", 62275, "Varmvatten nedre", 0.1, "°C", _T),
     ModbusSensor("dhw_temp", 62276, "Varmvatten", 0.1, "°C", _T),
-    ModbusSensor("dhw_capacity", 62279, "Varmvattenkapacitet", 1, "%", None, icon="mdi:water-percent"),
+    ModbusSensor("dhw_capacity", 62279, "Varmvattenkapacitet", 0.1, "%", None, icon="mdi:water-percent"),
     # Pump and fan speeds carry one decimal: an EcoAir 720M running at 66.2 per
     # cent reports 662, which read as a whole number would be nonsense.
     ModbusSensor("sg_mode", 62301, "SmartGrid-läge", 1, None, None, None, enum=SG_MODE, icon="mdi:transmission-tower"),

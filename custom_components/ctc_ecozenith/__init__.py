@@ -528,12 +528,13 @@ async def _async_catch_up(
             # by the sweep once per run and written down for the next start.
             sweep = entry.entry_id not in _SWEPT
             _SWEPT.add(entry.entry_id)
-            found = await async_read_identity(client, screens, sweep=sweep)
+            # No display pages ticked: leave the display's web server alone at start (myUplink).
+            found = await async_read_identity(client, screens, sweep=sweep) if entry.options.get(CONF_SLOW_PAGES) else Identity()
             identity = identity.merged_with(found)
 
             if (
                 not identity.serial
-                and entry.options.get(CONF_VISIT_SYSTEM_INFO, True)
+                and entry.options.get(CONF_VISIT_SYSTEM_INFO, False)
                 and entry.entry_id not in _WALKED
             ):
                 _WALKED.add(entry.entry_id)
@@ -593,6 +594,8 @@ async def _async_catch_up(
 
 def _menu_is_due(entry: "CtcConfigEntry", version: str) -> bool:
     """Whether this run still owes the entry a fresh reading of the menu."""
+    if not entry.options.get(CONF_SLOW_PAGES):
+        return False
     return menu_is_due(
         entry.options.get(CONF_MENU_VERSION),
         version,
