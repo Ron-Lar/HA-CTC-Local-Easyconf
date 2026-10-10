@@ -118,10 +118,50 @@ def test_an_unknown_mac_at_an_unknown_address_is_new():
     assert keys.match_discovery([], HOST, "020000000001") == (keys.NEW, None)
 
 
-def test_the_mac_decides_before_the_address():
-    # Another unit took the moved one's old address: the MAC says which is which.
+def test_the_mac_decides_where_the_address_is_free():
+    # The unit left its address and turned up at one no entry has.
+    known = [keys.Known("a", HOST, "02:00:00:00:00:01"), keys.Known("b", "192.0.2.10", "02:00:00:00:00:02")]
+    assert keys.match_discovery(known, MOVED_TO, "020000000002") == (keys.MOVED, "b")
+    assert keys.held_back(known, MOVED_TO, "020000000002") is None
+
+
+def test_no_entry_is_moved_to_an_address_another_entry_has():
+    # Another unit's entry stands at the address the moved unit turned up at:
+    # moving there would leave two entries on one address, two Modbus clients
+    # against the controller's one place. The entry stays, and is named.
     known = [keys.Known("a", HOST, "02:00:00:00:00:01"), keys.Known("b", MOVED_TO, "02:00:00:00:00:02")]
-    assert keys.match_discovery(known, HOST, "020000000002") == (keys.MOVED, "b")
+    assert keys.match_discovery(known, HOST, "020000000002") == (keys.KNOWN, "a")
+    assert keys.held_back(known, HOST, "020000000002") == "b"
+
+
+# The heat pump set up twice: A waits at the address the unit left (setup
+# retry holds no Modbus session, so B's probe got through), and B was added
+# at the address it went to and has read the same MAC. Or a 0.18.0 that
+# offered the moved unit as new, and an owner who took the offer.
+TWICE = [keys.Known("A", HOST, "02:00:00:00:00:01"), keys.Known("B", MOVED_TO, "02:00:00:00:00:01")]
+
+
+@pytest.mark.parametrize("known", [TWICE, TWICE[::-1]], ids=["oldest-first", "newest-first"])
+def test_the_same_heat_pump_set_up_twice_is_never_put_on_one_address(known):
+    assert keys.match_discovery(known, MOVED_TO, "020000000001") == (keys.KNOWN, "B")
+    assert keys.held_back(known, MOVED_TO, "020000000001") == "A"
+    # And from the old address, should the unit go back: A is where it is.
+    assert keys.match_discovery(known, HOST, "020000000001") == (keys.KNOWN, "A")
+    assert keys.held_back(known, HOST, "020000000001") == "B"
+
+
+@pytest.mark.parametrize("other_mac", [None, "02:00:00:00:00:02"], ids=["no-mac", "another-mac"])
+def test_an_entry_at_the_address_keeps_it_whatever_its_mac(other_mac):
+    known = [keys.Known("A", HOST, "02:00:00:00:00:01"), keys.Known("B", MOVED_TO, other_mac)]
+    for order in (known, known[::-1]):
+        assert keys.match_discovery(order, MOVED_TO, "020000000001") == (keys.KNOWN, "B")
+        assert keys.held_back(order, MOVED_TO, "020000000001") == "A"
+
+
+def test_nothing_is_held_back_where_nothing_stands_in_the_way():
+    assert keys.held_back(KNOWN, HOST, "020000000001") is None
+    assert keys.held_back(KNOWN, MOVED_TO, "020000000001") is None
+    assert keys.held_back(KNOWN, "192.0.2.10", None) is None
 
 
 @pytest.mark.parametrize("host", ["ctc8489.lan", "CTC8489", "varmepump.hemma.se", "fd00::1234"])

@@ -13,8 +13,9 @@ with: that keeps every unique_id an existing installation has exactly as it
 was, and an entry from before the key existed reads its address in its place,
 which comes to the same. When the DHCP flow then finds the unit at a new
 address by its MAC, it moves the address and pins the key first (moved_data),
-so the device and every entity stay what they were. An entry set up with a
-host name is never moved, since the name follows the unit already
+so the device and every entity stay what they were. It never moves an entry
+to an address another entry already has (match_discovery), an entry set up
+with a host name is never moved, since the name follows the unit already
 (leased_address), and a new entry at an address a moved entry was created
 with is given a key of its own (free_key).
 
@@ -126,29 +127,40 @@ def match_discovery(
 ) -> tuple[str, str | None]:
     """What a DHCP discovery of ``ip`` with ``mac`` is, and which entry it is about.
 
-    The MAC decides first, since it follows the unit and the address does
-    not: a configured unit whose MAC turns up at another address has moved.
-    Only an entry set up with the kind of address a lease hands out can have
-    moved, though. One set up with a host name, "CTC8489" or a name of the
-    router's DNS, already follows the unit wherever its lease goes, and one
-    set up with an IPv6 address is not reached through the lease at all:
-    either is the unit where it already is, and is left on what somebody
-    chose rather than moved to the lease's address and reloaded there (see
-    leased_address). An entry whose MAC has never been read can only be
-    recognised by its address. Anything else is a unit nobody has configured
+    An entry that already stands at ``ip`` is the one it is about, the one
+    with this MAC first if there are several, whatever MAC the others have
+    or lack. No entry is ever moved to an address another entry has: two
+    entries on one address are two Modbus clients against the controller's
+    one place, which take turns at being refused, and two display clients
+    moving the one panel. Where an entry with this MAC stands elsewhere all
+    the same, held_back names it, so the flow can say so.
+
+    Otherwise the MAC decides, since it follows the unit and the address
+    does not: a configured unit whose MAC turns up at a free address has
+    moved there. Only an entry set up with the kind of address a lease hands
+    out can have moved, though. One set up with a host name, "CTC8489" or a
+    name of the router's DNS, already follows the unit wherever its lease
+    goes, and one set up with an IPv6 address is not reached through the
+    lease at all: either is the unit where it already is, and is left on
+    what somebody chose rather than moved to the lease's address and
+    reloaded there (see leased_address). An entry whose MAC has never been
+    read can only be recognised by its address. Anything else is a unit nobody has configured
     yet.
     """
     entries = list(known)
     wanted = mac_hex(mac)
+    here = [item for item in entries if item.host == ip]
+    for item in here:
+        if wanted is not None and mac_hex(item.mac) == wanted:
+            return KNOWN, item.entry_id
+    if here:
+        return KNOWN, here[0].entry_id
     if wanted is not None:
         for item in entries:
             if mac_hex(item.mac) == wanted:
-                if item.host == ip or not leased_address(item.host, ip):
+                if not leased_address(item.host, ip):
                     return KNOWN, item.entry_id
                 return MOVED, item.entry_id
-    for item in entries:
-        if item.host == ip:
-            return KNOWN, item.entry_id
     return NEW, None
 
 
@@ -185,6 +197,24 @@ def free_key(host: str, taken: Iterable[str]) -> str:
     while f"{host}#{number}" in used:
         number += 1
     return f"{host}#{number}"
+
+
+def held_back(known: Iterable[Known], ip: str, mac: str | None) -> str | None:
+    """The entry with ``mac`` that match_discovery leaves where it is, if any.
+
+    One that stands at another address while some other entry already
+    stands at ``ip``. Most often the same heat pump set up twice: an entry
+    waiting at the address the unit left, and a second one added at the
+    address it went to. Which of them is to go only the owner can tell.
+    """
+    entries = list(known)
+    wanted = mac_hex(mac)
+    if wanted is None or not any(item.host == ip for item in entries):
+        return None
+    for item in entries:
+        if item.host != ip and mac_hex(item.mac) == wanted:
+            return item.entry_id
+    return None
 
 
 def moved_data(data: Mapping[str, Any], host: str) -> dict[str, Any]:

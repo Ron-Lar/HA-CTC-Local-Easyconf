@@ -274,10 +274,14 @@ the display by itself. A move connects at the new address only once the
 controller's settle time after the old session has passed, as after any
 reload, since both sessions are to the same pump. A second heat pump that later
 gets the address the first one was set up with is added like any other, with a
-device and entities of its own. The ports and the Modbus address are changed
-the same way, by removing the integration and adding it again: on a CTC they
-are 80 for the web interface, 502 for Modbus and address 1, and have no reason
-to change, so there is no separate dialog for them.
+device and entities of its own. No entry is ever moved to an address another
+entry already has, since the controller takes one Modbus client at a time: if
+the heat pump was added a second time at its new address while the old entry
+stood waiting, the old one stays where it was, the log says so on warning, and
+the one that does not answer is yours to delete. The ports and the Modbus
+address are changed the same way, by removing the integration and adding it
+again: on a CTC they are 80 for the web interface, 502 for Modbus and address
+1, and have no reason to change, so there is no separate dialog for them.
 
 The serial number and the display's own software version are only written into
 the System information page while that page is shown on the panel. The

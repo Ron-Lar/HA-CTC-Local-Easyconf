@@ -77,6 +77,7 @@ from .keys import (
     Known,
     device_key,
     free_key,
+    held_back,
     match_discovery,
     moved_data,
     moved_title,
@@ -578,24 +579,42 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         (roadmap R20). A unit whose MAC has never been read is recognised by
         its address alone. Either way, an entry waiting to be set up again is
         tried at once. Only what is neither is offered as new.
+
+        An entry is never moved to an address another entry already has,
+        which would put two clients on the controller's one Modbus place. An
+        entry with the unit's MAC left behind that way is said in the log as a
+        warning, since it is most often the same heat pump set up twice and
+        only the owner can tell which entry is to go.
         """
         host = discovery_info.ip
-        verdict, entry_id = match_discovery(
-            (
-                Known(
-                    entry.entry_id,
-                    entry.data.get(CONF_HOST),
-                    (entry.options.get(CONF_IDENTITY) or {}).get("mac"),
-                )
-                for entry in self._async_current_entries(include_ignore=False)
-            ),
-            host,
-            format_mac(discovery_info.macaddress),
-        )
+        mac = format_mac(discovery_info.macaddress)
+        entries = self._async_current_entries(include_ignore=False)
+        known = [
+            Known(
+                entry.entry_id,
+                entry.data.get(CONF_HOST),
+                (entry.options.get(CONF_IDENTITY) or {}).get("mac"),
+            )
+            for entry in entries
+        ]
+        verdict, entry_id = match_discovery(known, host, mac)
         if verdict == MOVED and entry_id is not None:
             self._async_move_entry(entry_id, host)
         elif verdict == KNOWN and entry_id is not None:
             self._async_wake_entry(entry_id)
+        left = held_back(known, host, mac)
+        if left is not None:
+            titles = {entry.entry_id: entry.title for entry in entries}
+            _LOGGER.warning(
+                "The heat pump of %s answered DHCP from %s, the address of %s, and %s is left "
+                "where it is: two entries on one address would be two clients on the "
+                "controller's one Modbus place. If both are the same heat pump, delete the "
+                "one that does not answer",
+                titles.get(left, left),
+                host,
+                titles.get(entry_id, entry_id),
+                titles.get(left, left),
+            )
         if verdict != NEW:
             return self.async_abort(reason="already_configured")
         # No updates here: an entry known by this address that has moved away
