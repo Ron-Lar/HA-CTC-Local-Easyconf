@@ -1,7 +1,7 @@
 """The attribute names automations read, in Swedish and in English.
 
-The attributes were named in Swedish, like the entities: skäl, underlag, kod,
-källa and so on. An automation or an energy manager that reads them is tied to
+The attributes were named in Swedish, like the entities: skäl, underlag, the
+energy figures beside the coefficient of performance, kod, källa and so on. An automation or an energy manager that reads them is tied to
 those names, and a name in the page's language is a poor key for code. Each of
 them now has an English twin carrying the same value, sent beside it for a
 version so that whatever reads the old name has time to move; the Swedish names
@@ -26,6 +26,10 @@ from typing import Any, Final
 ENGLISH: Final[dict[str, str]] = {
     "skäl": "reason",
     "underlag": "basis",
+    "dygn i underlaget": "days_in_basis",
+    "avgiven värme kWh": "heat_out_kwh",
+    "tillförd energi kWh": "energy_in_kwh",
+    "tillförd energi ur": "energy_in_from",
     "kod": "code",
     "källa": "source",
     "sida": "page",

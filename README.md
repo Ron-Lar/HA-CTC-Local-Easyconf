@@ -492,6 +492,10 @@ managers that read them should move to the English names now.
 |---|---|---|
 | `skäl` | `reason` | the coefficient of performance sensors |
 | `underlag` | `basis` | the coefficient of performance sensors |
+| `dygn i underlaget` | `days_in_basis` | the coefficient of performance sensors |
+| `avgiven värme kWh` | `heat_out_kwh` | the coefficient of performance sensors |
+| `tillförd energi kWh` | `energy_in_kwh` | the coefficient of performance sensors |
+| `tillförd energi ur`, `displayen` or `Modbus 62341` | `energy_in_from`, the same text | the coefficient of performance sensors |
 | `kod` | `code` | a status sensor answering a code it has no label for, and *Senaste larm* |
 | `källa` | `source` | every display row |
 | `sida` | `page` | every display row |
@@ -502,9 +506,10 @@ managers that read them should move to the English names now.
 | `styrning aktiv`, `ja` or `nej` | `control_active`, `true` or `false` | the number controls |
 | `episoder`, each with `kod`, `text`, `start`, `slut`, `utetemperatur` | `episodes`, each with `code`, `text`, `start`, `end`, `outdoor_temperature` | the binary sensor *Larm* |
 
-Values that are text, such as a reason or what a figure rests on, stay in
-Swedish under both names, like the entity names and the explanations. The
-other attributes keep their Swedish names for now.
+Values that are text, such as a reason, what a figure rests on or where the
+consumed energy was read, stay in Swedish under both names, like the entity
+names and the explanations. The other attributes keep their Swedish names for
+now.
 
 ## Known limits
 
