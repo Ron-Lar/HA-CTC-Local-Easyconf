@@ -44,9 +44,13 @@ EXPECTED = {
     "gäller till": "valid_until",
     "styrning aktiv": "control_active",
     "episoder": "episodes",
+    # R49: the pump's own value beside a control, and the overrides the
+    # sensor Aktiva överstyrningar lists, twinned from the start.
+    "pumpens värde": "pump_value",
+    "styrningar": "overrides",
 }
 
-READ = datetime(2026, 10, 9, 11, 40, tzinfo=timezone.utc)
+READ =datetime(2026, 10, 9, 11, 40, tzinfo=timezone.utc)
 
 
 @pytest.fixture(scope="module")

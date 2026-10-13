@@ -214,26 +214,45 @@ _VOLATILE = (
     "pumpen håller värdet, och når ingen skrivning fram på fem minuter släpps den."
 )
 
+#: What a control with a mirror among the stored settings carries beside its
+#: own value (R49): the pump's, whether or not Home Assistant holds the register.
+_PUMP_VALUE = (
+    " Attributet pumpens värde (pump_value) visar pumpens egen inställning, även medan Home "
+    "Assistant håller ett eget värde."
+)
+
 #: The control registers, by key.
 CONTROL: dict[str, str] = {
-    "ctl_room_setpoint_1": "Önskad rumstemperatur för värmesystem 1. Utan styrning visas pumpens egen inställning." + _VOLATILE,
-    "ctl_zone_mode_1": "Tvingar värmesystem 1 till Av, Värme, Kyla, Auto eller På. Släpp styrningen lämnar tillbaka till pumpen." + _VOLATILE,
+    "ctl_room_setpoint_1": "Önskad rumstemperatur för värmesystem 1. Utan styrning visas pumpens egen inställning." + _PUMP_VALUE + _VOLATILE,
+    "ctl_zone_mode_1": (
+        "Tvingar värmesystem 1 till Av, Värme, Kyla, Auto eller På. Släpp styrningen lämnar "
+        "tillbaka till pumpen. Pumpens Inställt värmeläge (61542) har andra lägen och speglar "
+        "inte det här registret, så listan visar Släpp styrningen när inget hålls och har inget "
+        "pumpens värde."
+    ) + _VOLATILE,
     "ctl_dhw_mode": (
         "Varmvattenprogram: Ekonomi för litet behov, Normal, Komfort för stort behov, eller Manuell. "
-        "Släpp styrningen lämnar tillbaka till pumpens eget program."
-    ) + _VOLATILE,
+        "Utan styrning visas pumpens eget program, Inställt varmvattenläge (61500). Släpp "
+        "styrningen lämnar tillbaka till det."
+    ) + _PUMP_VALUE + _VOLATILE,
     "ctl_dhw_setpoint": (
         "Önskad varmvattentemperatur. Pumpen har inget register som visar sin egen inställning, "
-        "därför står värdet som okänt tills Home Assistant har skrivit det."
+        "därför står värdet som okänt tills Home Assistant har skrivit det. Stopptemperatur "
+        "varmvatten (62001) är något annat, temperaturen där laddningen slutar, och visas därför "
+        "inte som pumpens värde."
     ) + _VOLATILE,
-    "ctl_extra_dhw": "Startar Extra varmvatten i så här många timmar. Utan styrning visas tiden som är kvar." + _VOLATILE,
+    "ctl_extra_dhw": (
+        "Startar Extra varmvatten i så här många timmar. Utan styrning visas tiden som är kvar. "
+        "Attributet pumpens värde (pump_value) visar Extra varmvatten kvar (61503) så som pumpen "
+        "svarar, även medan Home Assistant håller ett eget värde."
+    ) + _VOLATILE,
     "ctl_price_mode": (
         "Talar om vilken elpriskategori som gäller: låg, normal eller hög. Vad pumpen gör vid "
         "respektive pris ställs in i dess meny."
     ) + _VOLATILE,
-    "ctl_max_rps": "Begränsar kompressorns högsta varvtal. Utan styrning visas pumpens egen inställning." + _VOLATILE,
-    "ctl_immersion_lower": "Begränsar hur mycket effekt den nedre elpatronen får ge. Utan styrning visas pumpens egen inställning." + _VOLATILE,
-    "ctl_immersion_upper": "Begränsar hur mycket effekt den övre elpatronen får ge. Utan styrning visas pumpens egen inställning." + _VOLATILE,
+    "ctl_max_rps": "Begränsar kompressorns högsta varvtal. Utan styrning visas pumpens egen inställning." + _PUMP_VALUE + _VOLATILE,
+    "ctl_immersion_lower": "Begränsar hur mycket effekt den nedre elpatronen får ge. Utan styrning visas pumpens egen inställning." + _PUMP_VALUE + _VOLATILE,
+    "ctl_immersion_upper": "Begränsar hur mycket effekt den övre elpatronen får ge. Utan styrning visas pumpens egen inställning." + _PUMP_VALUE + _VOLATILE,
     "release_control": (
         "Släpper all styrning från Home Assistant på en gång. Inget skrivs: Home Assistant slutar "
         "skriva, och pumpen går tillbaka till sina egna inställningar inom cirka fem minuter, "
@@ -269,6 +288,14 @@ DERIVED: dict[str, str] = {
         "varmvattendelen eller den nedre. Båda effekterna står som attribut."
     ),
     "smartgrid_active": "Till när SmartGrid-läget är något annat än Normal.",
+    "active_overrides": (
+        "Hur många av pumpens flyktiga styrregister Home Assistant håller just nu, alltså skriver "
+        "om varje minut. Noll när pumpen följer sina egna inställningar. Attributet styrningar "
+        "(overrides) säger för varje styrning namn, register, värde och när en skrivning senast "
+        "nådde pumpen. Räknas bara från en skrivning som har nått pumpen, och når ingen "
+        "skrivning fram på fem minuter släpps styrningen, eftersom pumpen har glömt den. Släpp "
+        "all styrning släpper allt på en gång."
+    ),
     # The transitions in the heat pump's status, from one Modbus round to the
     # next (transitions.py). Nothing is stored, and the texts say so.
     "last_start": (
@@ -509,6 +536,8 @@ def source(key: str, pages: list[Mapping[str, Any]] | None = None, interval: int
         return f"Modbus-register {address}"
     if key == "release_control":
         return "Knapp i Home Assistant"
+    if key == "active_overrides":
+        return "Räknas fram ur det Home Assistant skriver till pumpens flyktiga styrregister"
     if key in ("compressor_running", "defrosting", "alarm", "blocked"):
         return "Räknas fram ur Värmepump status, Modbus-register 62017"
     if key in ("last_start", "starts_today", "last_run", "defrosts_today", "last_defrost"):

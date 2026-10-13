@@ -28,7 +28,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import EntityCategory
 
 from . import CtcConfigEntry
-from .attribute_names import with_english
+from .attribute_names import override_in_english, with_english
 from .catalogue import display_state_class, pages_from_storage
 from .cop import (
     WINDOWS,
@@ -50,6 +50,7 @@ from .const import (
 )
 from .entity import async_switch_on_new_defaults
 from .keys import prefix_of, previous_keys, unique_id
+from .overrides import held
 from .transitions import (
     MEAN_RUN_KEY,
     MEAN_RUN_NAME,
@@ -184,6 +185,11 @@ async def async_setup_entry(
             entities.append(CtcMeanRunSensor(runtime))
     if runtime.alarms is not None:
         entities.append(CtcLastAlarmSensor(runtime))
+    # What Home Assistant holds in the controller right now (R49), wherever
+    # it may hold anything, like the button that lets go of it all. Read with
+    # a default, so a runtime from before the sensor existed still sets up.
+    if getattr(runtime, "control_enabled", False):
+        entities.append(CtcActiveOverridesSensor(runtime))
 
     # At set-up, and only here: an entity an earlier version created switched
     # off is switched on before it is added, so it comes up in this set-up.
@@ -463,6 +469,56 @@ class CtcLastAlarmSensor(CoordinatorEntity, SensorEntity):
         # quiet is already said by Senaste displayskörd and by the reason
         # under the coefficient of performance.
         return True
+
+
+class CtcActiveOverridesSensor(CoordinatorEntity, SensorEntity):
+    """How many control registers Home Assistant holds in the controller right now (R49).
+
+    The keepalive writes each held register every minute, and the controller
+    lets go of one five minutes after the last write that reached it, so a
+    keepalive that stops lets go of everything. This says on the overview and
+    in the history what is being held: the count as the state, and under
+    ``styrningar`` and its English twin ``overrides`` each register's name,
+    number, value and when a write of it last reached the controller.
+
+    Written whenever the control manager changes what it holds, a write, a
+    release or an override given up, and with every Modbus round besides, so
+    the moment of the last write follows the keepalive. Available whatever
+    Modbus does: holding is Home Assistant's own state, and a lost round is
+    exactly when it is worth reading, with the button beside it on the page.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:hand-back-left-outline"
+    _attr_name = "Aktiva överstyrningar"
+
+    def __init__(self, runtime) -> None:
+        super().__init__(runtime.modbus)
+        self._runtime = runtime
+        self._attr_unique_id = unique_id(runtime.device, "active_overrides")
+        self._attr_device_info = runtime.device
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self._runtime.control.async_add_listener(self.async_write_ha_state)
+        )
+
+    @property
+    def native_value(self) -> int:
+        return len(self._runtime.control.active)
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        shown = held(self._runtime.control)
+        # The English twin with English keys inside, as the alarm episodes have.
+        return with_english(
+            {"styrningar": shown, "overrides": [override_in_english(item) for item in shown]}
+        )
 
 
 class CtcIdentitySensor(SensorEntity):

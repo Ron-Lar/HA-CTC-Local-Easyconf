@@ -31,6 +31,7 @@ from .const import CONTROL_NUMBERS, ControlRegister
 from .keys import unique_id
 from .entity import async_switch_on_new_defaults
 from .modbus_api import CtcModbusError
+from .overrides import pump_number
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -95,13 +96,7 @@ class CtcControlNumber(CoordinatorEntity, NumberEntity):
         raw = self._runtime.control.get(self._register.address)
         if raw is not None:
             return round(raw * self._register.scale, 3)
-        if self._register.mirror is not None:
-            for description in self._runtime.modbus.descriptions:
-                if description.address == self._register.mirror:
-                    value = (self._runtime.modbus.data or {}).get(description.key)
-                    if isinstance(value, (int, float)):
-                        return value
-        return None
+        return pump_number(self._runtime.modbus, self._register)
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -114,6 +109,11 @@ class CtcControlNumber(CoordinatorEntity, NumberEntity):
             "register": str(self._register.address),
             "not": "flyktigt register, nollställs av pumpen cirka fem minuter efter sista skrivningen",
         }
+        if self._register.mirror is not None:
+            # The pump's own setting beside what Home Assistant holds (R49),
+            # also while it holds something else: the card shows both. Only
+            # where there is a mirror; the hot water setpoint has none.
+            attributes["pumpens värde"] = pump_number(self._runtime.modbus, self._register)
         # "Aktiv" is claimed only from a write that reached the controller, and
         # these two say when that was and how long the unit holds it.
         attributes.update(control.written_attributes(self._register.address))

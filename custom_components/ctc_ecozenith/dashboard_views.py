@@ -160,17 +160,26 @@ AHEAD_OF_THE_INTEGRATION: frozenset[str] = frozenset()
 #: standing in the house. The rest are one tab away.
 _QUICK_CONTROLS = ("ctl_room_setpoint_1", "ctl_dhw_mode", "ctl_extra_dhw", "ctl_price_mode")
 
+#: The sensor that counts what Home Assistant holds in the controller, and the
+#: button that lets go of all of it (R49).
+_OVERRIDES = "active_overrides"
+_RELEASE_ALL = "release_control"
+#: The overrides chip's colour, one of the theme's four the chips card knows:
+#: Home Assistant holding the pump is worth seeing, not an alarm.
+_OVERRIDES_COLOUR = "info"
+
 #: Everything writable, grouped by what it does to the house: (id, icon, keys).
 _CONTROL_GROUPS = (
     ("heating", "mdi:radiator", ("ctl_room_setpoint_1", "ctl_zone_mode_1")),
     ("hot_water", "mdi:water-boiler", ("ctl_dhw_mode", "ctl_dhw_setpoint", "ctl_extra_dhw")),
     # The button that lets go of every override stands last among the power
     # controls, with the five minute rule in its own explanation, rather than
-    # in a column of its own beside a note: the room it stood in is for what is
-    # being overridden right now (R49).
+    # in a column of its own beside a note. On the overview it stands beside
+    # the count of what is being overridden right now, while there is any
+    # (R49, _overrides_section).
     ("power", "mdi:flash",
      ("ctl_price_mode", "ctl_max_rps", "ctl_immersion_lower", "ctl_immersion_upper",
-      "release_control")),
+      _RELEASE_ALL)),
 )
 
 # The readings, in sections: (id, icon, keys).
@@ -274,7 +283,8 @@ _BUTTON = "button."
 #: a place in it: (id, icon, keys). Display values follow, a group per page.
 _VALUE_GROUPS = (
     ("status", ICON, _STATUS_TILES + _STATUS_ROWS + _EVENT_ROWS + ("last_alarm",)),
-    ("control", "mdi:tune-variant", tuple(k for _id, _icon, keys in _CONTROL_GROUPS for k in keys)),
+    ("control", "mdi:tune-variant",
+     (_OVERRIDES, *(k for _id, _icon, keys in _CONTROL_GROUPS for k in keys))),
     *_READINGS,
     *_TECHNICAL,
 )
@@ -293,6 +303,7 @@ TEXT = {
         "values": "Alla värden",
         "display": "Displayvärden",
         "status": "Drift",
+        "overrides": "Styrs från Home Assistant",
         "quick": "Snabbstyrning",
         "readings": "Nyckeltal",
         "temperatures": "Temperaturer",
@@ -367,6 +378,7 @@ TEXT = {
         "values": "All values",
         "display": "Display values",
         "status": "Operation",
+        "overrides": "Held by Home Assistant",
         "quick": "Quick controls",
         "readings": "Key readings",
         "temperatures": "Temperatures",
@@ -794,6 +806,7 @@ def overview_sections(
         # The whole width: a line of chips reads as one line.
         _section(_heading(str(pump.get("name") or TITLE), ICON),
                  [build.chips(_STATUS_TILES + _STATUS_ROWS)], column_span=4),
+        _overrides_section(build, text),
         _section(_heading(text["quick"], "mdi:tune-variant"),
                  [build.controls(_QUICK_CONTROLS)]),
         # Twice the width of a column: a day of five lines, or of three bands
@@ -803,6 +816,33 @@ def overview_sections(
                  [build.readings(_KEY_READINGS)], column_span=4),
     ]
     return [section for section in sections if section]
+
+
+def _overrides_section(build: _Builder, text: Mapping[str, str]) -> dict[str, Any] | None:
+    """What Home Assistant holds in the pump, while it holds anything (R49).
+
+    The count of held registers as a chip, and beside it the button that lets
+    go of all of them, under a heading of their own. Both show only while the
+    count is above zero, so the section, which hides when every card in it
+    does, is not there at all while the pump follows its own settings: a
+    keepalive that stops lets go of everything, and that is worth seeing at a
+    glance, but an empty "nothing held" is not. Without the sensor, as with
+    control switched off, there is no section.
+    """
+    entity_id = build.entity_id(_OVERRIDES)
+    if entity_id is None:
+        return None
+    held = [{"condition": "numeric_state", "entity": entity_id, "above": 0}]
+    chips = build.chips((_OVERRIDES,))
+    if chips is None:
+        return None
+    for item in chips["items"]:
+        item["color"] = _OVERRIDES_COLOUR
+    chips["visibility"] = list(held)
+    release = build.controls((_RELEASE_ALL,))
+    if release is not None:
+        release["visibility"] = list(held)
+    return _section(_heading(text["overrides"], "mdi:hand-back-left-outline"), [chips, release])
 
 
 def _graph_section(

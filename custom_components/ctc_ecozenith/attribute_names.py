@@ -7,12 +7,17 @@ them now has an English twin carrying the same value, sent beside it for a
 version so that whatever reads the old name has time to move; the Swedish names
 go in the next major version, and the README has the table from old to new.
 
-Two twins are not a copy. ``control_active`` is a boolean where ``styrning
+Three twins are not a copy. ``control_active`` is a boolean where ``styrning
 aktiv`` says "ja" or "nej", since a key meant for code should not have to be
-compared with a Swedish word, and the episodes under ``episodes`` carry English
-keys inside as well (:data:`EPISODE_KEYS`), so the list does not have to be
+compared with a Swedish word, and the episodes under ``episodes`` and the
+overrides under ``overrides`` carry English keys inside as well
+(:data:`EPISODE_KEYS`, :data:`OVERRIDE_KEYS`), so the lists do not have to be
 renamed a second time. The values that are text, a reason or what a figure
 rests on, stay the integration's Swedish text under both names.
+
+``pumpens värde`` and ``styrningar`` came with roadmap R49 and were given
+their twins from the start: the pump's own value beside a control, and what
+the sensor Aktiva överstyrningar holds.
 
 Free of Home Assistant, so the names can be checked without an installation.
 """
@@ -39,6 +44,8 @@ ENGLISH: Final[dict[str, str]] = {
     "gäller till": "valid_until",
     "styrning aktiv": "control_active",
     "episoder": "episodes",
+    "pumpens värde": "pump_value",
+    "styrningar": "overrides",
 }
 
 #: The keys inside each alarm episode, Swedish to English, for ``episodes``.
@@ -48,6 +55,15 @@ EPISODE_KEYS: Final[dict[str, str]] = {
     "start": "start",
     "slut": "end",
     "utetemperatur": "outdoor_temperature",
+}
+
+#: The keys inside each override the sensor Aktiva överstyrningar lists,
+#: Swedish to English, for ``overrides`` (roadmap R49).
+OVERRIDE_KEYS: Final[dict[str, str]] = {
+    "namn": "name",
+    "register": "register",
+    "värde": "value",
+    "senast skriven": "last_written",
 }
 
 
@@ -72,3 +88,8 @@ def with_english(attributes: Mapping[str, Any] | None) -> dict[str, Any] | None:
 def episode_in_english(episode: Mapping[str, Any]) -> dict[str, Any]:
     """One alarm episode as ``episodes`` carries it, under English keys."""
     return {EPISODE_KEYS.get(key, key): value for key, value in episode.items()}
+
+
+def override_in_english(override: Mapping[str, Any]) -> dict[str, Any]:
+    """One override as ``overrides`` carries it, under English keys."""
+    return {OVERRIDE_KEYS.get(key, key): value for key, value in override.items()}
