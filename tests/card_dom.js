@@ -114,6 +114,11 @@ class Element {
     }
   }
 
+  /** What element.click() does in a browser: a click, unless it is disabled. */
+  click() {
+    if (!this.disabled) this.fire("click");
+  }
+
   getRootNode() {
     let node = this;
     while (node.parentNode) node = node.parentNode;

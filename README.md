@@ -425,8 +425,11 @@ panel answers it from the same small web server the integration harvests from.
 explanation out underneath: what the value is, where it comes from, a Modbus
 register and whether it is a stored setting or a volatile control register, or
 the display page and how often it is read, and a link to Home Assistant's own
-dialog for the entity. The name explains itself when tapped too, and on hover,
-and on a tile the icon still opens that dialog directly. The explanations come
+dialog for the entity. In the list a tap anywhere on the row does the same. The
+ⓘ is the one way in for the keyboard and a screen reader too: a button of its
+own, one tab stop per value, which says whether its explanation is open and
+which text it opens, and the name carries no hover text that would read the
+explanation a second time. The explanations come
 from CTC's BMS manual and CTC's own description of the operation data rows, and
 say so where a register's meaning is not confirmed on a running unit. They are
 in Swedish, like the entity names.

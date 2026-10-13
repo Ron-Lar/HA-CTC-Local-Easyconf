@@ -15,8 +15,10 @@
  *
  * Every value carries a blue "i" right after its name. It writes the explanation out
  * underneath, together with where the value comes from and a way into Home Assistant's
- * own dialog for the entity, which is what the NIBE page settled on. The explanation
- * is also the hover text, since a hover alone never reaches a phone or a screen reader.
+ * own dialog for the entity, which is what the NIBE page settled on. The "i" is the
+ * one toggle for its note (R41): a button, with aria-expanded and aria-controls
+ * pointing at the note, and no hover text on the name, which made a screen reader
+ * read every explanation twice. In the list a click on the row is passed on to it.
  * Every string goes into the page as text, never as HTML.
  *
  * The pure helpers at the top of the closure are what decides a write, which
@@ -141,14 +143,18 @@
       flex: none; background: none; border: none; padding: 0 2px; cursor: pointer;
       color: var(--primary-color, #03a9f4); font: inherit; line-height: 1;
     }
+    /* R41: a focus ring that can be seen, 2 px like the NIBE card's tabs. */
     .why:focus-visible {
-      outline: 1px solid var(--primary-color, #03a9f4); outline-offset: 2px; border-radius: 50%;
+      outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 2px; border-radius: 50%;
     }
     .note {
       color: var(--secondary-text-color); font-size: .85em; line-height: 1.45; padding-top: 4px;
     }
     .note .meta { display: block; margin-top: 4px; font-size: .9em; opacity: .85; }
     .note a { color: var(--primary-color); cursor: pointer; text-decoration: underline; }
+    .note a:focus-visible {
+      outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 2px; border-radius: 2px;
+    }
   `;
 
   function moreInfo(element, entityId) {
@@ -157,14 +163,27 @@
     );
   }
 
+  //: R41: the buttons that open each note, so that every one of them can say
+  //: whether it is open. A control's note has two: the "i" after its name and
+  //: the one beside a control without a value.
+  const TOGGLES = new WeakMap();
+  //: How many notes have been given an id, for the next one's.
+  let noteIds = 0;
+
   /** The blue "i" that opens an explanation. Every value the page shows has one:
-   *  a value is only worth reading if you know what it is. */
-  function explainButton(label, toggle) {
+   *  a value is only worth reading if you know what it is. It is the one
+   *  toggle for its note (R41), and says so: aria-controls names the note,
+   *  which gets an id of its own here, and aria-expanded follows it. */
+  function explainButton(label, note, toggle) {
     const why = document.createElement("button");
     why.className = "why";
     why.type = "button";
     why.textContent = "ⓘ";
     why.setAttribute("aria-label", label || "Explanation");
+    if (!note.id) note.id = `ctc-ecozenith-note-${++noteIds}`;
+    why.setAttribute("aria-controls", note.id);
+    why.setAttribute("aria-expanded", String(!note.hidden));
+    TOGGLES.set(note, [...(TOGGLES.get(note) || []), why]);
     why.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -221,15 +240,15 @@
       return card;
     }
 
-    /** The name, the "i" after it, and the note the "i" opens. */
+    /** The name, the "i" after it, and the note the "i" opens. The name has
+     *  no hover text: the "i" is the way in (R41). */
     _named(item, note, tag = "span") {
       const name = document.createElement(tag);
       name.className = "label";
       name.append(item.name || item.entity);
       if (item.explanation) {
-        name.title = item.explanation;
         name.appendChild(
-          explainButton(this._config.explain, () => this._toggle(item, note))
+          explainButton(this._config.explain, note, () => this._toggle(item, note))
         );
       }
       return name;
@@ -242,11 +261,21 @@
       this._fill(note, item, open);
     }
 
+    /** Close a note whose value has left the screen, so that it is closed,
+     *  and says so, when the value comes back. */
+    _shut(item, note) {
+      if (note.hidden && !this._open.has(item.entity)) return;
+      this._open.delete(item.entity);
+      this._fill(note, item, false);
+    }
+
     /** The explanation, then where the value comes from and a way to its dialog. */
     _fill(note, item, open) {
       note.hidden = !open;
+      for (const why of TOGGLES.get(note) || []) why.setAttribute("aria-expanded", String(open));
       if (!open) return;
       note.replaceChildren();
+      this._lead(note, item);
       note.append(item.explanation || "");
       this._more(note, item);
       const meta = document.createElement("span");
@@ -268,6 +297,10 @@
       meta.appendChild(link);
       note.appendChild(meta);
     }
+
+    /** What a card puts before the explanation: nothing, unless its notes
+     *  stand apart from their values. */
+    _lead(note, item) {}  // eslint-disable-line no-unused-vars
 
     /** What a card adds to a note between the explanation and the source:
      *  nothing, unless the card has something to say about this very value. */
@@ -347,7 +380,10 @@
     }
     .chip .label { color: var(--secondary-text-color); font-size: .8em; }
     .chip .value { color: var(--primary-text-color); font-weight: 500; }
-    .chips + .note { padding-top: 10px; }
+    /* R41: a note per chip, under the line in the chips' order, each led by
+       its chip's name, since two can be open at once. */
+    .notes .note { padding-top: 8px; }
+    .notes .lead { color: var(--primary-text-color); font-weight: 500; }
     /* R36: a boolean chip is only on the line while it is on, in the theme's
        colour for what it means: an alarm red, a block or SmartGrid amber, a
        defrost blue, a running compressor or heater green. The alarm chip is a
@@ -387,21 +423,35 @@
       const card = this._shell();
       const strip = document.createElement("div");
       strip.className = "chips";
-      const note = document.createElement("div");
-      note.className = "note";
-      note.hidden = true;
+      // R41: a note per chip. They shared one, while what is open was kept per
+      // entity, so the "i" of a second chip left the first one's text open.
+      const notes = document.createElement("div");
+      notes.className = "notes";
       this._items = (this._config.items || []).map((item) => {
         const chip = document.createElement("div");
         chip.className = "chip";
         // R36: the colour of what the chip means, from the page's YAML.
         if (item.color) chip.dataset.color = String(item.color);
+        const note = document.createElement("div");
+        note.className = "note";
+        note.hidden = true;
         const value = document.createElement("span");
         value.className = "value";
         chip.append(this._named(item, note), value);
         strip.appendChild(chip);
-        return { item, chip, value };
+        notes.appendChild(note);
+        return { item, chip, value, note };
       });
-      card.append(strip, note);
+      card.append(strip, notes);
+    }
+
+    /** The chip's name before its explanation: the notes stand under the
+     *  line, and two of them can be open at once. */
+    _lead(note, item) {
+      const lead = document.createElement("span");
+      lead.className = "lead";
+      lead.textContent = `${item.name || item.entity}: `;
+      note.appendChild(lead);
     }
 
     _update() {
@@ -413,6 +463,7 @@
         const off = row.item.on_state !== undefined
           && (!stateObj || stateObj.state !== String(row.item.on_state));
         row.chip.hidden = off || this._missing(row.item);
+        if (row.chip.hidden) this._shut(row.item, row.note);
         // The chip is its name and then the page's word for the state. A
         // word that is the name over again is not written twice: an alarm
         // chip named "Larm" whose word for on is "Larm" reads "Larm" once,
@@ -683,7 +734,7 @@
       // set it there, and whoever dragged it wrote a value they never meant.
       // The row is marked unset instead: the style hides the knob and dims the
       // track, the reading says so, and an "i" beside it opens the row's note.
-      const why = explainButton(this._config.explain, () => this._toggle(item, note));
+      const why = explainButton(this._config.explain, note, () => this._toggle(item, note));
       why.hidden = true;
       const mark = (unset) => {
         container.dataset.unset = unset ? "1" : "0";
@@ -844,7 +895,8 @@
       padding: 9px 4px; border-bottom: 1px solid var(--divider-color, #eee);
       border-radius: 4px; cursor: pointer;
     }
-    .row:hover, .row:focus-visible { background: var(--secondary-background-color, #f5f5f5); outline: none; }
+    /* The row is no tab stop of its own (R41): its "i" is, with its own ring. */
+    .row:hover { background: var(--secondary-background-color, #f5f5f5); }
     .row .label { color: var(--primary-text-color); overflow-wrap: anywhere; }
     .value { color: var(--primary-text-color); font-weight: 500; white-space: nowrap; text-align: right; }
     /* R35: what a figure rests on, or why there is none, under its row. */
@@ -920,9 +972,6 @@
     _row(item) {
       const element = document.createElement("div");
       element.className = "row";
-      element.tabIndex = 0;
-      element.setAttribute("role", "button");
-      element.setAttribute("aria-expanded", "false");
       const note = document.createElement("div");
       note.className = "note";
       note.hidden = true;
@@ -937,16 +986,14 @@
         element.appendChild(sub);
       }
       element.appendChild(note);
-      const toggle = () => {
-        this._toggle(item, note);
-        element.setAttribute("aria-expanded", String(!note.hidden));
-      };
-      element.addEventListener("click", toggle);
-      element.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          toggle();
-        }
+      // R41: the "i" is the one toggle, for a screen reader and for Tab, where
+      // the row was a second one with a tab stop of its own, 120 of them on
+      // All values. A click anywhere else on the row is passed on to the "i",
+      // so a finger or a mouse still opens the note from the whole row. The
+      // "i" and the note's link stop their own clicks from reaching the row.
+      element.addEventListener("click", () => {
+        const why = (TOGGLES.get(note) || [])[0];
+        if (why) why.click();
       });
       return { item, element, note, value, sub, seen: undefined, gone: false };
     }
@@ -972,7 +1019,7 @@
       for (const row of this._items) {
         const hidden = row.gone || !this._matches(row);
         row.element.hidden = hidden;
-        if (hidden) row.note.hidden = true;
+        if (hidden) this._shut(row.item, row.note);
         else shown += 1;
       }
       // A heading with nothing under it says nothing.
