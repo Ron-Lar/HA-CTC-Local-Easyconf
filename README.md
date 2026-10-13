@@ -16,13 +16,15 @@ Pro, the two units it was built against, and on EcoZenith i360 units in
 installations that send the anonymous statistics. Other CTC controllers with
 the same BMS register map may well work, but none has been seen yet; one the
 integration does not know is named after the family in its display's settings
-file, as described under [Setup](#setup).
+file, as described under
+[Setup](https://github.com/beolink/HA-CTC-Local-Easyconf#setup).
 
 ## Install
 
 It needs Home Assistant 2026.5 or later, and Modbus TCP switched on at the
 panel, with the display's web interface beside it for the values only the
-display has; [Setup](#setup) says where on the panel.
+display has; [Setup](https://github.com/beolink/HA-CTC-Local-Easyconf#setup)
+says where on the panel.
 
 **With HACS.** Until the integration is in HACS's default list, add it as a
 custom repository: in HACS, the three dots at the top right, *Custom
@@ -41,10 +43,12 @@ integration says in the repairs view when a newer release is out.
 
 **Afterwards** it is found under *Settings, Devices and services, Add
 integration*, by searching for *CTC Local Easyconf*, and the set-up first asks
-how to find the heat pump; see [Setup](#setup). Once it is set up, the heat
-pump is a device under *Settings, Devices and services, CTC Local Easyconf*,
-its options are under *Configure* on the same page (see [Options](#options)),
-and the **CTC** page is in the sidebar. Home Assistant installs the one library
+how to find the heat pump; see
+[Setup](https://github.com/beolink/HA-CTC-Local-Easyconf#setup). Once it is
+set up, the heat pump is a device under *Settings, Devices and services, CTC
+Local Easyconf*, its options are under *Configure* on the same page (see
+[Options](https://github.com/beolink/HA-CTC-Local-Easyconf#options)), and the
+**CTC** page is in the sidebar. Home Assistant installs the one library
 the integration needs, pymodbus, by itself.
 
 ## What it reads
@@ -251,10 +255,11 @@ every form of them, on both models tested.
    than that it found nothing. **Enter an address** skips the search; use it if
    yours is on another subnet, or the search finds nothing.
 3. Tick the display pages you want harvested. The menu is read from the unit
-   itself, so the list matches your model and your installed options, in your
-   own language. Everything is ticked to begin with; switch off what you do not
-   want. For the coefficient of performance, keep the page with the stored or
-   historical operation data.
+   itself, so the list matches your model and your installed options. The
+   titles are the display's own, in Swedish, the language the integration reads
+   the display in, whatever the panel is set to. Everything is ticked to begin
+   with; switch off what you do not want. For the coefficient of performance,
+   keep the page with the stored or historical operation data.
 
 **When Modbus does not answer.** If the display answers and Modbus does not, a
 step of its own says where on the panel Modbus TCP is turned on, and takes the
@@ -372,15 +377,15 @@ the form reloads the entry.
 | Modbus interval | 30 s, from 10 to 600 | How often the Modbus registers are read. |
 | Display interval | 1800 s, from 300 to 21600 | How often the ticked pages are harvested; every harvest walks the physical panel, which is why it is slow. |
 | Put the panel back afterwards | on | Returns the panel to the page it was found on after a harvest. |
-| Allow controlling the heat pump | on | Creates the controls, which write only to the volatile 1000 block; see [Control](#control). |
-| Let the integration open System information on the panel | on | The one walk to the page with the serial number and the display's software version; see [Setup](#setup). |
+| Allow controlling the heat pump | on | Creates the controls, which write only to the volatile 1000 block; see [Control](https://github.com/beolink/HA-CTC-Local-Easyconf#control). |
+| Let the integration open System information on the panel | on | The one walk to the page with the serial number and the display's software version; see [Setup](https://github.com/beolink/HA-CTC-Local-Easyconf#setup). |
 | Tell me when a new version is released | on | Asks GitHub once a day and says so in the repairs view. |
-| Send anonymous usage statistics | on | One report a day; see [Anonymous statistics](#anonymous-statistics). Switching it off erases what was sent. |
-| Read the display's menu again | off | Walks the menu now and offers the pages again on the next form; see [The catch with the display](#the-catch-with-the-display-and-what-the-integration-does-about-it). |
+| Send anonymous usage statistics | on | One report a day; see [Anonymous statistics](https://github.com/beolink/HA-CTC-Local-Easyconf#anonymous-statistics). Switching it off erases what was sent. |
+| Read the display's menu again | off | Walks the menu now and offers the pages again on the next form; see [The catch with the display](https://github.com/beolink/HA-CTC-Local-Easyconf#the-catch-with-the-display-and-what-the-integration-does-about-it). |
 
 The address, the ports and the Modbus address are not options: see the end of
-[Setup](#setup) for how a new address is followed and how the ports are
-changed.
+[Setup](https://github.com/beolink/HA-CTC-Local-Easyconf#setup) for how a new
+address is followed and how the ports are changed.
 
 ## Network and exposure
 
@@ -612,12 +617,14 @@ add one pair, never both, and by default the Modbus pair is read every half
 minute rather than every half hour. Not every controller keeps them: an i550 Pro has
 been seen with 62341 standing at zero.
 
-The display's *Avgiven värme totalt* is a counter in kWh too, and Home
-Assistant offers it in the same list, but it is the heat the pump has given
-off, not electricity it has used, several times as much on any day the pump
-works well. Added as a device it books the pump's whole output as consumption.
-It is what the coefficient of performance divides by the consumption, which
-the integration does for you.
+The display's history page also counts the heat the pump has delivered, in a
+row called *Avgiven värme totalt*, or *Avgiven energi* on older display
+software, which by CTC's manual is what the i360 has. Whatever the row is
+called, it is a counter in kWh too, and Home Assistant offers it in the same
+list, but it is the heat the pump has given off, not electricity it has used,
+several times as much on any day the pump works well. Added as a device it
+books the pump's whole output as consumption. It is what the coefficient of
+performance divides by the consumption, which the integration does for you.
 
 ## Control
 
@@ -890,7 +897,7 @@ week and a month are not sent.
 An indoor unit the integration does not know yet is reported as "other", which
 says nothing about what turned up. For those alone the report adds a flag
 named after the family code in the name of the display's settings file, such
-as `family_ezi3xx`, so a new kind of controller is seen when its first owner
+as `family_ezi4xx`, so a new kind of controller is seen when its first owner
 installs the integration rather than when somebody files an issue. The code is
 sent only when it is two to sixteen lowercase letters and digits and nothing
 else; a known model sends no such flag.
@@ -985,14 +992,17 @@ view. The CTC page leaves the sidebar with the last heat pump. Nothing is
 written to the pump on the way: whatever Home Assistant held, the controller
 lets go of by itself about five minutes after the last write.
 
-Two things stay behind. The card script's entry among the dashboards'
+Three things stay behind. The card script's entry among the dashboards'
 resources, `/ctc_ecozenith/ctc-ecozenith-card.js`, is deleted under *Settings,
 Dashboards*, the three dots at the top right, *Resources*, which shows with
 advanced mode switched on in your user profile; the integration's cards on a
-dashboard of your own are deleted from that dashboard. And what the anonymous
+dashboard of your own are deleted from that dashboard. What the anonymous
 statistics have already sent: removing the integration only stops the reports,
 so switch *Send anonymous usage statistics* off under *Configure* first if you
-want that erased.
+want that erased. And the file `config/.storage/ctc_ecozenith.stats`, which
+holds the installation's random id for those reports, one for all heat pumps
+together: delete it by hand once the last heat pump is removed, or an
+installation of the integration later on reports under the same id.
 
 Then remove the files, through HACS (the integration's three dots, *Remove*)
 or by deleting `config/custom_components/ctc_ecozenith`, and restart Home

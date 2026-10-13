@@ -46,7 +46,7 @@ rules:
     comment: README, Install, through HACS as a custom repository or by hand, with the Home Assistant it needs and where it is found afterwards; Setup goes on from there.
   docs-removal-instructions:
     status: done
-    comment: README, Removing the integration, with what the integration deletes and the two things that stay behind.
+    comment: README, Removing the integration, with what the integration deletes and the three things that stay behind, the card resource, what the statistics already sent and .storage/ctc_ecozenith.stats with the installation's random id.
   docs-triggers:
     status: exempt
     comment: The integration provides no triggers; the event entity Händelser is described under What it reads.
