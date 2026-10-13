@@ -41,6 +41,7 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node not i
 STATES = {
     "on": "Till", "off": "Av", "problem_on": "Utlöst", "problem_off": "OK",
     "unset": "ej satt", "unset_note": "Pumpen lämnar inte ut sitt eget värde här.",
+    "unread": "ej läst", "unread_note": "Pumpens eget värde gick inte att läsa.",
     "no_limit": "ingen gräns",
 }
 
@@ -262,6 +263,33 @@ def test_the_stub_writes_a_range_value_back_the_way_a_browser_does():
       if (shortest !== "40" || middle !== "47.5") throw new Error(JSON.stringify({shortest, middle}));
       t.state("55");
     """, "number.dhw", "unknown", DHW)["value"] == "55"
+
+
+def test_a_mirrored_slider_whose_own_value_did_not_answer_says_not_read_and_why():
+    # F2.1: the top speed stays available through a lost Modbus round, idle
+    # and unknown, with pump_value carried but empty. It is drawn empty like
+    # an unset one, but reads "ej läst", and its note says the read failed
+    # rather than that the pump never gives the value out.
+    unread = dict(RPS, pump_value=None)
+    assert _play("""
+      t.why.fire("click");
+      const says = t.note.children.map((e) => e.textContent);
+      if (!says.includes(UNREAD_NOTE)) throw new Error("the note does not say why: " + JSON.stringify(says));
+      if (says.includes(UNSET_NOTE)) throw new Error("the note says not set: " + JSON.stringify(says));
+      t.why.fire("click");
+    """.replace("UNREAD_NOTE", json.dumps(STATES["unread_note"]))
+       .replace("UNSET_NOTE", json.dumps(STATES["unset_note"])),
+        "number.rps", "unknown", unread) == {
+        "unset": "1", "pending": "0", "value": "0", "text": "ej läst", "why": True,
+        "placeholder": "", "calls": [],
+    }
+    # The next round answers: the pump's own value is back, and so is the knob.
+    assert _play("t.state('50.0', {'pump_value': 50});", "number.rps", "unknown", unread) == {
+        "unset": "0", "pending": "0", "value": "50", "text": "50.0 rps", "why": False,
+        "placeholder": "", "calls": [],
+    }
+    # As a field, the word is the placeholder.
+    assert _play("", "number.rps", "unknown", unread, widget="field")["placeholder"] == "ej läst"
 
 
 def test_a_slider_with_a_value_is_drawn_as_before():

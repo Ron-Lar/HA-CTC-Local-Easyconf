@@ -104,7 +104,9 @@
       const deviceClass = attributes.device_class;
       return (deviceClass && states[`${deviceClass}_${state}`]) || states[state];
     }
-    if (CONTROL_DOMAINS.has(domain) && state === "unknown") return states.unset;
+    if (CONTROL_DOMAINS.has(domain) && state === "unknown") {
+      return (unread(attributes) && states.unread) || states.unset;
+    }
     if (unknownMeans && state === "unknown") return states[unknownMeans];
     if (zeroMeans && parseFieldValue(state) === 0 && !controlActive(attributes)) {
       return states[zeroMeans];
@@ -131,6 +133,18 @@
       if (value !== undefined && value !== null && String(value) !== "") return value;
     }
     return undefined;
+  }
+
+  /** F2.1, F2.3: whether a control's own value could not be read just now.
+   *  A number or list with a mirror carries pump_value also when the mirror
+   *  did not answer, empty, and stays available through a lost Modbus round
+   *  with the state unknown, while one without a mirror, the hot water
+   *  setpoint, carries no pump_value at all and is unknown until something is
+   *  written. The two read "not read" and "not set", each with its own note. */
+  function unread(attributes) {
+    const carried = ["pump_value", "pumpens värde"].some(
+      (name) => Object.prototype.hasOwnProperty.call(attributes, name));
+    return carried && pumpValue(attributes) === undefined;
   }
 
   /** Whether two values say the same: as numbers where both are numbers, so
@@ -824,14 +838,18 @@
     }
 
     /** A control without a value says why in its note: the pump does not give
-     *  out its own value here, so nothing is set until Home Assistant writes. */
+     *  out its own value here, so nothing is set until Home Assistant writes,
+     *  or, for one with a mirror, the pump's value could not be read just now
+     *  (F2.1, F2.3). A page from before the second note says the first. */
     _more(note, item) {
       const stateObj = this._state(item.entity);
+      if (!stateObj || stateObj.state !== "unknown") return;
       const states = this._config.states || {};
-      if (!stateObj || stateObj.state !== "unknown" || !states.unset_note) return;
+      const text = (unread(stateObj.attributes || {}) && states.unread_note) || states.unset_note;
+      if (!text) return;
       const why = document.createElement("span");
       why.className = "meta";
-      why.textContent = states.unset_note;
+      why.textContent = text;
       note.appendChild(why);
     }
 
@@ -978,7 +996,9 @@
       const step = Number(attributes.step) || 1;
       const states = this._config.states || {};
       // A number without a value yet: the hot water setpoint has no mirror
-      // register, so it is unknown until something is written. The browser
+      // register, so it is unknown until something is written, and one with a
+      // mirror is unknown while idle through a Modbus round that was lost
+      // (F2.1), which the reading and the note then say instead. The browser
       // would draw its slider with the knob in the middle, as if someone had
       // set it there, and whoever dragged it wrote a value they never meant.
       // The row is marked unset instead: the style hides the knob and dims the
@@ -1116,8 +1136,11 @@
           shown = Number(stateObj.state);
           if (String(field.value) === String(stateObj.state)) container.dataset.pending = "0";
         }
-        // The number input holds "" for unknown; the placeholder says what that is.
-        field.placeholder = unset && states.unset ? states.unset : "";
+        // The number input holds "" for unknown; the placeholder says what that
+        // is, not set or not read.
+        field.placeholder = unset
+          ? (unread(stateObj.attributes || {}) && states.unread) || states.unset || ""
+          : "";
         mark(unset);
         field.disabled = stateObj.state === "unavailable";
       };

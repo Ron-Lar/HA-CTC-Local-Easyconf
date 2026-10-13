@@ -365,6 +365,13 @@ TEXT = {
             "Pumpen lämnar inte ut sitt eget värde här, så reglaget står tomt tills "
             "Home Assistant har skrivit ett."
         ),
+        # A control with a mirror whose own value did not answer in the last
+        # Modbus round (F2.1, F2.3): unknown as well, but for another reason.
+        "state_unread": "ej läst",
+        "state_unread_note": (
+            "Pumpens eget värde gick inte att läsa i den senaste omgången och syns igen när "
+            "nästa läsning svarar. Ett värde som sätts nu skickas ändå till pumpen."
+        ),
         "state_no_limit": "ingen gräns",
         # A value unknown because nothing has happened yet, in the words of
         # what has not happened (_NONE_YET): the full list shows the row
@@ -448,6 +455,11 @@ TEXT = {
         "state_unset_note": (
             "The pump does not give out its own value here, so the control stays empty "
             "until Home Assistant has written one."
+        ),
+        "state_unread": "not read",
+        "state_unread_note": (
+            "The pump's own value could not be read in the last round and shows again when "
+            "the next read answers. A value set now is still sent to the pump."
         ),
         "state_no_limit": "no limit",
         "state_none_alarm": "no alarm yet",

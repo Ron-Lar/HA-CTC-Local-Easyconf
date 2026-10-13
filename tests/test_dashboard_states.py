@@ -29,10 +29,10 @@ def _value_cards(config):
 def test_the_words_are_the_text_tables_state_entries_without_the_prefix(dashboard_views):
     sv = dashboard_views.state_words(dashboard_views.TEXT["sv"])
     en = dashboard_views.state_words(dashboard_views.TEXT["en"])
-    notes = ("unset_note", "controlled_note")
+    notes = ("unset_note", "unread_note", "controlled_note")
     assert {k: v for k, v in sv.items() if k not in notes} == {
         "on": "Till", "off": "Av", "problem_on": "Utlöst", "problem_off": "OK",
-        "unset": "ej satt", "no_limit": "ingen gräns",
+        "unset": "ej satt", "unread": "ej läst", "no_limit": "ingen gräns",
         "none_alarm": "inget larm ännu", "none_event": "ingen händelse ännu",
         "none_start": "ingen start ännu", "none_run": "ingen körning ännu",
         "none_defrost": "ingen avfrostning ännu",
@@ -40,7 +40,7 @@ def test_the_words_are_the_text_tables_state_entries_without_the_prefix(dashboar
     }
     assert {k: v for k, v in en.items() if k not in notes} == {
         "on": "On", "off": "Off", "problem_on": "Raised", "problem_off": "OK",
-        "unset": "not set", "no_limit": "no limit",
+        "unset": "not set", "unread": "not read", "no_limit": "no limit",
         "none_alarm": "no alarm yet", "none_event": "no event yet",
         "none_start": "no start yet", "none_run": "no run yet",
         "none_defrost": "no defrost yet",
@@ -49,6 +49,9 @@ def test_the_words_are_the_text_tables_state_entries_without_the_prefix(dashboar
     # The note the "i" beside "ej satt" opens: why there is no value.
     assert sv["unset_note"].startswith("Pumpen lämnar inte ut sitt eget värde här")
     assert en["unset_note"].startswith("The pump does not give out its own value here")
+    # F2.1, F2.3: the note beside "ej läst", a mirror that did not answer.
+    assert sv["unread_note"].startswith("Pumpens eget värde gick inte att läsa")
+    assert en["unread_note"].startswith("The pump's own value could not be read")
     # R49: the hover text on "Styrd", the keepalive in one sentence.
     assert sv["controlled_note"].startswith("Home Assistant håller värdet")
     assert en["controlled_note"].startswith("Home Assistant holds this value")
