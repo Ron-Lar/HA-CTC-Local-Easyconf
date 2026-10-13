@@ -1,9 +1,18 @@
 name: Release
 
 # A tag vX.Y.Z that names manifest.json's version makes the GitHub release
-# HACS installs from, titled "CTC Local Easyconf vX.Y.Z" (roadmap R73):
+# HACS installs from, titled "CTC Local Easyconf vX.Y.Z" (roadmap R73). The
+# release waits for the whole of validate.yaml on the tagged commit: hassfest,
+# HACS, ruff, the test matrix, and a real Home Assistant on the houses' release
+# and on the floor in hacs.json. The tag must be on main, so main and the tag
+# go up in one push, both or neither:
 #
-#   git tag -a v0.21.0 -F notes.md && git push origin v0.21.0
+#   git tag -a --cleanup=whitespace v0.21.0 -F notes.md && git push --atomic origin main v0.21.0
+#
+# --cleanup=whitespace keeps the lines of notes.md that start with #, such as
+# Markdown headings, which git tag otherwise strips as comments. Not verbatim:
+# a signed tag whose notes.md has no final newline would then carry the
+# signature into the notes.
 #
 # The notes are the annotated tag's message when it says more than one line,
 # else the subjects of the commits since the tag before (release_notes.py).
@@ -21,10 +30,13 @@ permissions:
 
 jobs:
   check:
-    name: the tag names the manifest's version and the tests pass
+    name: the tag names the manifest's version, is on main, and the tests pass
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Every branch as origin/*, so that origin/main is there to test.
+          fetch-depth: 0
       - name: The tag names the manifest's version
         run: |
           manifest=$(python3 -c 'import json; print(json.load(open("custom_components/ctc_ecozenith/manifest.json"))["version"])')
@@ -32,15 +44,25 @@ jobs:
             echo "::error::the tag ${GITHUB_REF_NAME} is not manifest.json's version ${manifest}"
             exit 1
           fi
+      # HEAD is the tagged commit as checked out. GITHUB_SHA is not what is
+      # tested, so it never matters whether it names an annotated tag's object.
+      - name: The tag is on main
+        run: git merge-base --is-ancestor HEAD origin/main || { echo "::error::the tag ${GITHUB_REF_NAME} is not on main, push main first"; exit 1; }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
       - run: pip install -r requirements-test.txt
       - run: pytest -q
 
+  validate:
+    name: the whole validation
+    # The jobs a push to main runs, read from the tagged commit, with the
+    # read-only token this file gives every job that asks for nothing more.
+    uses: ./.github/workflows/validate.yaml
+
   release:
     name: the release, unless it exists already
-    needs: check
+    needs: [check, validate]
     runs-on: ubuntu-latest
     permissions:
       contents: write
