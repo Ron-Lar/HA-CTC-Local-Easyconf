@@ -444,7 +444,9 @@ explanation out underneath: what the value is, where it comes from, a Modbus
 register and whether it is a stored setting or a volatile control register, or
 the display page, the screen and the row's place on it, and how often it is
 read, and a link to Home Assistant's own
-dialog for the entity. In the list a tap anywhere on the row does the same. The
+dialog for the entity. In the list a tap anywhere on the row does the same; a
+row without an explanation, in a list written by hand or started from the card
+picker, opens Home Assistant's dialog for the entity instead. The
 ⓘ is the one way in for the keyboard and a screen reader too: a button of its
 own, one tab stop per value, which says whether its explanation is open and
 which text it opens, and the name carries no hover text that would read the
@@ -568,7 +570,8 @@ The controls stay available when a Modbus round fails, so a value or a mode
 set from an action in that moment is written rather than skipped, and a held
 control keeps its attributes. A round that failed only takes the pump's own
 value away: an idle control that shows it then shows *unknown* until the next
-round answers.
+round answers, which the CTC page writes as *ej läst* (*not read*) rather than
+*ej satt*.
 
 Every control says whether it is held, in *control_active*, and a control
 with a stored setting beside it also carries the pump's own value, in
@@ -633,8 +636,14 @@ control registers, and the first writes nothing at all.
   it back, so it is not something to run on a timer. A panel that is in use
   right now, because the integration is reading it or walking it, is answered
   with an error at once rather than waited for, and a reading that does not get
-  the whole menu changes nothing. An entry set up on Modbus alone has no menu
-  and is refused.
+  the whole menu changes nothing, as does one whose heat pump is reloaded or
+  unloaded while its menu is read. Over several heat pumps, an answer where
+  some were read and others not names all three kinds, those read, those whose
+  panel was in use and those whose menu was not read whole, so the others can
+  be asked for again with `config_entry_id` rather than walking a panel that
+  was just read, and one where none was read keeps the panels in use apart from
+  the menus not read whole. An entry set up on Modbus alone has no menu and is
+  refused.
 
 - **`ctc_ecozenith.cop_sample`** writes the two lifetime energy counters down as
   a sample of the coefficient of performance now, rather than at the next six
