@@ -105,7 +105,7 @@ class FakePanel:
 
 SYSTEM_ROWS = [
     ("Serienummer", "Serial number", "720825400001"),
-    ("MAC-adress", "MAC address", "02:00:00:12:34:56"),
+    ("MAC-adress", "MAC address", "02:00:00:00:00:01"),
     ("Programversion", "Program version", "20260610"),
     ("Bootloaderversion", "Bootloader version", "1.7"),
 ]

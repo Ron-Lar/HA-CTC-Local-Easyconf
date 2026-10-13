@@ -112,7 +112,7 @@ def mac_hex(text: Any) -> str | None:
 
 
 def mac_address(text: Any) -> str | None:
-    """A MAC address the way the device registry writes it, "02:00:00:00:00:0e"."""
+    """A MAC address the way the device registry writes it, "02:00:00:00:00:01"."""
     digits = mac_hex(text)
     if digits is None:
         return None

@@ -174,8 +174,8 @@ def test_an_entry_set_up_by_name_or_ipv6_is_where_it_is(host):
     # DNS follows the unit, and DHCP hands out no IPv6 address: the lease's
     # address is no news, and moving the entry there would reload it with a
     # second client knocking on the same pump.
-    known = [keys.Known("e1", host, "02:00:00:00:00:0e")]
-    assert keys.match_discovery(known, "192.0.2.77", "02000000000e") == (keys.KNOWN, "e1")
+    known = [keys.Known("e1", host, "02:00:00:00:00:01")]
+    assert keys.match_discovery(known, "192.0.2.77", "020000000001") == (keys.KNOWN, "e1")
 
 
 def test_only_an_address_of_the_leases_kind_follows_the_lease():
