@@ -14,14 +14,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
-#: Display family to a short slug. Unknown models report "other" rather than
-#: their name, so a future model cannot leak an unreviewed string.
-MODEL_SLUGS = {
-    "EcoZenith i255": "i255",
-    "EcoZenith i360": "i360",
-    "EcoZenith i550 Pro": "i550",
-    "EcoLogic": "ecologic",
-}
+from .const import MODEL_FAMILIES
+
+#: Display family to a short slug, by the model name discovery gives it, out of
+#: const.MODEL_FAMILIES. Unknown models report "other" rather than their name,
+#: so a future model cannot leak an unreviewed string.
+MODEL_SLUGS = {name: slug for name, slug in MODEL_FAMILIES.values()}
 
 
 def model_slug(model: str | None) -> str:

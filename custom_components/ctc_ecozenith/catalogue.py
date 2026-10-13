@@ -16,7 +16,14 @@ import logging
 import re
 from typing import Any
 
-from .const import PERIOD_MARKERS, SENTINELS, SlowPage, SlowValue
+from .const import (
+    CHROME_BUTTON,
+    PERIOD_MARKERS,
+    ROW_TOLERANCE,
+    SENTINELS,
+    SlowPage,
+    SlowValue,
+)
 from .keys import row_key
 from .web_api import CtcWebClient, CtcWebError, Widget
 
@@ -36,13 +43,10 @@ _CLOCK_SUFFIX = re.compile(r"\s+h:m\s*$")
 #: count, and the name keeps the period without it.
 _PERIOD_UNIT = re.compile(r"(/\d+)\s+h\s*$")
 
-_ROW_TOLERANCE = 14
 _FLOW_X = -10000
 MAX_READINGS_PER_ROW = 4
 #: Anything this high up and this wide is the page heading, not a row name.
 _HEADER_HEIGHT = 45
-#: How far a caption and its reading may sit apart and still be the same row.
-_ROW_TOLERANCE = 14
 
 
 def _decimals(fmt: str) -> float:
@@ -318,10 +322,10 @@ def _pair_labels(widgets: list[Widget]) -> dict[int, str]:
         while queue:
             candidate = queue[0]
             if candidate.y >= 0 <= value.y:
-                if candidate.y < value.y - _ROW_TOLERANCE:
+                if candidate.y < value.y - ROW_TOLERANCE:
                     queue.pop(0)  # a row of its own, without a reading
                     continue
-                if candidate.y > value.y + _ROW_TOLERANCE:
+                if candidate.y > value.y + ROW_TOLERANCE:
                     break  # the caption belongs further down; this one has none
             elif candidate.y >= 0 > value.y:
                 # The caption is on a row the panel is drawing and the reading
@@ -1016,7 +1020,7 @@ async def _async_back_to(
             return True
         if here == stop_at:
             return False
-        await client.async_click(page_map.get(here, []), 440, 23)
+        await client.async_click(page_map.get(here, []), *CHROME_BUTTON)
         if await client.async_current_page() == here:
             return False
     return await client.async_current_page() == target

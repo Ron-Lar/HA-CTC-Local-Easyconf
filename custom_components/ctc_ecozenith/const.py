@@ -67,7 +67,6 @@ CONF_CHECK_UPDATES: Final = "check_updates"
 RELEASES_API: Final = "https://api.github.com/repos/beolink/HA-CTC-Local-Easyconf/releases/latest"
 RELEASES_PAGE: Final = "https://github.com/beolink/HA-CTC-Local-Easyconf/releases/latest"
 CONF_SLOW_INTERVAL: Final = "slow_interval"
-CONF_PARK_PAGE: Final = "park_page"
 CONF_RESTORE_PAGE: Final = "restore_page"
 CONF_ENABLE_CONTROL: Final = "enable_control"
 CONF_FAST_INTERVAL: Final = "fast_interval"
@@ -119,6 +118,29 @@ PAGE_HEADER_HEIGHT: Final = 45
 #: The header icon sits at the top left of a page, inside this many pixels
 #: from the left edge, at x 5 on every page captured so far.
 HEADER_ICON_MAX_X: Final = 60
+#: How far apart, in pixels up or down, a caption and the reading or text
+#: beside it may sit and still be the same row: on the pages the menu reading
+#: walks, on the identity screens and beside the status field.
+ROW_TOLERANCE: Final = 14
+#: The panel's own control, top right. On a subpage it steps back; on the home
+#: screen the same spot is a button of its own (the quick menu on an i550 Pro),
+#: so it is never pressed as a way back on a page known to be home.
+CHROME_BUTTON: Final = (440, 23)
+
+#: The families the display's settings file names, by the stem of the file:
+#: the model name chosen for each and the slug the daily report gives it. The
+#: name is the member of the family that has the display with Modbus TCP,
+#: since that is the only kind this integration can talk to at all. A family
+#: joins the table once the fleet has shown its stem (roadmap R19); the names
+#: discovery gives (discovery.MODEL_NAMES) and the report's closed list of
+#: slugs (stats_extra.MODEL_SLUGS) are both read off it, so the two cannot
+#: drift apart (roadmap L10).
+MODEL_FAMILIES: Final = {
+    "ezi2xx": ("EcoZenith i255", "i255"),
+    "ezi3xx": ("EcoZenith i360", "i360"),
+    "ezi5xx": ("EcoZenith i550 Pro", "i550"),
+    "ecologic": ("EcoLogic", "ecologic"),
+}
 
 #: How the display prints an alarm out of its catalogue: "[E017] Givare
 #: solpaneler ut". Information texts are printed "[I...]" and are no alarm.
@@ -157,7 +179,6 @@ HARVEST_SKIP_LIMIT: Final = 2
 #: been in Home Assistant since 2023.8, well inside hacs.json's floor.
 PLATFORMS: Final = ["sensor", "binary_sensor", "number", "select", "button", "event"]
 
-CONF_READ_TOTALS: Final = "read_totals"
 CONF_IDENTITY: Final = "identity"
 
 
@@ -450,7 +471,6 @@ CONTROL_SELECTS: Final[tuple[ControlRegister, ...]] = (
 # it is not among the addresses the write path lets through. The day a
 # function needs it, it comes in with its own entity and its own test.
 CONTROL_VDI_REGISTER: Final = 1100
-VDI_COUNT: Final = 8
 
 #: Every address the integration may ever write: exactly the control tables
 #: above, derived rather than typed out, so a new ControlRegister is let
