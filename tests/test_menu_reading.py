@@ -98,7 +98,7 @@ def test_an_interrupted_sweep_still_offers_its_pages_where_nothing_was_stored(
     assert not fresh
 
 
-def test_a_whole_rereading_replaces_the_menu_and_is_fresh(catalogue, const):
+def test_a_whole_rereading_folds_in_a_new_page_and_is_fresh(catalogue, const):
     stored = [page(const, n) for n in VSH_PAGES]
     discovered = [page(const, n) for n in [*VSH_PAGES, 27]]
     menu, fresh = catalogue.menu_after_rescan(stored, stored, discovered, True)

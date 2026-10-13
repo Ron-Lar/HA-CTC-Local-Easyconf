@@ -11,6 +11,7 @@ mirrors how the panel itself is laid out.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 import logging
 import re
@@ -24,7 +25,7 @@ from .const import (
     SlowPage,
     SlowValue,
 )
-from .keys import row_key
+from .keys import row_key, union_by_page
 from .web_api import CtcWebClient, CtcWebError, Widget
 
 _LOGGER = logging.getLogger(__name__)
@@ -566,6 +567,12 @@ class MenuReading:
     root: int | None = None
     #: Pages read with a gap this time, by number; see the class docstring.
     gaps: list[int] = field(default_factory=list)
+    #: Every page number in the display's screen map when the walk began, or
+    #: None where the map was never read. A stored page the sweep did not
+    #: reach is kept only while the map still has it (see still_offered): a
+    #: page the display's software no longer has is evidence, and costs no
+    #: tap to find out.
+    screen_pages: frozenset[int] | None = None
     #: How far the walk got; see the class docstring.
     home_found: bool | None = None
     tile_found: bool | None = None
@@ -710,6 +717,7 @@ async def async_discover_pages(
     reading = MenuReading(home_found=False, tile_found=False, root_entered=False)
     try:
         page_map = await client.async_screen_map(refresh=True)
+        reading.screen_pages = frozenset(page_map)
         origin = await client.async_current_page()
     except CtcWebError as err:
         # Nothing has been pressed, so there is nothing to put back, and no
@@ -1243,11 +1251,73 @@ def menu_wait(last: float | None, now: float, interval: float) -> float:
     return max(0.0, interval - (now - last))
 
 
+def keep_unreached(
+    stored: list[SlowPage],
+    discovered: list[SlowPage],
+    keep: Callable[[SlowPage], bool] | None = None,
+) -> list[SlowPage]:
+    """The pages a reading found, with the stored pages it did not reach that still belong.
+
+    Pages the reading found come with the definitions it brought, in the
+    stored order, and pages the menu has not had before come last. A stored
+    page the reading did not reach stays in its place when ``keep`` says it
+    still belongs, or always without one, which is how an interrupted
+    reading is offered: what it did not get to is not evidence of anything.
+    """
+    fresh_by_page = {page.page: page for page in discovered}
+    known = {page.page for page in stored}
+    menu = [
+        fresh_by_page.get(page.page, page)
+        for page in stored
+        if page.page in fresh_by_page or keep is None or keep(page)
+    ]
+    menu += [page for page in discovered if page.page not in known]
+    return menu
+
+
+def still_offered(
+    selection: Iterable[int],
+    root: int | None,
+    screen_pages: frozenset[int] | None,
+) -> Callable[[SlowPage], bool]:
+    """Whether a stored page a whole reading did not reach still belongs in the menu.
+
+    A sweep that ran to its end has still not seen every page the menu has:
+    the i550 Pro's operation data root is a schematic picture, and it draws
+    the tile that leads to Kompressor VP1 only in some operating states. A
+    whole reading taken while PT charged hot water (2026-10-13) did not reach
+    the page, and folding that reading in as the menu took the page off the
+    harvest and out of the options, with its 35 rows left unprovided.
+
+    So a page the reading did not reach stays, ticked as it was, when it is
+    ticked (unticking it is how the owner lets it go: the next whole reading
+    that does not reach it drops it), when it was reached by a recorded route
+    or is the root itself (a page with neither was only the page the panel
+    showed when the set-up could not find the menu), and when the display's
+    screen map still has its number (a page the display's software no longer
+    has is gone, not hidden). A harvest that cannot reach a kept page gives
+    it up after the first tap that does not move the panel, says so among its
+    missed pages, and lets its rows go unavailable.
+    """
+    ticked = set(selection)
+
+    def keep(page: SlowPage) -> bool:
+        return (
+            page.page in ticked
+            and (bool(page.route) or page.page == root)
+            and (screen_pages is None or page.page in screen_pages)
+        )
+
+    return keep
+
+
 def menu_after_rescan(
     stored_menu: list[SlowPage],
     stored_selection: list[SlowPage],
     discovered: list[SlowPage],
     complete: bool = True,
+    root: int | None = None,
+    screen_pages: frozenset[int] | None = None,
 ) -> tuple[list[SlowPage], bool]:
     """The menu to offer after "read the menu again", and whether it is fresh.
 
@@ -1262,31 +1332,36 @@ def menu_after_rescan(
     A reading that was interrupted is offered for what it found, with its new
     definitions, but the stored pages it did not reach stand beside it in
     their old place, so saving the form cannot make a page disappear. It is
-    not fresh either: the version stays unstamped and the reading owed.
+    not fresh either: the version stays unstamped and the reading owed. A
+    whole reading is fresh, and keeps a stored page it did not reach as long
+    as that page still belongs (see still_offered).
     """
+    stored = union_by_page(stored_menu, stored_selection)
     if discovered and complete:
-        return discovered, True
-    stored = stored_menu or stored_selection
-    fresh_by_page = {page.page: page for page in discovered}
-    known = {page.page for page in stored}
-    menu = [fresh_by_page.get(page.page, page) for page in stored]
-    menu += [page for page in discovered if page.page not in known]
-    return menu, False
+        keep = still_offered([page.page for page in stored_selection], root, screen_pages)
+        return keep_unreached(stored, discovered, keep), True
+    return keep_unreached(stored, discovered), False
 
 
 def merge_menu(
     previous_menu: list[SlowPage],
     previous_selection: list[int],
     discovered: list[SlowPage],
+    root: int | None = None,
+    screen_pages: frozenset[int] | None = None,
 ) -> tuple[list[SlowPage], list[int]]:
-    """Fold a fresh reading of the menu into what the user has already chosen.
+    """Fold a whole reading of the menu into what the user has already chosen.
 
     A page switched off stays off, because that was a deliberate choice: every
     harvested page means the panel is walked there and back. Anything the menu
     has not offered before starts on, so a page a new version can use is used
     without a visit to the options, and the first reading switches everything on.
+    A stored page the reading did not reach stays, ticked as it was, while it
+    still belongs (see still_offered).
     """
     known = {page.page for page in previous_menu}
     switched_off = known - set(previous_selection)
-    selected = [page.page for page in discovered if page.page not in switched_off]
-    return discovered, selected
+    keep = still_offered(previous_selection, root, screen_pages)
+    menu = keep_unreached(previous_menu, discovered, keep)
+    selected = [page.page for page in menu if page.page not in switched_off]
+    return menu, selected
