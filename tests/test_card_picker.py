@@ -71,10 +71,12 @@ HASS = {
                               "device_id": DEVICE, "entity_category": "diagnostic"},
         "sensor.ctc_hidden": {"entity_id": "sensor.ctc_hidden", "platform": "ctc_ecozenith",
                               "device_id": DEVICE, "hidden": True},
+        # Every number and select of the integration is a configuration
+        # entity (number.py, select.py), and the frontend says so.
         "number.ctc_room": {"entity_id": "number.ctc_room", "platform": "ctc_ecozenith",
-                            "device_id": DEVICE},
+                            "device_id": DEVICE, "entity_category": "config"},
         "select.ctc_dhw": {"entity_id": "select.ctc_dhw", "platform": "ctc_ecozenith",
-                           "device_id": DEVICE},
+                           "device_id": DEVICE, "entity_category": "config"},
         "light.lamp": {"entity_id": "light.lamp", "platform": "hue", "device_id": "lamp"},
     },
 }
@@ -197,6 +199,41 @@ def test_a_stub_shows_only_the_integrations_own_visible_entities():
     assert "light.lamp" not in named, "en annan integrations entitet"
     assert "sensor.ctc_hidden" not in named, "en dold entitet"
     assert "sensor.ctc_serial" not in named, "en diagnostisk entitet"
+
+
+def test_the_controls_stub_lets_configuration_entities_in_and_nothing_else_does():
+    # F5.1: the controls are configuration entities, so a stub that sorted
+    # every entity_category away was always empty for the controls card. Its
+    # stub lets "config" in; a diagnostic or hidden entity stays out there,
+    # a button that is configuration too is no control, and the other stubs
+    # keep configuration entities out.
+    hass = json.loads(json.dumps(HASS))
+    extra = {
+        "button.ctc_release_all": (_state("unknown", friendly_name="Släpp all styrning"),
+                                   {"entity_category": "config"}),
+        "number.ctc_diag": (_state("3", min=0, max=10, step=1, friendly_name="Diag"),
+                            {"entity_category": "diagnostic"}),
+        "select.ctc_hidden": (_state("Av", options=["Av"], friendly_name="Dold lista"),
+                              {"entity_category": "config", "hidden": True}),
+        "sensor.ctc_config": (_state("4", unit_of_measurement="h", friendly_name="Konfig"),
+                              {"entity_category": "config"}),
+    }
+    for entity_id, (state, entry) in extra.items():
+        hass["states"][entity_id] = state
+        hass["entities"][entity_id] = {"entity_id": entity_id, "platform": "ctc_ecozenith",
+                                       "device_id": DEVICE, **entry}
+    stubs = _browser(
+        f"const hass = {json.dumps(hass)};\n"
+        f"console.log(JSON.stringify(Object.fromEntries({json.dumps(list(PAGE_CARDS.items()))}"
+        ".map(([kind, tag]) => [kind, customElements.get(tag).getStubConfig(hass)]))));"
+    )
+    assert stubs["controls"] == {"items": [
+        {"entity": "number.ctc_room", "name": "Rum"},
+        {"entity": "select.ctc_dhw", "name": "VV"},
+    ]}
+    for kind in ("chips", "readings", "rows"):
+        named = {item["entity"] for item in stubs[kind].get("items", stubs[kind].get("rows", []))}
+        assert "sensor.ctc_config" not in named, kind
 
 
 def test_without_a_heat_pump_the_page_cards_get_empty_lists_and_the_section_card_says_why():
