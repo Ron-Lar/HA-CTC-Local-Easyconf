@@ -157,6 +157,29 @@ def test_a_control_without_a_value_says_so_and_a_reading_without_one_is_left_alo
     """) == ["ej satt", "ej satt", None, None, None]
 
 
+def test_a_mirrored_control_whose_own_value_did_not_answer_says_not_read():
+    # F2.1, F2.3: a number or list with a mirror stays available through a
+    # lost Modbus round and is unknown while idle, with pump_value (or the
+    # older "pumpens värde") carried but empty. That is "ej läst", not "ej
+    # satt", which would say the pump never gives its value out. A control
+    # without the attribute at all, the hot water setpoint, is not set, and a
+    # page from before the word says "ej satt" for both.
+    sv = dict(SV, unread="ej läst")
+    assert _pure(f"""
+      const t = {json.dumps(sv)};
+      const old = {json.dumps(SV)};
+      console.log(JSON.stringify([
+        c.ownWord("number.a", {json.dumps(_number("unknown", pump_value=None))}, t),
+        c.ownWord("number.a", {json.dumps(_number("unknown", **{"pumpens värde": None}))}, t),
+        c.ownWord("select.a", {{state: "unknown", attributes: {{pump_value: null}}}}, t),
+        c.ownWord("select.a", {{state: "unknown", attributes: {{pump_value: ""}}}}, t),
+        c.ownWord("number.a", {json.dumps(_number("unknown"))}, t),
+        c.ownWord("number.a", {json.dumps(_number("unknown", pump_value=None))}, old),
+        c.ownWord("sensor.a", {{state: "unknown", attributes: {{pump_value: null}}}}, t),
+      ].map((v) => (v === undefined ? null : v))));
+    """) == ["ej läst", "ej läst", "ej läst", "ej läst", "ej satt", "ej satt", None]
+
+
 def test_a_zero_the_pump_means_as_no_limit_is_a_word_for_the_pumps_own_value_only():
     # The compressor's top speed: 0 in the stored setting means no limit, and
     # the control mirrors it while nothing is written. A 0 written through the
