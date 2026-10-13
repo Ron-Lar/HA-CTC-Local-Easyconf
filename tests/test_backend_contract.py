@@ -548,24 +548,34 @@ def test_a_number_past_the_edge_is_left_out_rather_than_clamped(stats_extra, giv
     assert stored["metrics"] == sent.get("metrics", {})
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason=(
-        "stats_extra.build_extra sends int() of the serial's first group, so a product "
-        "group with a leading zero becomes a product_code under 1000, and lib/ingest.ts "
-        "clamps it to 1000 without an error. No CTC serial seen so far starts with a 0 "
-        "(7208, 1002, 7312), so this has not happened; the fix is to leave product_code "
-        "out below 1000 in stats_extra, or to let the backend take 0 to 9999."
-    ),
-)
 def test_a_product_group_with_a_leading_zero_is_not_changed_by_the_backend(stats_extra):
+    """A product group under 1000 is left out, never clamped to another product's 1000.
+
+    build_extra used to send int() of the serial's first group, so 0712 went as
+    712 and lib/ingest.ts stored it as 1000 without an error. No CTC serial
+    seen so far starts with a 0 (7208, 1002, 7312); one that did now sends no
+    product code, and its build year and week still go.
+    """
     sent = report(stats_extra, {
         "model": "EcoZenith i255", "has_display": True, "control_enabled": False,
         "page_count": 1, "read_failures": 0, "serial": "071225400001",
     })
     _reason, stored = backend_validate(sent)
     assert stored["metrics"].get("product_code") == sent["metrics"].get("product_code")
+    assert "product_code" not in sent["metrics"]
+    assert sent["metrics"] == {"built_year": 2025, "built_week": 40}
+
+
+@pytest.mark.parametrize(
+    ("product", "code"),
+    [("1000", 1000), ("9999", 9999), ("7208", 7208), ("0999", None), ("0712", None),
+     ("0000", None), ("", None), (None, None)],
+)
+def test_only_a_product_code_the_backend_keeps_as_it_is_is_sent(stats_extra, product, code):
+    assert stats_extra.product_code_value(product) == code
+    backend = METRICS["product_code"]
+    kept = (stats_extra.PRODUCT_CODE_MIN, stats_extra.PRODUCT_CODE_MAX)
+    assert kept == (backend["min"], backend["max"])
 
 
 # ------------------------------------------- the copy of the backend itself
