@@ -99,9 +99,17 @@ def _collect(hass: HomeAssistant) -> list[dict[str, Any]]:
             "name": name or entry.title,
             "entities": entities,
             "names": names,
+            # Each display value with its screen and its place in the page's
+            # list, counted from 1, for the source line (R39): a page can
+            # have four rows that read "Status 2", and the line tells them
+            # apart where the name cannot.
             "pages": [
                 {"title": page.title,
-                 "values": [{"key": v.key, "label": v.label, "unit": v.unit} for v in page.values]}
+                 "values": [
+                     {"key": v.key, "label": v.label, "unit": v.unit,
+                      "screen": v.screen, "row": place}
+                     for place, v in enumerate(page.values, start=1)
+                 ]}
                 for page in runtime.pages
             ],
             "energy_out": getattr(runtime.energy_out, "key", None),
