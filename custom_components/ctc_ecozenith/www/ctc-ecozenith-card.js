@@ -1625,18 +1625,24 @@
 
   /** The integration's own entities that have a state, as the registry entries
    *  the frontend holds (hass.entities), sorted by entity id. A hidden entity,
-   *  and a diagnostic or configuration one, is not what a stub should show. */
-  function ownEntries(hass) {
+   *  and a diagnostic one, is not what a stub should show, nor is a
+   *  configuration one unless `config` lets it through: every number and
+   *  select of the integration is a configuration entity (number.py and
+   *  select.py), so the controls card's stub would otherwise always be empty. */
+  function ownEntries(hass, config = false) {
     const registry = (hass && hass.entities) || {};
     const states = (hass && hass.states) || {};
+    const category = (entry) => !entry.entity_category
+      || (config && entry.entity_category === "config");
     return Object.values(registry)
       .filter((entry) => entry && entry.platform === DOMAIN && !entry.hidden
-        && !entry.entity_category && states[entry.entity_id])
+        && category(entry) && states[entry.entity_id])
       .sort((a, b) => (a.entity_id < b.entity_id ? -1 : a.entity_id > b.entity_id ? 1 : 0));
   }
 
   //: What each page card's stub is made of: the list it fills, how many of
-  //: the integration's entities at most, and which.
+  //: the integration's entities at most, and which. `config` lets the
+  //: integration's configuration entities in, which the controls are.
   const STUBS = {
     chips: {
       field: "items", count: 3,
@@ -1648,7 +1654,7 @@
         && s.state !== "" && Number.isFinite(Number(s.state)),
     },
     controls: {
-      field: "items", count: 3,
+      field: "items", count: 3, config: true,
       wants: (id) => domainOf(id) === "number" || domainOf(id) === "select",
     },
     rows: { field: "rows", count: 6, wants: (id) => domainOf(id) === "sensor" },
@@ -1659,12 +1665,12 @@
    *  few of the integration's entities under their friendly names, or none
    *  where there are none, which the cards draw as an empty frame. */
   function stubConfig(kind, hass) {
-    const entries = ownEntries(hass);
     if (kind === "section") {
-      const pump = entries.find((entry) => entry.device_id);
+      const pump = ownEntries(hass).find((entry) => entry.device_id);
       return { device_id: pump ? pump.device_id : "", section: STUB_SECTION };
     }
     const stub = STUBS[kind];
+    const entries = ownEntries(hass, Boolean(stub.config));
     const states = (hass && hass.states) || {};
     const items = entries
       .map((entry) => entry.entity_id)
