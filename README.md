@@ -929,6 +929,25 @@ real timer helper instead of the stand-in's, and only the four tests that
 build a coordinator directly skip themselves, since a real core's coordinator
 wants a running instance behind it.
 
+The suite runs against stand-ins, so what only a real Home Assistant would
+refuse, a moved import or a selector the real selector does not accept, is
+checked by `scripts/smoke_real_ha.py`. It imports every module of the
+integration, builds every form that needs no network, the CTC page's Lovelace
+class and `services.yaml`, under whichever release is installed:
+
+```sh
+pip install homeassistant==2026.9.4
+python scripts/smoke_real_ha.py
+```
+
+CI runs it against the release the maintainer's houses run, against the floor
+`hacs.json` promises, and every Monday against the newest release with
+`--strict`, which also fails on Home Assistant's notices that the integration
+uses something on its way out. CI further runs the suite on Python 3.13 and
+3.14 against three pymodbus versions, the whole suite under
+`pytest-homeassistant-custom-component`, ruff with the rules in `ruff.toml`,
+hassfest and the HACS checks.
+
 ## Roadmap
 
 - **`test_counters_going_backwards_fall_back_to_lifetime`** puts its sample 400

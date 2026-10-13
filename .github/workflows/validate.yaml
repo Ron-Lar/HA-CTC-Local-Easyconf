@@ -5,8 +5,9 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    # HACS and hassfest change their rules, and pymodbus its releases, without
-    # a commit here, so everything runs again every Monday.
+    # HACS and hassfest change their rules, and pymodbus and Home Assistant
+    # their releases, without a commit here, so everything runs again every
+    # Monday.
     - cron: "0 4 * * 1"
   workflow_dispatch:
 
@@ -86,3 +87,105 @@ jobs:
         run: pip install --upgrade pymodbus
       - run: python -c "import pymodbus; print(pymodbus.__version__)"
       - run: pytest -q
+
+  # The suite runs against stand-ins for Home Assistant, so a moved Home
+  # Assistant import, a selector config the real selector refuses or a
+  # Lovelace class that changed would first show on a house as an entry that
+  # does not load (R58). scripts/smoke_real_ha.py imports every module and
+  # builds every form that needs no network under a real release, three ways.
+
+  smoke-house:
+    name: real Home Assistant, the houses' release
+    # Pushes and pull requests meet the older of the two releases the houses
+    # this is developed on run (2026.10.0 and 2026.9.4). Raised by hand when
+    # that house is updated, together with the plugin pin in ha-tests.
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    env:
+      HA_VERSION: "2026.9.4"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      # Home Assistant with the manifest's own requirements, as it installs
+      # the integration.
+      - run: >-
+          python -c 'import json; print("\n".join(json.load(open("custom_components/ctc_ecozenith/manifest.json"))["requirements"]))'
+          | xargs python -m pip install "homeassistant==${HA_VERSION}"
+      - run: python scripts/smoke_real_ha.py
+
+  smoke-floor:
+    name: real Home Assistant, the floor in hacs.json
+    # The release hacs.json promises, read from the file, on the Python that
+    # release was built for, so raising the floor is a change to hacs.json
+    # alone. Every run: a promise that stops being true is found at the
+    # change that broke it. If this goes red, raise the floor.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: release
+        run: python3 scripts/ha_release.py floor >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ steps.release.outputs.python }}
+      - env:
+          HA_VERSION: ${{ steps.release.outputs.version }}
+        run: >-
+          python -c 'import json; print("\n".join(json.load(open("custom_components/ctc_ecozenith/manifest.json"))["requirements"]))'
+          | xargs python -m pip install "homeassistant==${HA_VERSION}"
+      - run: python scripts/smoke_real_ha.py
+
+  smoke-latest:
+    name: real Home Assistant, the newest release, deprecations included
+    # Weekly and by hand, the newest release on its own Python, strict: a
+    # DeprecationWarning attributed to the integration's modules fails it, and
+    # so does Home Assistant's notice in its log that the integration uses
+    # something on its way out, which comes about a year before the removal.
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: release
+        run: python3 scripts/ha_release.py latest >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ steps.release.outputs.python }}
+      - env:
+          HA_VERSION: ${{ steps.release.outputs.version }}
+        run: >-
+          python -c 'import json; print("\n".join(json.load(open("custom_components/ctc_ecozenith/manifest.json"))["requirements"]))'
+          | xargs python -m pip install "homeassistant==${HA_VERSION}"
+      - run: python scripts/smoke_real_ha.py --strict
+
+  ha-tests:
+    name: tests under a real Home Assistant core
+    # The whole suite where pytest-homeassistant-custom-component is
+    # installed, as the README tells a contributor to run it: the Home
+    # Assistant tests run against the core the plugin pins, and the rest
+    # against the real classes rather than the stand-ins.
+    runs-on: ubuntu-latest
+    env:
+      # 0.13.367 pins Home Assistant 2026.9.4, the release smoke-house runs;
+      # the two move together.
+      PLUGIN_VERSION: "0.13.367"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      # The plugin alone: it pins Home Assistant, pytest and pytest-asyncio.
+      # Not pymodbus, whose one test drives the real library over a loopback
+      # socket that the plugin's socket guard refuses; it runs in tests.
+      - run: python -m pip install "pytest-homeassistant-custom-component==${PLUGIN_VERSION}"
+      - name: Run the suite and make sure the Home Assistant tests ran
+        shell: bash
+        run: |
+          python -m pytest -q -rs | tee pytest.log
+          # Those tests skip themselves, with a reason, where the plugin or
+          # its async fixtures cannot run, which here would be a green run
+          # that tested nothing this job is for.
+          if grep -E "asyncio_mode=auto|could not import 'pytest_homeassistant_custom_component'" pytest.log; then
+            echo "::error::the Home Assistant tests skipped themselves"
+            exit 1
+          fi
