@@ -1057,8 +1057,11 @@ without pymodbus, does not ask for its loopback socket back the way
 The suite runs against stand-ins, so what only a real Home Assistant would
 refuse, a moved import or a selector the real selector does not accept, is
 checked by `scripts/smoke_real_ha.py`. It imports every module of the
-integration, builds every form that needs no network, the CTC page's Lovelace
-class and `services.yaml`, under whichever release is installed:
+integration, runs every Home Assistant import as it is written, inside
+functions and try blocks too, looks up every attribute of a Home Assistant
+module the source reaches for and holds the calls of what it finds to their
+real signatures, and builds every form that needs no network, the CTC page's
+Lovelace class and `services.yaml`, under whichever release is installed:
 
 ```sh
 pip install homeassistant==2026.9.4
