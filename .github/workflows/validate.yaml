@@ -45,11 +45,15 @@ jobs:
       - run: ruff check --output-format=github .
 
   tests:
-    name: tests (pymodbus ${{ matrix.pymodbus }})
+    name: tests (Python ${{ matrix.python }}, pymodbus ${{ matrix.pymodbus }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        # Both houses run the integration on 3.14, the Python Home Assistant
+        # has required since 2026.3; 3.13 is what the oldest release hacs.json
+        # admits was built for (R60).
+        python: ["3.13", "3.14"]
         # The adapter is run against the floor the manifest allows, the version
         # Home Assistant's own modbus integration ships, and whatever PyPI has
         # today. The last leg is deliberately unpinned, past the manifest's own
@@ -62,12 +66,19 @@ jobs:
         # Actions tab. A red Monday run is the warning, and it goes to whoever
         # last touched this file.
         pymodbus: ["3.6.9", "3.13.1", "latest"]
+        # Five of the six pairs. The manifest's floor is what an older Home
+        # Assistant on 3.13 may still hold, and no Home Assistant on 3.14
+        # comes with it: that pair could only go red over an installation
+        # nobody has, so it is left out rather than run.
+        exclude:
+          - python: "3.14"
+            pymodbus: "3.6.9"
     continue-on-error: ${{ matrix.pymodbus == 'latest' && (github.event_name == 'push' || github.event_name == 'pull_request') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python }}
       - run: pip install -r requirements-test.txt
       - if: ${{ matrix.pymodbus != 'latest' }}
         run: pip install "pymodbus==${{ matrix.pymodbus }}"
