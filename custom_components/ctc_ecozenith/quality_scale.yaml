@@ -1,0 +1,181 @@
+# Home Assistant's integration quality scale, kept as a working checklist
+# (roadmap R56). Every rule of the scale is listed, with done, todo or exempt
+# and a comment that says why.
+#
+# hassfest validates this file only for core integrations, so nothing in
+# Home Assistant's CI reads it here. tests/test_quality_scale.py holds it to
+# the rules instead: every rule present, a comment on every row, the checks
+# hassfest itself runs for the rules marked done, and no quality_scale in the
+# manifest until every rule of that tier and those below is done or exempt.
+# tests/test_homeassistant_quality_scale.py compares the list of rules with
+# the release installed beside it.
+rules:
+  # Bronze
+  action-setup:
+    status: done
+    comment: release, reread_menu and cop_sample are registered in async_setup, so they exist with no entry loaded and answer in words when none is.
+  appropriate-polling:
+    status: done
+    comment: Modbus every 30 s and the display's pages every 30 min by default, at least 5 min, both under Configure; reading a page moves the panel, so that interval is slow on purpose.
+  brands:
+    status: done
+    comment: brand/icon.png and brand/icon@2x.png ship with the integration and Home Assistant serves them from 2026.3; home-assistant/brands no longer takes custom integrations.
+  common-modules:
+    status: todo
+    comment: The coordinators live in coordinator.py, but the entity classes share no base class; entity.py holds the helper that switches entities on at set-up.
+  config-flow-test-coverage:
+    status: todo
+    comment: The flow is driven under a real core in tests/test_homeassistant_config_flow.py and the device key and options tests, but the coverage of config_flow.py is not measured.
+  config-flow:
+    status: todo
+    comment: Set up from the UI by search, typed address or DHCP, but the set-up steps have no data_description in strings.json; only the options form has.
+  dependency-transparency:
+    status: done
+    comment: One requirement, pymodbus, open source and released to PyPI from its own CI.
+  docs-actions:
+    status: done
+    comment: README, Actions.
+  docs-conditions:
+    status: exempt
+    comment: The integration provides no conditions.
+  docs-high-level-description:
+    status: done
+    comment: README, the opening paragraphs and What it reads.
+  docs-installation-instructions:
+    status: todo
+    comment: README has Setup but no Install section that says how the integration gets into Home Assistant (R74).
+  docs-removal-instructions:
+    status: todo
+    comment: README does not say how to remove the integration or what stays behind (R74).
+  docs-triggers:
+    status: exempt
+    comment: The integration provides no triggers; the event entity Händelser is described under What it reads.
+  entity-event-setup:
+    status: done
+    comment: Entities attach their listeners in async_added_to_hass with async_on_remove; the identity signal is connected per entry at platform set-up with entry.async_on_unload.
+  entity-unique-id:
+    status: done
+    comment: Every unique_id is built in keys.py from the entry's device key.
+  has-entity-name:
+    status: done
+    comment: Every entity class sets _attr_has_entity_name.
+  runtime-data:
+    status: done
+    comment: async_setup_entry sets entry.runtime_data.
+  test-before-configure:
+    status: done
+    comment: The flow asks Modbus for a register before it creates an entry, and names a taken Modbus place on a step of its own.
+  test-before-setup:
+    status: done
+    comment: The first Modbus refresh runs in async_setup_entry, and an entry that reads no register is retried with the reason.
+  unique-config-entry:
+    status: done
+    comment: The flow aborts on an address that has an entry and on a unique_id that is configured.
+
+  # Silver
+  action-exceptions:
+    status: done
+    comment: The actions raise ServiceValidationError for a call that cannot be served and HomeAssistantError when the panel is busy or the menu was not read, all with translation keys.
+  config-entry-unloading:
+    status: done
+    comment: async_unload_entry unloads the platforms, stops the keepalive and shuts the Modbus client for good.
+  docs-configuration-parameters:
+    status: todo
+    comment: The options are described where they matter but not listed in one place (R74).
+  docs-installation-parameters:
+    status: done
+    comment: README, Setup, names the address, the two ports and the Modbus address the forms ask for.
+  entity-unavailable:
+    status: done
+    comment: Modbus readings go unavailable when a round fails, a display row once its page is three intervals old or after three failed harvests in a row.
+  integration-owner:
+    status: done
+    comment: The manifest names @beolink in codeowners.
+  log-when-unavailable:
+    status: done
+    comment: The coordinators log the loss and the return once each, and a skipped harvest and its resumption are one line each.
+  parallel-updates:
+    status: todo
+    comment: No platform sets PARALLEL_UPDATES; reads go through the coordinators and writes are serialised by the control manager, so 0 is the value to set.
+  reauthentication-flow:
+    status: exempt
+    comment: Neither Modbus TCP nor the display's web interface has credentials.
+  test-coverage:
+    status: todo
+    comment: A suite without Home Assistant and one under a real core, but coverage is not measured.
+
+  # Gold
+  devices:
+    status: done
+    comment: One device per heat pump, with the model and firmware versions and the serial number once the display has given them.
+  diagnostics:
+    status: done
+    comment: diagnostics.py, with the address, device key, MAC, title and links taken out and the serial number cut to its product and week groups.
+  discovery-update-info:
+    status: done
+    comment: A DHCP request from a configured display moves its entry to the new address, the unit recognised by the MAC on its system information page (keys.py).
+  discovery:
+    status: done
+    comment: DHCP, by the display's MAC prefix and by registered devices.
+  docs-data-update:
+    status: done
+    comment: README says how often Modbus and the display are read and why the display is read slowly.
+  docs-examples:
+    status: done
+    comment: README, Actions and The section card, with YAML.
+  docs-known-limitations:
+    status: done
+    comment: README, Known limits.
+  docs-supported-devices:
+    status: done
+    comment: README names the models the integration has been seen on.
+  docs-supported-functions:
+    status: done
+    comment: README, What it reads, Control and Actions.
+  docs-troubleshooting:
+    status: done
+    comment: README, When Modbus does not answer and Reporting a problem.
+  docs-use-cases:
+    status: done
+    comment: README says what an energy manager does with the controls and the release action, and what the coefficient of performance rests on.
+  dynamic-devices:
+    status: exempt
+    comment: One heat pump per entry; no device appears behind it later.
+  entity-category:
+    status: done
+    comment: The controls are configuration entities; the harvest, identity and firmware rows are diagnostic.
+  entity-device-class:
+    status: done
+    comment: Temperatures, pressures, power, energy, current and timestamps carry their device class.
+  entity-disabled-by-default:
+    status: todo
+    comment: Every entity is created enabled, by the owner's choice since 0.14.0, and the CTC page leaves out what has only read zero; the rule asks for the rarely used ones to start disabled.
+  entity-translations:
+    status: todo
+    comment: Entity names are Swedish, from the register tables and the display's own captions; only the event entity has a translation_key.
+  exception-translations:
+    status: todo
+    comment: The actions and the two Modbus reasons for a retried set-up are translated; the coordinators' UpdateFailed messages are not.
+  icon-translations:
+    status: todo
+    comment: Icons are set in code; there is no icons.json.
+  reconfiguration-flow:
+    status: todo
+    comment: A new address is followed through DHCP, but there is no reconfigure step; the ports are changed by removing and adding the entry.
+  repair-issues:
+    status: done
+    comment: An unharvested history page, unticked or missing pages, an unread menu or serial number, a taken Modbus place and a newer release are raised in the repairs view.
+  stale-devices:
+    status: exempt
+    comment: One device per entry, removed with the entry.
+
+  # Platinum
+  async-dependency:
+    status: done
+    comment: pymodbus's AsyncModbusTcpClient for Modbus and aiohttp for the display.
+  inject-websession:
+    status: done
+    comment: The display's client is handed Home Assistant's shared aiohttp session; pymodbus opens a socket of its own and takes no session.
+  strict-typing:
+    status: todo
+    comment: Type hints throughout, but no py.typed and mypy is not run.
