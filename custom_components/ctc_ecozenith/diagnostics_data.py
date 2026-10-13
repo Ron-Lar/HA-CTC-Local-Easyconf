@@ -45,7 +45,7 @@ from .const import (
     CONF_MENU_VERSION,
     CONF_SLOW_PAGES,
 )
-from .cop import cop_for_report, current_totals
+from .cop import SHARE_SPANS, cop_for_report, current_totals, immersion_now, share_for
 from .stats_extra import serial_made, serial_product
 
 #: What Home Assistant puts in place of a redacted value, used for the wash too.
@@ -327,11 +327,22 @@ def cop_section(runtime: Any) -> dict[str, Any]:
         "consumption_from_modbus": snapshot is not None,
         "totals": {"heat_kwh": out, "consumption_kwh": consumed},
         "figures": cop_for_report(runtime),
+        # R28: the immersion heater's counter as taken with the display's
+        # counters, which the samples and the share of auxiliary heat use.
+        "immersion_kwh": immersion_now(runtime),
     }
     tracker = getattr(runtime, "cop", None)
     if tracker is None:
         found["tracker"] = None
         return found
+    found["aux_share"] = {}
+    for span in SHARE_SPANS:
+        try:
+            result, reason = share_for(runtime, span)
+        except Exception as err:  # the diagnostics must come whatever a figure does
+            found["aux_share"][span] = {"error": type(err).__name__}
+            continue
+        found["aux_share"][span] = {"value": result.value, "reason": reason}
     samples = dict(getattr(tracker, "_samples", None) or {})
     newest = sorted(samples)[-SAMPLES_SHOWN:]
     found["tracker"] = {

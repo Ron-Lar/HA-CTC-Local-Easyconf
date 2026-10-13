@@ -47,6 +47,9 @@ EXPECTED = {
     # sensor Aktiva överstyrningar lists, twinned from the start.
     "pumpens värde": "pump_value",
     "styrningar": "overrides",
+    # R28: the two energies beside the share of auxiliary heat.
+    "elpatron kWh": "immersion_kwh",
+    "kompressor kWh": "compressor_kwh",
 }
 
 READ =datetime(2026, 10, 9, 11, 40, tzinfo=UTC)

@@ -81,14 +81,17 @@ from .const import (
 from .coordinator import CtcControlManager, CtcModbusCoordinator, CtcWebCoordinator
 from .cop import (
     MIN_CONSUMPTION_KWH,
+    STORAGE_MINOR_VERSION as COP_MINOR_VERSION,
     ConsumptionSnapshot,
     CopTracker,
+    ImmersionSnapshot,
     cop_for_report,
     counter_fault,
     counters_read_at,
     current_totals,
     find_energy_totals,
     find_operating_hours,
+    immersion_at,
     modbus_consumption_answered,
     powered_on_hours,
 )
@@ -1118,6 +1121,10 @@ class CtcRuntime:
     energy_in: Any | None = None
     #: Consumed energy from Modbus, where the display has no counter for it.
     consumption_snapshot: ConsumptionSnapshot | None = None
+    #: The immersion heater's counter, Modbus 62191, taken when the display's
+    #: counters were read, for the samples and the share of auxiliary heat
+    #: (roadmap R28). Wherever there is a tracker.
+    immersion_snapshot: ImmersionSnapshot | None = None
     #: Candidate rows for the unit's powered-on hours; the largest is used.
     operating_hours: Any | None = None
     #: What this installation has ever given a value other than zero.
@@ -1171,7 +1178,9 @@ class CtcRuntime:
             if commissioned is not None:
                 await tracker.async_set_anchor(commissioned)
             if read_at is not None:
-                await tracker.async_record(out, consumed, now=read_at)
+                await tracker.async_record(
+                    out, consumed, now=read_at, immersion=immersion_at(self, read_at)
+                )
         except Exception as err:  # a missed sample is not fatal
             _LOGGER.debug("Could not write down the energy counters: %s", err)
             return False
@@ -1394,10 +1403,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         if runtime.energy_out is not None and (
             runtime.energy_in is not None or runtime.consumption_snapshot is not None
         ):
+            # Minor 2 since the immersion heater's counter came into the
+            # samples (R28); the major stays at 1, see SeenStore.
             runtime.cop = CopTracker(
-                Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_cop")
+                Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_cop", minor_version=COP_MINOR_VERSION)
             )
             await runtime.cop.async_load()
+            # The immersion heater's counter, taken when delivered heat is
+            # read, as the consumption above, so a sample and the share of
+            # auxiliary heat set it against the compressor's counter of the
+            # same moment. Nothing is kept for a restart: the moment the
+            # display store comes back with is the snapshot's, empty, so a
+            # fresh Modbus reading is never paired with an old display one.
+            immersion = ImmersionSnapshot()
+            immersion_key = runtime.energy_out.key
+            immersion.seed(web.last_read(immersion_key), None)
+
+            def _take_immersion() -> None:
+                immersion.update(
+                    web.last_read(immersion_key),
+                    modbus.data if modbus.last_update_success else None,
+                )
+
+            _take_immersion()
+            entry.async_on_unload(web.async_add_listener(_take_immersion))
+            runtime.immersion_snapshot = immersion
         # The alarm the panel shows, read off the same values as the rows. The
         # harvest notes it page by page; this concludes once per round, after
         # the listeners of the round have what they need, with the outdoor

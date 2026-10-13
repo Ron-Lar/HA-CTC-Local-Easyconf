@@ -38,6 +38,7 @@ from .const import (
     identity_signal,
 )
 from .cop import (
+    SHARE_SPANS,
     WINDOWS,
     counter_rows,
     current_totals,
@@ -45,6 +46,7 @@ from .cop import (
     modbus_consumption_answered,
     powered_on_hours,
     reason_for,
+    share_for,
     stale_rows,
 )
 from .entity import async_switch_on_new_defaults
@@ -175,6 +177,9 @@ async def async_setup_entry(
     if runtime.cop is not None:
         for span in ("day", "week", "month", "year", "first_year", "lifetime"):
             entities.append(CtcCopSensor(runtime, span))
+        # The immersion heater's share of the electricity over the same spans
+        # but the first year (R28), from the same samples.
+        entities.extend(CtcShareSensor(runtime, span) for span in SHARE_SPANS)
 
     # What the status codes said from one poll to the next: starts, the last
     # run, and where the history page is harvested the mean run over a day.
@@ -770,6 +775,67 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
         # that has never been read leaves the day standing, with the reason
         # that the counters have not been read. The other spans rest on
         # stored samples and say that the display is quiet.
+        if self._span == "day":
+            return self.coordinator.last_update_success and not stale_rows(
+                self.coordinator, counter_rows(self._runtime)
+            )
+        return True
+
+
+class CtcShareSensor(CoordinatorEntity, SensorEntity):
+    """The immersion heater's share of the electricity, in per cent (roadmap R28).
+
+    The immersion heater's counter, Modbus 62191, against the sum of it and
+    the compressor's counter, over the coefficient of performance's spans and
+    from its samples, so it exists exactly where the coefficient of
+    performance does. A hundred per cent only where the compressor's counter
+    stood still while the immersion heater's moved; where there is no figure
+    the attribute skäl says why, as on the coefficient of performance.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:heating-coil"
+    _attr_native_unit_of_measurement = "%"
+    _attr_suggested_display_precision = 1
+    # Kept as long term statistics, like the coefficient of performance, so a
+    # month of it can be drawn.
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    NAMES = {
+        "day": "Spetsvärmeandel, dygn",
+        "week": "Spetsvärmeandel, vecka",
+        "month": "Spetsvärmeandel, månad",
+        "year": "Spetsvärmeandel, rullande år",
+        "lifetime": "Spetsvärmeandel, hela livslängden",
+    }
+
+    def __init__(self, runtime, span: str) -> None:
+        super().__init__(runtime.web)
+        self._runtime = runtime
+        self._span = span
+        self._attr_unique_id = unique_id(runtime.device, f"aux_share_{span}")
+        self._attr_name = self.NAMES[span]
+        self._attr_device_info = runtime.device
+
+    @property
+    def native_value(self) -> float | None:
+        result, _reason = share_for(self._runtime, self._span)
+        # One span's share under another span's name would be another number.
+        return result.value if result.basis == self._span else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        result, reason = share_for(self._runtime, self._span)
+        attributes = result.as_attributes()
+        if reason:
+            attributes["skäl"] = reason
+        return with_english(attributes)
+
+    @property
+    def available(self) -> bool:
+        # As the coefficient of performance: available without a figure, so
+        # the reason can be read, except the day, which goes with a quiet
+        # display or a counter row gone stale.
         if self._span == "day":
             return self.coordinator.last_update_success and not stale_rows(
                 self.coordinator, counter_rows(self._runtime)

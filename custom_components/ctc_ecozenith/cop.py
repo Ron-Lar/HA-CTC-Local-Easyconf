@@ -17,6 +17,11 @@ exists the yearly figure says how far the samples have come instead of showing
 nothing. The commissioning day, worked out from the powered-on hours, serves
 the first year alone: the counters stood at zero that day, so a sample from
 about a year later holds the whole first year.
+
+Since roadmap R28 the samples also carry the immersion heater's counter,
+Modbus 62191, taken at the moment the display's counters were read, and the
+same spans give the immersion heater's share of the electricity, the share of
+auxiliary heat; see the section of that name below.
 """
 
 from __future__ import annotations
@@ -38,6 +43,15 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 1
+
+#: Minor 1 held each sample as delivered heat and consumed energy. Minor 2
+#: adds the immersion heater's counter, Modbus 62191, as a third number where
+#: it was read with the other two (roadmap R28); a sample without it, every
+#: sample minor 1 wrote among them, is one whose immersion heater is unknown.
+#: The major version stays at 1: the release before reads the first two
+#: numbers of a sample and passes over the third, so a return to it keeps
+#: every sample, and only the third numbers are lost when it writes back.
+STORAGE_MINOR_VERSION = 2
 
 #: Below this the divisor is noise rather than a measurement. The two floors are
 #: not the same kind of number, which is why they are so far apart. A lifetime
@@ -84,6 +98,17 @@ YEAR_MAX_DAYS = 380
 #: turn a week into a fortnight.
 WINDOWS: dict[str, tuple[int, int]] = {"week": (7, 2), "month": (30, 5)}
 
+#: What each span is called in the attribute underlag, for the coefficient of
+#: performance and the share of auxiliary heat alike.
+BASIS_WORDS: dict[str, str] = {
+    "year": "rullande år",
+    "day": "senaste dygnet",
+    "week": "senaste 7 dygnen",
+    "month": "senaste 30 dygnen",
+    "first_year": "första året",
+    "lifetime": "hela livslängden",
+}
+
 
 @dataclass
 class CopResult:
@@ -103,14 +128,7 @@ class CopResult:
     reason: str | None = None
 
     def as_attributes(self) -> dict[str, Any]:
-        basis = {
-            "year": "rullande år",
-            "day": "senaste dygnet",
-            "week": "senaste 7 dygnen",
-            "month": "senaste 30 dygnen",
-            "first_year": "första året",
-            "lifetime": "hela livslängden",
-        }.get(self.basis, self.basis)
+        basis = BASIS_WORDS.get(self.basis, self.basis)
         return {
             "underlag": basis,
             "dygn i underlaget": self.days,
@@ -361,16 +379,162 @@ def reason_for(
     )
 
 
+# ------------------------------------------------- the share of auxiliary heat
+#
+# How much of the electricity the unit used went to the immersion heater, the
+# auxiliary heat, rather than to the compressor (roadmap R28): the immersion
+# heater's counter, Modbus 62191, against the sum of it and the compressor's
+# counter, the same consumed energy the coefficient of performance divides by.
+# Over the coefficient of performance's own spans, from the same samples, but
+# for the first year, whose figure was kept before the immersion heater's
+# counter was sampled. A system coefficient of performance with the immersion
+# heater counted in was left out on purpose: on an i255 whose immersion heater
+# has used 1 of 9358 kWh it is the same figure, and on an i550 Pro whose
+# compressor counter stands at zero it is 1.0 by definition. Never read off the
+# display's "/30 dagar" rows, and never sent to the statistics backend.
+
+#: The spans the share is given over.
+SHARE_SPANS: tuple[str, ...] = ("day", "week", "month", "year", "lifetime")
+
+#: Why a share is missing, where the words are the same for every span.
+SHARE_NOT_SAMPLED = (
+    "proven i underlaget saknar elpatronens räknare; nyare prov har den, så andelen kommer "
+    "när ett sådant prov är gammalt nog"
+)
+SHARE_IMMERSION_UNREAD = (
+    "elpatronens räknare har inte lästs ihop med displayens räknare sedan Home Assistant startade"
+)
+SHARE_IMMERSION_SILENT = "registret 62191 har inte svarat, så elpatronens räknare saknas"
+SHARE_BOTH_STUCK = (
+    "båda räknarna står på noll fast enheten varit igång, styrenheten fyller dem inte"
+)
+
+
+@dataclass
+class ShareResult:
+    """The immersion heater's share of the electricity, and what it rests on."""
+
+    #: Per cent, one decimal, or None with the reason why.
+    value: float | None
+    #: The span, by the same names as :class:`CopResult`'s.
+    basis: str
+    days: int
+    #: The immersion heater's and the compressor's energy across the span, kWh.
+    immersion: float | None = None
+    compressor: float | None = None
+    reason: str | None = None
+
+    def as_attributes(self) -> dict[str, Any]:
+        return {
+            "underlag": BASIS_WORDS.get(self.basis, self.basis),
+            "dygn i underlaget": self.days,
+            "elpatron kWh": self.immersion,
+            "kompressor kWh": self.compressor,
+        }
+
+
+def share_value(immersion: float, compressor: float) -> float:
+    """The immersion heater's per cent of the two, never 100 while the compressor used any.
+
+    One decimal: an immersion heater that used 1 of 9358 kWh is 0.0 per cent,
+    which is what it is, and the attributes carry the kilowatt hours. At the
+    other end a hundred per cent says that the compressor used nothing at all,
+    so a compressor that used a little is 99.9 however the rounding falls.
+    """
+    value = round(100.0 * immersion / (immersion + compressor), 1)
+    return min(value, 99.9) if compressor > 0 else value
+
+
+def _share_result(
+    basis: str,
+    days: int,
+    immersion: float,
+    compressor: float,
+    floor: float,
+    since: str,
+) -> ShareResult:
+    """The share across a span from its two deltas, or the reason there is none."""
+    if immersion < 0 or compressor < 0:
+        # A counter that went backwards: the unit was replaced or reset, and
+        # no share across that is honest.
+        return ShareResult(
+            None, basis, days,
+            reason=f"räknarna har gått bakåt sedan {since}, enheten är bytt eller nollställd",
+        )
+    shown = (round(immersion, 1), round(compressor, 1))
+    total = immersion + compressor
+    if total <= 0:
+        return ShareResult(
+            None, basis, days, *shown, reason=f"båda räknarna har stått still sedan {since}"
+        )
+    if total < floor:
+        return ShareResult(
+            None, basis, days, *shown,
+            reason=f"för lite energi ännu, {total:.1f} av {floor:.0f} kWh",
+        )
+    return ShareResult(share_value(immersion, compressor), basis, days, *shown)
+
+
+def compressor_counter_fault(
+    compressor: float | None, compressor_hours: float | None
+) -> str | None:
+    """Why no share can be trusted: a compressor counter at zero on a compressor that has run.
+
+    A hundred per cent auxiliary heat is the answer only where the compressor
+    has really used nothing. Its counter at zero beside a running time of a
+    day or more (Modbus 62214) is a controller that does not fill the counter,
+    and every share would then be the immersion heater's alone, whatever the
+    compressor did.
+    """
+    if compressor is None or compressor_hours is None:
+        return None
+    if compressor <= 0 and compressor_hours >= RUNNING_HOURS:
+        return (
+            f"kompressorns räknare står på noll fast kompressorn har gått "
+            f"{compressor_hours:.0f} timmar, styrenheten fyller den inte"
+        )
+    return None
+
+
+def _row_immersion(row: Any, index: int) -> float | None:
+    """The immersion heater's counter in a stored sample, or None where it was not read."""
+    if len(row) <= index:
+        return None
+    value = row[index]
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        return None
+    return float(value)
+
+
+def _known(value: float | None) -> list[float]:
+    """A sample's third number as it is stored: there where known, left out where not.
+
+    Left out rather than written as null, so a sample whose immersion heater
+    is unknown is stored exactly as minor 1 stored every sample.
+    """
+    return [] if value is None else [value]
+
+
 class CopTracker:
-    """Keeps one sample a day of the two lifetime counters."""
+    """Keeps one sample a day of the two lifetime counters, and the immersion heater's.
+
+    A sample is delivered heat and consumed energy, and since roadmap R28 the
+    immersion heater's counter (Modbus 62191) as a third number where it was
+    read with them. A sample without the third number, as every sample from
+    before then is, has an immersion heater that is unknown: the coefficient
+    of performance reads it as always, and the share of auxiliary heat passes
+    it over.
+    """
 
     def __init__(self, store: Any) -> None:
         self._store = store
         self._samples: dict[str, list[float]] = {}
         #: A short run of timestamped samples. The daily figure needs finer
         #: spacing than one a day, or "yesterday" could be anything from 12 to
-        #: 36 hours ago depending on when the samples happened to land.
-        self._recent: list[tuple[str, float, float]] = []
+        #: 36 hours ago depending on when the samples happened to land. Each
+        #: is (moment, delivered, consumed) or, with the immersion heater's
+        #: counter read, (moment, delivered, consumed, immersion heater).
+        self._recent: list[tuple[Any, ...]] = []
         #: The day the lifetime counters started from zero, when known. CTC's
         #: counters begin at nothing the day the unit is commissioned, which
         #: makes that day a sample of its own: zero delivered, zero consumed.
@@ -384,8 +548,12 @@ class CopTracker:
             return
         data = await self._store.async_load()
         if isinstance(data, dict) and isinstance(data.get("samples"), dict):
+            # Minor 1 wrote two numbers a sample, minor 2 a third where the
+            # immersion heater's counter was read; the shape decides, not the
+            # version, since a release before minor 2 may have written the
+            # file back.
             self._samples = {
-                day: [float(values[0]), float(values[1])]
+                day: [float(values[0]), float(values[1]), *_known(_row_immersion(values, 2))]
                 for day, values in data["samples"].items()
                 if isinstance(values, (list, tuple)) and len(values) >= 2
             }
@@ -399,7 +567,10 @@ class CopTracker:
             for row in data["recent"]:
                 if isinstance(row, (list, tuple)) and len(row) >= 3:
                     try:
-                        self._recent.append((str(row[0]), float(row[1]), float(row[2])))
+                        self._recent.append(
+                            (str(row[0]), float(row[1]), float(row[2]),
+                             *_known(_row_immersion(row, 3)))
+                        )
                     except (TypeError, ValueError):
                         continue
         self._loaded = True
@@ -410,6 +581,7 @@ class CopTracker:
         energy_in: float | None,
         today: date | None = None,
         now: datetime | None = None,
+        immersion: float | None = None,
     ) -> None:
         """Store the counters: one per day for the year, and a timestamped run.
 
@@ -420,6 +592,10 @@ class CopTracker:
         since, or when the pair comes back out of the display store after a
         restart, and recording it again would stamp a day's sample with a
         pair that was read on another day.
+
+        ``immersion`` is the immersion heater's counter as it stood at that
+        same moment, where it was read then; without it the sample is kept
+        as before, and its immersion heater is unknown.
         """
         if energy_out is None or energy_in is None:
             return
@@ -430,11 +606,12 @@ class CopTracker:
                 return
         when = now or datetime.now(UTC)
         stamp = (today or when.date()).isoformat()
-        self._samples[stamp] = [float(energy_out), float(energy_in)]
+        heater = _known(_row_immersion((immersion,), 0))
+        self._samples[stamp] = [float(energy_out), float(energy_in), *heater]
         cutoff = ((today or when.date()) - timedelta(days=COP_HISTORY_DAYS)).isoformat()
         self._samples = {d: v for d, v in self._samples.items() if d >= cutoff}
 
-        self._recent.append((when.isoformat(), float(energy_out), float(energy_in)))
+        self._recent.append((when.isoformat(), float(energy_out), float(energy_in), *heater))
         keep = when - timedelta(days=RECENT_DAYS)
         self._recent = [r for r in self._recent if _parse(r[0]) >= keep]
 
@@ -492,7 +669,7 @@ class CopTracker:
         for day in sorted(self._samples):
             span = (date.fromisoformat(day) - start).days
             if COP_WINDOW_DAYS <= span <= YEAR_MAX_DAYS:
-                out, consumed = self._samples[day]
+                out, consumed = self._samples[day][:2]
                 self._first_year = [float(out), float(consumed), float(span)]
                 return
 
@@ -532,7 +709,7 @@ class CopTracker:
             return CopResult(
                 None, "day", 0, reason="väntar på ett prov som är 20 till 30 timmar gammalt"
             )
-        stamp, base_out, base_in = max(window, key=lambda r: _parse(r[0]))
+        stamp, base_out, base_in = max(window, key=lambda r: _parse(r[0]))[:3]
         delta_out = energy_out - base_out
         delta_in = energy_in - base_in
         if delta_out < 0 or delta_in < 0:
@@ -580,7 +757,7 @@ class CopTracker:
         earliest = (now - timedelta(days=days + tolerance)).isoformat()
         older = sorted(d for d in self._samples if earliest <= d <= window_start)
         if older:
-            base_out, base_in = self._samples[older[-1]]
+            base_out, base_in = self._samples[older[-1]][:2]
             span = (now - date.fromisoformat(older[-1])).days
             delta_out = energy_out - base_out
             delta_in = energy_in - base_in
@@ -600,22 +777,24 @@ class CopTracker:
                 _ratio(delta_out, delta_in, floor), basis, span,
                 round(delta_out, 1), round(delta_in, 1),
             )
+        collected, reason = self._progress(days, tolerance, now)
+        return CopResult(None, basis, collected, reason=reason)
+
+    def _progress(self, days: int, tolerance: int, now: date) -> tuple[int, str]:
+        """How far the samples have come towards a window without a sample in its band.
+
+        The days to report and the reason: nothing kept yet, a gap in the
+        samples that covers the band, or so many days collected since the
+        oldest sample. The same for every figure that reads the daily samples.
+        """
         if not self._samples:
-            return CopResult(
-                None, basis, 0, reason=f"0 av {days} dygn samlade, inget prov sparat ännu"
-            )
+            return 0, f"0 av {days} dygn samlade, inget prov sparat ännu"
         oldest = min(self._samples)
         collected = (now - date.fromisoformat(oldest)).days
         if collected > days + tolerance:
-            return CopResult(
-                None, basis, days,
-                reason=f"inget sparat prov är {days} till {days + tolerance} dygn gammalt",
-            )
+            return days, f"inget sparat prov är {days} till {days + tolerance} dygn gammalt"
         collected = max(0, min(collected, days))
-        return CopResult(
-            None, basis, collected,
-            reason=f"{collected} av {days} dygn samlade, äldsta provet {oldest}",
-        )
+        return collected, f"{collected} av {days} dygn samlade, äldsta provet {oldest}"
 
     def result_year(
         self,
@@ -705,6 +884,158 @@ class CopTracker:
         if year.value is not None:
             return year
         return self.result_lifetime(energy_out, energy_in, today)
+
+    # --------------------------------------------- the share of auxiliary heat
+
+    def share_day(
+        self,
+        compressor: float | None,
+        immersion: float | None,
+        now: datetime | None = None,
+    ) -> ShareResult:
+        """The immersion heater's share over the last day.
+
+        Against the newest sample 20 to 30 hours old, as the day's coefficient
+        of performance, among those that carry the immersion heater's counter:
+        a sample from before it was sampled, or one written down at a restart
+        before the counter had been read with the display, is passed over
+        rather than taken for zero.
+        """
+        if compressor is None or immersion is None:
+            return ShareResult(None, "day", 0)
+        when = now or datetime.now(UTC)
+        oldest_allowed = when - timedelta(hours=DAY_MAX_HOURS)
+        newest_allowed = when - timedelta(hours=DAY_MIN_HOURS)
+        window = [
+            r for r in self._recent if oldest_allowed <= _parse(r[0]) <= newest_allowed
+        ]
+        if not window:
+            return ShareResult(
+                None, "day", 0,
+                reason=(
+                    f"väntar på ett prov som är {DAY_MIN_HOURS} till {DAY_MAX_HOURS} "
+                    "timmar gammalt"
+                ),
+            )
+        known = [r for r in window if _row_immersion(r, 3) is not None]
+        if not known:
+            return ShareResult(None, "day", 0, reason=SHARE_NOT_SAMPLED)
+        base = max(known, key=lambda r: _parse(r[0]))
+        moment = _parse(base[0])
+        hours = (when - moment).total_seconds() / 3600
+        return _share_result(
+            "day",
+            max(1, round(hours / 24)),
+            immersion - (_row_immersion(base, 3) or 0.0),
+            compressor - base[2],
+            MIN_CONSUMPTION_KWH_DAY,
+            moment.isoformat(timespec="minutes"),
+        )
+
+    def _share_window(
+        self,
+        compressor: float,
+        immersion: float,
+        basis: str,
+        days: int,
+        tolerance: int,
+        floor: float,
+        now: date,
+        per_day: bool = False,
+    ) -> ShareResult:
+        """The share across a window, from the newest daily sample in its band that has the counter.
+
+        The band and the floor are the coefficient of performance's for the
+        same span (:meth:`_window`). A sample without the immersion heater's
+        counter is passed over: the share starts a week, a month and a year
+        after the counter is first sampled, never across a sample that does
+        not have it.
+        """
+        window_start = (now - timedelta(days=days)).isoformat()
+        earliest = (now - timedelta(days=days + tolerance)).isoformat()
+        older = sorted(d for d in self._samples if earliest <= d <= window_start)
+        if older:
+            known = [d for d in older if _row_immersion(self._samples[d], 2) is not None]
+            if not known:
+                span = (now - date.fromisoformat(older[-1])).days
+                return ShareResult(None, basis, span, reason=SHARE_NOT_SAMPLED)
+            base = known[-1]
+            span = (now - date.fromisoformat(base)).days
+            if per_day:
+                floor = floor * max(1, span)
+            return _share_result(
+                basis,
+                span,
+                immersion - (_row_immersion(self._samples[base], 2) or 0.0),
+                compressor - self._samples[base][1],
+                floor,
+                base,
+            )
+        collected, reason = self._progress(days, tolerance, now)
+        return ShareResult(None, basis, collected, reason=reason)
+
+    def share_window(
+        self,
+        compressor: float | None,
+        immersion: float | None,
+        basis: str,
+        today: date | None = None,
+    ) -> ShareResult:
+        """The share over the last week or month, the spans in :data:`WINDOWS`."""
+        days, tolerance = WINDOWS[basis]
+        if compressor is None or immersion is None:
+            return ShareResult(None, basis, 0)
+        return self._share_window(
+            compressor, immersion, basis, days, tolerance, MIN_CONSUMPTION_KWH_DAY,
+            today or date.today(), per_day=True,
+        )
+
+    def share_year(
+        self,
+        compressor: float | None,
+        immersion: float | None,
+        today: date | None = None,
+    ) -> ShareResult:
+        """The share over a rolling year, where a year of samples with the counter exists."""
+        if compressor is None or immersion is None:
+            return ShareResult(None, "year", 0)
+        return self._share_window(
+            compressor, immersion, "year",
+            COP_WINDOW_DAYS, YEAR_MAX_DAYS - COP_WINDOW_DAYS, MIN_CONSUMPTION_KWH,
+            today or date.today(),
+        )
+
+    def share_lifetime(
+        self,
+        compressor: float | None,
+        immersion: float | None,
+        today: date | None = None,
+        hours: float | None = None,
+    ) -> ShareResult:
+        """The share over everything the two counters have counted.
+
+        Both at zero on a unit that has been switched on for a day
+        (``hours``, the powered-on hours) is a controller that fills neither,
+        said as such; before that it is too little energy so far. The days are
+        counted as the lifetime coefficient of performance counts them.
+        """
+        if compressor is None or immersion is None:
+            return ShareResult(None, "lifetime", 0)
+        now = today or date.today()
+        since = self._anchor or (min(self._samples) if self._samples else None)
+        span = max(0, (now - date.fromisoformat(since)).days) if since else 0
+        if compressor < 0 or immersion < 0:
+            return ShareResult(None, "lifetime", span, reason="räknarna har inte lästs")
+        if compressor + immersion <= 0:
+            if hours is not None and hours >= RUNNING_HOURS:
+                return ShareResult(None, "lifetime", span, 0.0, 0.0, reason=SHARE_BOTH_STUCK)
+            return ShareResult(
+                None, "lifetime", span, 0.0, 0.0,
+                reason=f"för lite energi ännu, 0.0 av {MIN_CONSUMPTION_KWH:.0f} kWh",
+            )
+        return _share_result(
+            "lifetime", span, immersion, compressor, MIN_CONSUMPTION_KWH, since or "driftstarten"
+        )
 
 
 #: The older name of the delivered heat counter. The display's text catalogue
@@ -845,7 +1176,57 @@ class ConsumptionSnapshot:
         self._read_at = read_at
         # A Modbus value that is not usable right now must not be paired with
         # the new display reading either; better no sample than a wrong one.
-        self.value = modbus_consumption(modbus_data)
+        self.value = self._read(modbus_data)
+
+    def value_at(self, read_at: Any) -> float | None:
+        """The value taken at ``read_at``, or None where the snapshot is of another moment."""
+        if read_at is None or read_at != self._read_at:
+            return None
+        return self.value
+
+    @staticmethod
+    def _read(modbus_data: dict[str, Any] | None) -> float | None:
+        return modbus_consumption(modbus_data)
+
+
+#: Modbus register 62191, the energy the immersion heater has used, in kWh.
+MODBUS_IMMERSION_KEY = "immersion_kwh"
+MODBUS_IMMERSION_ADDRESS = next(d.address for d in MODBUS_SENSORS if d.key == MODBUS_IMMERSION_KEY)
+
+
+def modbus_immersion_answered(answered: Collection[int] | None) -> bool:
+    """Whether the controller has answered for register 62191 at all, as for 62341."""
+    return MODBUS_IMMERSION_ADDRESS in (answered or ())
+
+
+def modbus_immersion(data: dict[str, Any] | None) -> float | None:
+    """The immersion heater's energy from Modbus, or None where there is no reading.
+
+    By the same rules as :func:`modbus_consumption`: zero is a reading, and
+    a value that is no number, below zero or one of CTC's markers is none.
+    """
+    value = (data or {}).get(MODBUS_IMMERSION_KEY)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value < 0 or value in SENTINELS:
+        return None
+    return float(value)
+
+
+class ImmersionSnapshot(ConsumptionSnapshot):
+    """Modbus 62191 as it stood when the display's delivered heat was last read (R28).
+
+    The share of auxiliary heat sets the immersion heater's counter against
+    the compressor's, which is read with the display, so the two are taken at
+    the same moment for the reason :class:`ConsumptionSnapshot` gives. Nothing
+    of it is written down for a restart: until the display is read again the
+    snapshot is empty, and a sample written down meanwhile has no immersion
+    heater, which the share passes over.
+    """
+
+    @staticmethod
+    def _read(modbus_data: dict[str, Any] | None) -> float | None:
+        return modbus_immersion(modbus_data)
 
 
 def find_operating_hours(pages: list[Any]) -> Any | None:
@@ -916,6 +1297,99 @@ def counters_read_at(runtime: Any) -> datetime | None:
         if row_read_at(web, row.key) is None or row_is_fresh(web, row.key) is False:
             return None
     return row_read_at(web, rows[0].key)
+
+
+def immersion_now(runtime: Any) -> float | None:
+    """The immersion heater's counter as it stood when the display's counters were last read."""
+    snapshot = getattr(runtime, "immersion_snapshot", None)
+    return snapshot.value if snapshot is not None else None
+
+
+def immersion_at(runtime: Any, read_at: datetime | None) -> float | None:
+    """The immersion heater's counter taken at ``read_at``, for a sample of that moment."""
+    snapshot = getattr(runtime, "immersion_snapshot", None)
+    return snapshot.value_at(read_at) if snapshot is not None else None
+
+
+def _modbus_number(runtime: Any, key: str) -> float | None:
+    modbus = getattr(runtime, "modbus", None)
+    value = (getattr(modbus, "data", None) or {}).get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def share_reason(
+    result: ShareResult,
+    compressor: float | None,
+    immersion: float | None,
+    *,
+    compressor_hours: float | None = None,
+    consumption_answered: bool = True,
+    immersion_answered: bool = True,
+    display: str | None = None,
+) -> str | None:
+    """Why the share for ``result`` shows nothing, the nearest cause first, as :func:`reason_for`.
+
+    A display that has gone quiet first, since the compressor's counter is
+    read with it; then a counter that has not been read, by register where a
+    register never answered; then a compressor counter that a running
+    compressor never moves, which empties any share; and last the tracker's
+    own account of its samples and the deltas.
+    """
+    if display is not None:
+        return display
+    if compressor is None:
+        if not consumption_answered:
+            return "registret 62341 har inte svarat, så tillförd energi saknas"
+        return "räknarna har inte lästs"
+    if immersion is None:
+        return SHARE_IMMERSION_UNREAD if immersion_answered else SHARE_IMMERSION_SILENT
+    fault = compressor_counter_fault(compressor, compressor_hours)
+    if fault is not None:
+        return fault
+    if result.value is not None:
+        return None
+    return result.reason or "räknarna har inte lästs"
+
+
+def share_for(runtime: Any, span: str) -> tuple[ShareResult, str | None]:
+    """The share over ``span`` for a heat pump, and the reason where it has no figure.
+
+    The compressor's counter as the coefficient of performance reads it, the
+    display's own or Modbus 62341 taken with the display, and the immersion
+    heater's taken at the same moment. Where a reason stands the figure is
+    empty, whatever the deltas gave: a quiet display or a compressor counter
+    that does not count leaves nothing to set the immersion heater against.
+    """
+    tracker = runtime.cop
+    _out, compressor = current_totals(runtime)
+    immersion = immersion_now(runtime)
+    if span == "day":
+        result = tracker.share_day(compressor, immersion)
+    elif span in WINDOWS:
+        result = tracker.share_window(compressor, immersion, span)
+    elif span == "year":
+        result = tracker.share_year(compressor, immersion)
+    else:
+        result = tracker.share_lifetime(compressor, immersion, hours=powered_on_hours(runtime))
+    modbus = getattr(runtime, "modbus", None)
+    answered = getattr(modbus, "answered", None)
+    reason = share_reason(
+        result,
+        compressor,
+        immersion,
+        compressor_hours=_modbus_number(runtime, "compressor_hours"),
+        consumption_answered=getattr(runtime, "energy_in", None) is not None
+        or modbus_consumption_answered(answered),
+        immersion_answered=modbus_immersion_answered(answered),
+        display=display_silence(getattr(runtime, "web", None), *counter_rows(runtime)),
+    )
+    if reason is not None and result.value is not None:
+        result = ShareResult(
+            None, result.basis, result.days, result.immersion, result.compressor, reason
+        )
+    return result, reason
 
 
 def sample_summary(runtime: Any, recorded: bool) -> dict[str, Any]:
