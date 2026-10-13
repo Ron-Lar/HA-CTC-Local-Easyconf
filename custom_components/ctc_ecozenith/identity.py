@@ -46,10 +46,12 @@ import logging
 from typing import Any
 
 from .const import (
+    CHROME_BUTTON,
     CONF_IDENTITY,
     CONF_IDENTITY_SCREENS,
     NAV_ALLOWED_EN,
     PAGE_HEADER_HEIGHT,
+    ROW_TOLERANCE,
     SYSTEM_INFO_LABEL_EN,
 )
 from .web_api import CtcWebClient, CtcWebError, Widget, tap_target
@@ -69,12 +71,6 @@ LABEL_HP_SOFTWARE = "Software HP PCB"
 #: A firmware written as a date. Anything outside this range is not one.
 FIRMWARE_MIN = 20000000
 FIRMWARE_MAX = 21000000
-
-#: Rows on the history screen, by English label.
-LABEL_ENERGY_OUT = "Energy output total (kWh)"
-LABEL_ENERGY_IN = "Energy consumption total (kWh)"
-
-_ROW_TOLERANCE = 14
 
 
 @dataclass
@@ -210,7 +206,7 @@ def only_identity_differs(before: Mapping[str, Any], after: Mapping[str, Any]) -
 
 
 def _same_row(one: Widget, other: Widget) -> bool:
-    return abs(one.y - other.y) <= _ROW_TOLERANCE
+    return abs(one.y - other.y) <= ROW_TOLERANCE
 
 
 async def _async_english(client: CtcWebClient, screen: int, widget: Widget) -> str | None:
@@ -357,14 +353,13 @@ async def async_read_identity(
 
 # --------------------------------------------------------- the guarded walk
 
-#: The panel's own control, top right. On a subpage it steps back; on the home
-#: screen it opens the quick menu, which is where an i550 Pro is thought to keep
-#: the system information page, behind a caption and an icon whose own label is
-#: nonsense. This is the single press the walk could make without a caption to
-#: go by, and it is made on the chrome rather than on anything the page itself
-#: draws: it navigates, it does not act. It has never met a real i550 Pro, so
-#: the branch is off unless CONF_TRY_QUICK_MENU says otherwise.
-CHROME_BUTTON = (440, 23)
+# On the home screen the panel's own control, CHROME_BUTTON, opens the quick
+# menu, which is where an i550 Pro is thought to keep the system information
+# page, behind a caption and an icon whose own label is nonsense. This is the
+# single press the walk could make without a caption to go by, and it is made
+# on the chrome rather than on anything the page itself draws: it navigates,
+# it does not act. It has never met a real i550 Pro, so the branch is off
+# unless CONF_TRY_QUICK_MENU says otherwise.
 
 
 async def _async_controls(
@@ -449,7 +444,7 @@ async def _async_descend(
             return True
         if await _async_descend(client, landed, depth - 1, visited, home):
             return True
-        await client.async_click(page_map.get(landed, []), 440, 23)
+        await client.async_click(page_map.get(landed, []), *CHROME_BUTTON)
         if await client.async_current_page() != page:
             _LOGGER.debug("Stepping back from page %s did not return to %s", landed, page)
             return False

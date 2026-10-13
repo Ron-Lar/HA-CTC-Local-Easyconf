@@ -25,6 +25,8 @@ from typing import Any
 
 import aiohttp
 
+from .const import MODEL_FAMILIES
+
 _LOGGER = logging.getLogger(__name__)
 
 PORT_CONCURRENCY = 60
@@ -37,17 +39,9 @@ PROBE_TIMEOUT = 4.0
 #: address on it rather than passed over (roadmap L8).
 MAX_SWEEP = 1024
 
-# The settings file names a family, not an exact model. The name chosen here is
-# the member of each family that has the display with Modbus TCP, since that is
-# the only kind this integration can talk to at all. A family joins the list
-# once the fleet has shown its stem (roadmap R19); stats_extra.MODEL_SLUGS must
-# hold every name given here, and tests/test_model_names.py says so.
-MODEL_NAMES = {
-    "ezi2xx": "EcoZenith i255",
-    "ezi3xx": "EcoZenith i360",
-    "ezi5xx": "EcoZenith i550 Pro",
-    "ecologic": "EcoLogic",
-}
+#: The settings file names a family, not an exact model: the model name for
+#: each known stem, out of const.MODEL_FAMILIES.
+MODEL_NAMES = {stem: name for stem, (name, _slug) in MODEL_FAMILIES.items()}
 
 #: The model of a heat pump whose display has not said which one it is: set up
 #: on Modbus alone (roadmap R11), or named by a settings file nobody has seen

@@ -8,7 +8,8 @@ entries keep the stem in their data for the report to read.
 
 discovery.MODEL_NAMES gives the names and stats_extra.MODEL_SLUGS turns them
 into the report's closed list of slugs. A name in the one and not the other
-would report a known model as "other" without anybody noticing.
+would report a known model as "other" without anybody noticing, so both are
+read off one table, const.MODEL_FAMILIES (L10).
 """
 
 from __future__ import annotations
@@ -52,6 +53,15 @@ def test_every_named_model_has_a_slug_and_every_slug_a_name(discovery, stats_ext
     assert set(discovery.MODEL_NAMES.values()) == set(stats_extra.MODEL_SLUGS)
     for name in discovery.MODEL_NAMES.values():
         assert stats_extra.model_slug(name) != "other", name
+
+
+def test_both_lists_are_read_off_the_one_table(const, discovery, stats_extra):
+    """L10: a family is added to const.MODEL_FAMILIES and to no list of its own."""
+    for stem, (name, slug) in const.MODEL_FAMILIES.items():
+        assert discovery.MODEL_NAMES[stem] == name
+        assert stats_extra.MODEL_SLUGS[name] == slug
+    assert len(discovery.MODEL_NAMES) == len(const.MODEL_FAMILIES), "en namnlista vid sidan om"
+    assert len(stats_extra.MODEL_SLUGS) == len(const.MODEL_FAMILIES), "en sluglista vid sidan om"
 
 
 def test_an_unknown_family_reports_as_other_and_never_by_its_name(stats_extra):

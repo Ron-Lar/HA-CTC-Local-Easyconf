@@ -72,7 +72,6 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         client: CtcModbusClient,
         interval: int,
-        include_settings: bool = True,
         config_entry: Any = None,
     ) -> None:
         super().__init__(
@@ -83,9 +82,7 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             **_entry_kwargs(config_entry),
         )
         self.client = client
-        self.descriptions: tuple[ModbusSensor, ...] = (
-            MODBUS_SENSORS + MODBUS_SETTINGS if include_settings else MODBUS_SENSORS
-        )
+        self.descriptions: tuple[ModbusSensor, ...] = MODBUS_SENSORS + MODBUS_SETTINGS
         # The block with the register every model answers goes first, so a
         # controller that answers nothing is found out after one timeout.
         self._blocks = lead_with(plan_blocks(self.descriptions), PROBE_REGISTER)
@@ -218,8 +215,6 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         pages: list[SlowPage],
         interval: int,
         restore_page: bool = True,
-        home_page: int | None = None,
-        on_home_page_found: Any = None,
         stored: StoredHarvest | None = None,
         config_entry: Any = None,
     ) -> None:
@@ -241,9 +236,8 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         #: it in this run, learnt the first time a harvest finds the panel
         #: outside the harvested pages. Within the run it keeps one failed
         #: restore from making the wrong page the new normal; a restart learns
-        #: it again, unless the caller hands it back in, and nothing does yet.
-        self.home_page = home_page
-        self._on_home_page_found = on_home_page_found
+        #: it again.
+        self.home_page: int | None = None
         self._expected_page: int | None = None
         #: The harvest's own bookkeeping, for the diagnostics to show: how many
         #: rounds in a row gave way because the panel was not where the last
@@ -501,8 +495,6 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             and origin not in {p.page for p in self.pages}
         ):
             self.home_page = origin
-            if self._on_home_page_found is not None:
-                self._on_home_page_found(origin)
 
     def _restore_target(self, origin: int) -> int | None:
         """Where the panel is put back afterwards, if anywhere.

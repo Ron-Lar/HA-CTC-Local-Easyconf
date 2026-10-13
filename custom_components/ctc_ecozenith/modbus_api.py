@@ -524,7 +524,8 @@ class CtcModbusClient:
         async with self._lock:
             client = await self._ensure_client()
             kwargs = self._slave_kwargs(client, "write_registers")
-            raw = value & 0xFFFF if value >= 0 else (value + 65536) & 0xFFFF
+            # A negative value goes as its two's complement, the low sixteen bits.
+            raw = value & 0xFFFF
             await self._pace()
             try:
                 result = await client.write_registers(address, [raw], **kwargs)

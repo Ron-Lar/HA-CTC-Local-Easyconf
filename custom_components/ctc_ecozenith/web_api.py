@@ -44,17 +44,15 @@ from typing import Any
 import aiohttp
 
 from .const import (
+    CHROME_BUTTON,
     HEADER_ICON_MAX_X,
     PAGE_HEADER_HEIGHT,
+    ROW_TOLERANCE,
     STATUS_CAPTIONS,
     WEB_MAX_CONCURRENCY,
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-#: How far apart a caption and a text may sit and still be the same row. The
-#: catalogue's own tolerance; kept here since the catalogue imports this module.
-ROW_TOLERANCE = 14
 
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
 #: A second chance for a reading that was merely slow. The display is a small
@@ -62,10 +60,6 @@ REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
 #: never repeated, because a tap that did land would move the panel twice.
 PATIENT_TIMEOUT = aiohttp.ClientTimeout(total=25)
 
-#: The panel's own control, top right. On a subpage it steps back; on the home
-#: screen the same spot is a button of its own (the quick menu on an i550 Pro),
-#: so it is never pressed on a page known to be home.
-BACK_BUTTON = (440, 23)
 #: The panel is 480 by 272. A tap outside it is a verified no-operation, used
 #: to fetch screens without pressing anything.
 PANEL_WIDTH = 480
@@ -705,14 +699,6 @@ class CtcWebClient:
             return None
         return picked[1]
 
-    async def async_find_widget(self, screen: int, label: str) -> Widget | None:
-        """Return the first visible widget whose label matches, case folded."""
-        wanted = label.strip().casefold()
-        for widget in await self.async_widgets(screen):
-            if widget.visible and widget.label and widget.label.strip().casefold() == wanted:
-                return widget
-        return None
-
     # ------------------------------------------------------------- navigation
 
     def _click_path(self, screens: list[int]) -> str:
@@ -801,7 +787,7 @@ class CtcWebClient:
             if here == home or here in seen:
                 return False
             seen.add(here)
-            await self.async_click(page_map.get(here, []), *BACK_BUTTON)
+            await self.async_click(page_map.get(here, []), *CHROME_BUTTON)
             if await self.async_current_page() == here:
                 return False
         return await self.async_current_page() == root
@@ -828,7 +814,7 @@ class CtcWebClient:
             if here == self._home or here in seen:
                 return False
             seen.add(here)
-            await self.async_click(page_map.get(here, []), *BACK_BUTTON)
+            await self.async_click(page_map.get(here, []), *CHROME_BUTTON)
             if await self.async_current_page() == here:
                 return False
         return await self.async_current_page() == target
@@ -897,7 +883,7 @@ class CtcWebClient:
             if here in seen:
                 return None
             seen.add(here)
-            await self.async_click(page_map.get(here, []), *BACK_BUTTON)
+            await self.async_click(page_map.get(here, []), *CHROME_BUTTON)
             if await self.async_current_page() == here:
                 return None
         here = await self.async_current_page()
