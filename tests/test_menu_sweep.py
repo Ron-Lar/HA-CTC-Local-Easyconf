@@ -14,7 +14,12 @@ the way the two models in the houses lay theirs out:
 * an i255, whose operation data pages share a tab strip along the bottom, and
   whose history page is two screens;
 * an i550 Pro, whose root is a schematic without a strip, with the heat pump's
-  pages one level further down behind a strip of their own.
+  pages one level further down behind a strip of their own. The root here is
+  simplified, six controls, so that the budget reaches the heat pump's strip.
+  On PT's real i550 Pro it does not: the budget runs out before Kompressor
+  VP1 (page 42, screen 138) is reached, a gap the sweep lives with until the
+  roadmap's L7 finds the way there. Nothing here imitates that root, since
+  its definition was never captured; L7's own tests are the place for it.
 
 Each page carries a header icon at the top left that leads out of the menu to
 the installer's settings, and the home screen's own button opens the quick
@@ -297,6 +302,9 @@ def i550_expected(const) -> list:
         ]),
         # The heat pump's own pages are a level down, behind the strip on the
         # page the heat pump picture leads to; that page has no reading itself.
+        # They are reached because this root is simplified, six controls so
+        # that the budget lasts. PT's real root spends the budget before
+        # Kompressor VP1 (page 42, screen 138); see the roadmap's L7.
         (VP1, "Kompressor VP1", [138], [centre(VP_BOX), centre(VP_TABS[0])], [
             value(const, 42, 138, 118, "Avgiven värme", "%.1f", "kW", 0.1),
             value(const, 42, 138, 124, "Tillförd effekt", "%.1f", "kW", 0.1),
@@ -568,6 +576,14 @@ def test_a_panel_found_outside_the_menu_is_left_on_the_home_screen(
     sweep(catalogue, web_api, panel)
     assert panel.page == HOME
     assert [p for p in panel.control_presses if p.page == start] == []
+    # Once the panel is on the home screen, the restore leaves it there
+    # (catalogue._async_restore) rather than pressing the tile and stepping
+    # back out: two moves of the physical panel for nothing. A panel that
+    # started on the root or inside the menu may need the tile again to be put
+    # back, so the count is held for these two starts only.
+    assert sum(1 for p in panel.presses if p.page == HOME) == 1, (
+        "hemskärmen trycks bara en gång, på kaklet"
+    )
 
 
 INSIDE = [
