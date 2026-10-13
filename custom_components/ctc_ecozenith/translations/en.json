@@ -214,8 +214,34 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "alarm": {
+        "name": "Alarm"
+      },
+      "blocked": {
+        "name": "Blocked"
+      },
+      "compressor_running": {
+        "name": "Compressor running"
+      },
+      "defrosting": {
+        "name": "Defrost"
+      },
+      "immersion_active": {
+        "name": "Immersion heater active"
+      },
+      "smartgrid_active": {
+        "name": "SmartGrid active"
+      }
+    },
+    "button": {
+      "release_control": {
+        "name": "Release all control"
+      }
+    },
     "event": {
       "events": {
+        "name": "Events",
         "state_attributes": {
           "event_type": {
             "state": {
@@ -230,6 +256,267 @@
             }
           }
         }
+      }
+    },
+    "number": {
+      "ctl_dhw_setpoint": {
+        "name": "Control hot water setpoint"
+      },
+      "ctl_extra_dhw": {
+        "name": "Control extra hot water"
+      },
+      "ctl_immersion_lower": {
+        "name": "Control max lower immersion heater"
+      },
+      "ctl_immersion_upper": {
+        "name": "Control max upper immersion heater"
+      },
+      "ctl_max_rps": {
+        "name": "Control max compressor speed"
+      },
+      "ctl_room_setpoint_1": {
+        "name": "Control room setpoint"
+      }
+    },
+    "select": {
+      "ctl_dhw_mode": {
+        "name": "Control hot water mode"
+      },
+      "ctl_price_mode": {
+        "name": "Control price mode"
+      },
+      "ctl_zone_mode_1": {
+        "name": "Control operating mode HS1"
+      }
+    },
+    "sensor": {
+      "active_overrides": {
+        "name": "Active overrides"
+      },
+      "bootloader": {
+        "name": "Bootloader version"
+      },
+      "compressor_hours": {
+        "name": "Compressor running time"
+      },
+      "compressor_hours_24h": {
+        "name": "Compressor running time over the last day"
+      },
+      "compressor_kwh": {
+        "name": "Compressor energy"
+      },
+      "control_sw": {
+        "name": "Controller software version"
+      },
+      "control_sw_year": {
+        "name": "Controller software version, year"
+      },
+      "cop_day": {
+        "name": "Daily COP"
+      },
+      "cop_first_year": {
+        "name": "COP, first year"
+      },
+      "cop_lifetime": {
+        "name": "COP, whole lifetime"
+      },
+      "cop_month": {
+        "name": "Monthly COP"
+      },
+      "cop_week": {
+        "name": "Weekly COP"
+      },
+      "cop_year": {
+        "name": "Yearly COP"
+      },
+      "current_l1": {
+        "name": "Current L1"
+      },
+      "current_l2": {
+        "name": "Current L2"
+      },
+      "current_l3": {
+        "name": "Current L3"
+      },
+      "defrosts_today": {
+        "name": "Defrosts today"
+      },
+      "degree_minutes": {
+        "name": "Degree minutes"
+      },
+      "dhw_capacity": {
+        "name": "Hot water capacity"
+      },
+      "dhw_circulation": {
+        "name": "Hot water circulation"
+      },
+      "dhw_lower_temp": {
+        "name": "Hot water lower"
+      },
+      "dhw_stop_temp": {
+        "name": "Hot water stop temperature"
+      },
+      "dhw_temp": {
+        "name": "Hot water"
+      },
+      "dhw_temp_raw": {
+        "name": "Hot water temperature (62003)"
+      },
+      "display_fw": {
+        "name": "Display software version"
+      },
+      "display_harvest": {
+        "name": "Last display harvest"
+      },
+      "hp1_brine_in": {
+        "name": "Brine in"
+      },
+      "hp1_brine_out": {
+        "name": "Brine out"
+      },
+      "hp1_brine_pump": {
+        "name": "Brine pump"
+      },
+      "hp1_charge_pump": {
+        "name": "Charge pump"
+      },
+      "hp1_defrost_timer": {
+        "name": "Defrost timer"
+      },
+      "hp1_discharge": {
+        "name": "Hot gas"
+      },
+      "hp1_fan": {
+        "name": "Fan"
+      },
+      "hp1_high_pressure": {
+        "name": "High pressure"
+      },
+      "hp1_in": {
+        "name": "Heat pump in"
+      },
+      "hp1_low_pressure": {
+        "name": "Low pressure"
+      },
+      "hp1_out": {
+        "name": "Heat pump out"
+      },
+      "hp1_outdoor_temp": {
+        "name": "Outdoor temperature at the heat pump"
+      },
+      "hp1_power": {
+        "name": "Heat pump supplied power"
+      },
+      "hp1_rps": {
+        "name": "Compressor speed"
+      },
+      "hp1_status": {
+        "name": "Heat pump status"
+      },
+      "hp1_suction": {
+        "name": "Suction gas"
+      },
+      "hp_fw": {
+        "name": "Heat pump control board software version"
+      },
+      "hp_model": {
+        "name": "Heat pump model"
+      },
+      "hs1_flow": {
+        "name": "Flow HS1"
+      },
+      "hs1_flow_setpoint": {
+        "name": "Flow setpoint HS1"
+      },
+      "hs1_status": {
+        "name": "Heating system status"
+      },
+      "immersion_kwh": {
+        "name": "Immersion heater energy"
+      },
+      "immersion_lower_kw": {
+        "name": "Lower immersion heater"
+      },
+      "immersion_upper_kw": {
+        "name": "Upper immersion heater"
+      },
+      "last_alarm": {
+        "name": "Last alarm"
+      },
+      "last_defrost": {
+        "name": "Last defrost"
+      },
+      "last_run": {
+        "name": "Last run"
+      },
+      "last_start": {
+        "name": "Last start"
+      },
+      "made": {
+        "name": "Manufactured"
+      },
+      "mean_run_24h": {
+        "name": "Mean run over the last day"
+      },
+      "outdoor_temp": {
+        "name": "Outdoor temperature"
+      },
+      "radiator_temp": {
+        "name": "Radiator water"
+      },
+      "return_temp": {
+        "name": "Return temperature"
+      },
+      "room_temp_1": {
+        "name": "Room temperature"
+      },
+      "room_temp_2": {
+        "name": "Room temperature 2"
+      },
+      "serial": {
+        "name": "Serial number"
+      },
+      "set_adjust_1": {
+        "name": "Curve adjustment"
+      },
+      "set_dhw_mode": {
+        "name": "Hot water mode setting"
+      },
+      "set_extra_dhw": {
+        "name": "Extra hot water left"
+      },
+      "set_heating_mode_1": {
+        "name": "Heating mode setting"
+      },
+      "set_hp1_blocked": {
+        "name": "Heat pump allowed"
+      },
+      "set_max_immersion_lower": {
+        "name": "Max lower immersion heater"
+      },
+      "set_max_immersion_upper": {
+        "name": "Max upper immersion heater"
+      },
+      "set_max_rps_1": {
+        "name": "Max compressor speed setting"
+      },
+      "set_room_1": {
+        "name": "Room temperature setting"
+      },
+      "set_slope_1": {
+        "name": "Curve slope"
+      },
+      "sg_mode": {
+        "name": "SmartGrid mode"
+      },
+      "starts_today": {
+        "name": "Starts today"
+      },
+      "system_status": {
+        "name": "System status"
+      },
+      "tank_lower_setpoint": {
+        "name": "Lower tank setpoint"
       }
     }
   }

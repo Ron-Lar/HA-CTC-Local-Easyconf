@@ -61,7 +61,11 @@ class CtcControlSelect(CoordinatorEntity, SelectEntity):
         self._register = register
         self._enum = register.enum or {}
         self._attr_unique_id = unique_id(runtime.device, register.key)
-        self._attr_name = register.name
+        # Named in Home Assistant's language from the translations under the
+        # register's key (roadmap R23). The options are the table's Swedish
+        # labels and Släpp styrningen in every language, with no translation:
+        # an automation or an energy manager selects them by those words.
+        self._attr_translation_key = register.key
         self._attr_device_info = runtime.device
         self._attr_options = [RELEASE, *self._enum.values()]
         if register.icon:

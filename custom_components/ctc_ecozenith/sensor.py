@@ -53,14 +53,14 @@ from .overrides import held
 from .rows import due_rows, split_rows, vanished_display_keys
 from .transitions import (
     MEAN_RUN_KEY,
-    MEAN_RUN_NAME,
     MINUTES_24H_KEY,
     TRANSITION_SENSORS,
     TransitionSensor,
     mean_run_minutes,
 )
 
-#: What the unit says about itself, one sensor each: the entity key, the name,
+#: What the unit says about itself, one sensor each: the entity key, which is
+#: its translation key, the Swedish name that translations/sv.json carries,
 #: where on the identity the value is read, and the icon.
 IDENTITY_ROWS = (
     ("hp_model", "Värmepumpsmodell", lambda i: i.heatpump_model, "mdi:heat-pump-outline"),
@@ -163,11 +163,11 @@ async def async_setup_entry(
 
     def identity_sensors() -> list[SensorEntity]:
         new: list[SensorEntity] = []
-        for key, name, read, icon in IDENTITY_ROWS:
+        for key, _name, read, icon in IDENTITY_ROWS:
             if key in offered or not read(runtime.identity):
                 continue
             offered.add(key)
-            new.append(CtcIdentitySensor(runtime, key, name, read, icon, signal))
+            new.append(CtcIdentitySensor(runtime, key, read, icon, signal))
         return new
 
     entities.extend(identity_sensors())
@@ -246,7 +246,12 @@ class CtcModbusSensor(CoordinatorEntity, SensorEntity):
         super().__init__(runtime.modbus)
         self._description = description
         self._attr_unique_id = unique_id(runtime.device, description.key)
-        self._attr_name = description.name
+        # Named in Home Assistant's language from the translations under the
+        # register's key, Swedish (the table's own name, word for word) or
+        # English (roadmap R23). An enum register's state stays the table's
+        # Swedish label in every language: automations and the history rest
+        # on it.
+        self._attr_translation_key = description.key
         self._attr_device_info = runtime.device
         self._attr_entity_registry_enabled_default = description.enabled_default
         if description.icon:
@@ -297,7 +302,10 @@ class CtcDisplaySensor(CoordinatorEntity, SensorEntity):
     """A reading harvested from the display's own web interface.
 
     These come from a page the integration has to navigate to, so they update on
-    the slow interval rather than continuously.
+    the slow interval rather than continuously. Named by the panel itself, its
+    page title and its row, in the language the menu is read in, which is
+    Swedish whatever Home Assistant speaks: the integration has no word of
+    its own for a row a display shows, so it has no translation either.
     """
 
     _attr_has_entity_name = True
@@ -374,7 +382,7 @@ class CtcHarvestSensor(CoordinatorEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_icon = "mdi:clock-check-outline"
-    _attr_name = "Senaste displayskörd"
+    _attr_translation_key = "display_harvest"
 
     def __init__(self, runtime) -> None:
         super().__init__(runtime.web)
@@ -426,12 +434,12 @@ class CtcLastAlarmSensor(CoordinatorEntity, SensorEntity):
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:alert-circle-outline"
+    _attr_translation_key = "last_alarm"
 
     def __init__(self, runtime) -> None:
         super().__init__(runtime.web)
         self._runtime = runtime
         self._attr_unique_id = unique_id(runtime.device, "last_alarm")
-        self._attr_name = "Senaste larm"
         self._attr_device_info = runtime.device
 
     @property
@@ -492,7 +500,7 @@ class CtcActiveOverridesSensor(CoordinatorEntity, SensorEntity):
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:hand-back-left-outline"
-    _attr_name = "Aktiva överstyrningar"
+    _attr_translation_key = "active_overrides"
 
     def __init__(self, runtime) -> None:
         super().__init__(runtime.modbus)
@@ -537,9 +545,9 @@ class CtcIdentitySensor(SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_should_poll = False
 
-    def __init__(self, runtime, key: str, name: str, read, icon: str, signal: str) -> None:
+    def __init__(self, runtime, key: str, read, icon: str, signal: str) -> None:
         self._attr_unique_id = unique_id(runtime.device, key)
-        self._attr_name = name
+        self._attr_translation_key = key
         self._attr_icon = icon
         self._attr_device_info = runtime.device
         self._runtime = runtime
@@ -571,7 +579,7 @@ class CtcTransitionSensor(CoordinatorEntity, SensorEntity):
         self._watch = runtime.transitions
         self._item = item
         self._attr_unique_id = unique_id(runtime.device, item.key)
-        self._attr_name = item.name
+        self._attr_translation_key = item.key
         self._attr_device_info = runtime.device
         self._attr_icon = item.icon
         if item.kind == "timestamp":
@@ -624,7 +632,7 @@ class CtcMeanRunSensor(CoordinatorEntity, SensorEntity):
         super().__init__(runtime.modbus)
         self._runtime = runtime
         self._attr_unique_id = unique_id(runtime.device, MEAN_RUN_KEY)
-        self._attr_name = MEAN_RUN_NAME
+        self._attr_translation_key = MEAN_RUN_KEY
         self._attr_device_info = runtime.device
 
     def _parts(self) -> tuple[object, object]:
@@ -669,6 +677,8 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
     # coefficient of performance has nothing to draw.
     _attr_state_class = SensorStateClass.MEASUREMENT
 
+    #: The Swedish name of each span, which translations/sv.json carries word
+    #: for word under the translation key cop_<span>.
     NAMES = {
         "day": "Dygnsvärmefaktor",
         "week": "Veckovärmefaktor",
@@ -683,7 +693,7 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
         self._runtime = runtime
         self._span = span
         self._attr_unique_id = unique_id(runtime.device, f"cop_{span}")
-        self._attr_name = self.NAMES[span]
+        self._attr_translation_key = f"cop_{span}"
         self._attr_device_info = runtime.device
 
     def _result(self):

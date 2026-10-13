@@ -259,8 +259,12 @@ def test_the_week_and_the_month_are_sensors_with_their_own_keys(sensor, cop):
     assert list(sensors) == ["day", "week", "month", "year", "first_year", "lifetime"]
     assert sensors["week"]._attr_unique_id == "ctc_ecozenith_pump_cop_week"
     assert sensors["month"]._attr_unique_id == "ctc_ecozenith_pump_cop_month"
-    assert sensors["week"]._attr_name == "Veckovärmefaktor"
-    assert sensors["month"]._attr_name == "Månadsvärmefaktor"
+    # Named from the translations (R23): Veckovärmefaktor and Månadsvärmefaktor
+    # in sv.json, held there by tests/test_entity_names.py.
+    assert sensors["week"]._attr_translation_key == "cop_week"
+    assert sensors["month"]._attr_translation_key == "cop_month"
+    assert sensor.CtcCopSensor.NAMES["week"] == "Veckovärmefaktor"
+    assert sensor.CtcCopSensor.NAMES["month"] == "Månadsvärmefaktor"
     assert sensors["week"]._attr_state_class == sensors["day"]._attr_state_class
 
 

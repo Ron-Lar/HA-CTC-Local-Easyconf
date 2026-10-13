@@ -288,6 +288,25 @@ def _icon_translations() -> None:
     assert (COMPONENT / "icons.json").is_file()
 
 
+def _entity_translations() -> None:
+    # Every entity class but the display's rows, which the panel names, sets
+    # a translation key and no name of its own; tests/test_entity_names.py
+    # holds the names in the three files to the keys.
+    names = json.loads((COMPONENT / "strings.json").read_text(encoding="utf-8"))["entity"]
+    for platform in PLATFORMS:
+        assert names.get(platform), platform
+        for node in _module(f"{platform}.py").body:
+            if not isinstance(node, ast.ClassDef) or not any(
+                "Entity" in ast.unparse(base) for base in node.bases
+            ):
+                continue
+            source = ast.unparse(node)
+            if node.name == "CtcDisplaySensor":
+                continue
+            assert "_attr_translation_key" in source, node.name
+            assert "_attr_name" not in source, node.name
+
+
 CHECKS = {
     "config-flow": _config_flow,
     "runtime-data": _runtime_data,
@@ -305,6 +324,7 @@ CHECKS = {
     "config-entry-unloading": _config_entry_unloading,
     "repair-issues": _repair_issues,
     "icon-translations": _icon_translations,
+    "entity-translations": _entity_translations,
 }
 
 #: The README section a documentation rule points at once it is done.
