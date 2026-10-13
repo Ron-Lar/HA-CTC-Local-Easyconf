@@ -1296,3 +1296,555 @@
     if (!customElements.get(name)) customElements.define(name, card);
   }
 })();
+
+/* --------------------------------------- the card picker and the section card (L11)
+ *
+ * A closure of its own after the page's cards, which it touches only to give each
+ * of them a stub configuration for Home Assistant's card picker:
+ *
+ *   custom:ctc-ecozenith-section    one section of the CTC page on a dashboard of
+ *                                   one's own, from a heat pump (device_id) and a
+ *                                   section, with the page's explanations
+ *
+ * The section card writes no list of values of its own. It asks the integration
+ * for the section's cards over the websocket command ctc_ecozenith/items, which
+ * cuts them out of the page as the page would be built this moment
+ * (section_card.py), and draws them with the page's own cards above. So the texts
+ * stay in the integration and follow it, and the section follows the page: the
+ * card asks again whenever an open page would fetch its layout again, which is
+ * when lovelace_updated names the page's address.
+ *
+ * All five cards are in the card picker (window.customCards), the section card
+ * first. The four page cards take lists of values, which the picker cannot
+ * write: their stub is a handful of the integration's own entities, enough to see
+ * the card, and the description says that the section card brings the
+ * explanations. The block hands node nothing of its own: tests/test_card_picker.py
+ * and tests/test_card_section.py work it through the stub DOM, so the helpers the
+ * page cards hand over above stay exactly what they were.
+ */
+
+(() => {
+  const DOMAIN = "ctc_ecozenith";
+  //: The CTC page's address, which lovelace_updated names when the page changes.
+  const PAGE = "ctc-ecozenith";
+  const COMMAND = `${DOMAIN}/items`;
+  const SECTION_CARD = "ctc-ecozenith-section";
+  const DOCS = "https://github.com/beolink/HA-CTC-Local-Easyconf#the-section-card";
+  //: After a request that failed the card asks again with a later state, but
+  //: not before this: a pump that is starting answers within half a minute.
+  const RETRY_MS = 30000;
+  //: What the section card's stub shows: a section every pump has.
+  const STUB_SECTION = "temperatures";
+
+  //: The sections, in the page's order, as section_card.SECTIONS has them, and
+  //: what the editor calls each (section_card.label). tests/test_card_picker.py
+  //: holds the two sides equal.
+  const SECTIONS = [
+    "status", "quick_controls", "key_readings",
+    "heating_controls", "hot_water_controls", "power_controls",
+    "temperatures", "hot_water", "energy", "compressor", "cycles", "settings", "unit", "other",
+    "values",
+  ];
+  const SECTION_LABELS = {
+    sv: {
+      status: "Översikt: Drift",
+      quick_controls: "Översikt: Snabbstyrning",
+      key_readings: "Översikt: Nyckeltal",
+      heating_controls: "Styrning: Värme",
+      hot_water_controls: "Styrning: Varmvatten",
+      power_controls: "Styrning: Drift och el",
+      temperatures: "Prestanda: Temperaturer",
+      hot_water: "Prestanda: Varmvatten",
+      energy: "Prestanda: Energi och värmefaktor",
+      compressor: "Prestanda: Kompressor och köldkrets",
+      cycles: "Prestanda: Starter, körningar och avfrostningar",
+      settings: "Prestanda: Pumpens inställningar",
+      unit: "Prestanda: Om enheten",
+      other: "Prestanda: Övrigt",
+      values: "Alla värden",
+    },
+    en: {
+      status: "Overview: Operation",
+      quick_controls: "Overview: Quick controls",
+      key_readings: "Overview: Key readings",
+      heating_controls: "Controls: Heating",
+      hot_water_controls: "Controls: Hot water",
+      power_controls: "Controls: Operation and power",
+      temperatures: "Performance: Temperatures",
+      hot_water: "Performance: Hot water",
+      energy: "Performance: Energy and COP",
+      compressor: "Performance: Compressor and refrigerant circuit",
+      cycles: "Performance: Starts, runs and defrosts",
+      settings: "Performance: Settings in the heat pump",
+      unit: "Performance: About the unit",
+      other: "Performance: Other",
+      values: "All values",
+    },
+  };
+
+  //: The page's cards, by what their stub is made of.
+  const PAGE_CARDS = {
+    chips: "ctc-ecozenith-chips",
+    readings: "ctc-ecozenith-readings",
+    controls: "ctc-ecozenith-controls",
+    rows: "ctc-ecozenith-rows",
+  };
+
+  //: The card picker's name and description of each card, in the language
+  //: Home Assistant is shown in.
+  const PICKER = {
+    sv: {
+      section: [
+        "CTC: sektion av sidan",
+        "En sektion av CTC-sidan på en egen instrumentpanel, med sidans förklaring till "
+          + "varje värde. Välj värmepump och sektion, så hämtas resten ur integrationen.",
+      ],
+      chips: [
+        "CTC: chips",
+        "Värden som en rad chips, som driftraden på CTC-sidan. Värdena listas under items. "
+          + "Sidans förklaringar får du med sektionskortet.",
+      ],
+      readings: [
+        "CTC: nyckeltal",
+        "Litet namn över stor siffra, som nyckeltalen på CTC-sidan. Värdena listas under items. "
+          + "Sidans förklaringar får du med sektionskortet.",
+      ],
+      controls: [
+        "CTC: reglage",
+        "En rad per reglage, med listan, skjutreglaget eller fältet till höger, som styrningen "
+          + "på CTC-sidan. Reglagen listas under items. Sidans förklaringar får du med "
+          + "sektionskortet.",
+      ],
+      rows: [
+        "CTC: värdelista",
+        "En tät lista, namn till vänster och värde till höger, som listorna på CTC-sidan. "
+          + "Värdena listas under rows. Sidans förklaringar får du med sektionskortet.",
+      ],
+    },
+    en: {
+      section: [
+        "CTC: section of the page",
+        "A section of the CTC page on a dashboard of your own, with the page's explanation "
+          + "for every value. Pick the heat pump and the section, and the rest comes from the "
+          + "integration.",
+      ],
+      chips: [
+        "CTC: chips",
+        "Values as a line of chips, like the status line on the CTC page. The values are listed "
+          + "under items. The section card brings the page's explanations.",
+      ],
+      readings: [
+        "CTC: key figures",
+        "A small name over a large number, like the key figures on the CTC page. The values are "
+          + "listed under items. The section card brings the page's explanations.",
+      ],
+      controls: [
+        "CTC: controls",
+        "One row per control, with the list, slider or field on the right, like the controls on "
+          + "the CTC page. The controls are listed under items. The section card brings the "
+          + "page's explanations.",
+      ],
+      rows: [
+        "CTC: list of values",
+        "A dense list, name on the left and value on the right, like the lists on the CTC page. "
+          + "The values are listed under rows. The section card brings the page's explanations.",
+      ],
+    },
+  };
+
+  //: The section card's own words: its editor's two fields, and what it says
+  //: in place of the section. A refusal it has no word for is said in the
+  //: integration's own.
+  const WORDS = {
+    sv: {
+      device_id: "Värmepump",
+      section: "Sektion",
+      not_found: "Enheten är ingen värmepump i CTC Local Easyconf.",
+      not_running: "Värmepumpen är inte igång just nu. Kortet fylls i när integrationen "
+        + "har startat.",
+      unknown_command: "Kortet är nyare än integrationen som körs. Starta om Home Assistant "
+        + "efter uppdateringen.",
+      empty: "Sidan visar inget i den här sektionen för den här värmepumpen just nu.",
+      failed: "Sektionen kunde inte hämtas.",
+    },
+    en: {
+      device_id: "Heat pump",
+      section: "Section",
+      not_found: "The device is not a heat pump of CTC Local Easyconf.",
+      not_running: "The heat pump is not running right now. The card fills in once the "
+        + "integration has started.",
+      unknown_command: "The card is newer than the integration that is running. Restart Home "
+        + "Assistant after the update.",
+      empty: "The page shows nothing in this section for this heat pump right now.",
+      failed: "The section could not be fetched.",
+    },
+  };
+
+  /* ---------------------------------------------------------- pure helpers */
+
+  /** Swedish for any sv-* setting, English otherwise, as the page decides. */
+  function language(lang) {
+    return String(lang || "").toLowerCase().startsWith("sv") ? "sv" : "en";
+  }
+
+  /** The language Home Assistant is shown in, before any hass is at hand: the
+   *  frontend writes it on the document, and the browser's own is the fallback. */
+  function pickerLanguage() {
+    const root = typeof document !== "undefined" && document ? document.documentElement : null;
+    if (root && root.lang) return language(root.lang);
+    return language(typeof navigator !== "undefined" && navigator ? navigator.language : "");
+  }
+
+  function domainOf(entityId) {
+    return String(entityId || "").split(".")[0];
+  }
+
+  /** The integration's own entities that have a state, as the registry entries
+   *  the frontend holds (hass.entities), sorted by entity id. A hidden entity,
+   *  and a diagnostic or configuration one, is not what a stub should show. */
+  function ownEntries(hass) {
+    const registry = (hass && hass.entities) || {};
+    const states = (hass && hass.states) || {};
+    return Object.values(registry)
+      .filter((entry) => entry && entry.platform === DOMAIN && !entry.hidden
+        && !entry.entity_category && states[entry.entity_id])
+      .sort((a, b) => (a.entity_id < b.entity_id ? -1 : a.entity_id > b.entity_id ? 1 : 0));
+  }
+
+  //: What each page card's stub is made of: the list it fills, how many of
+  //: the integration's entities at most, and which.
+  const STUBS = {
+    chips: {
+      field: "items", count: 3,
+      wants: (id, s) => domainOf(id) === "sensor" && s.attributes.device_class === "enum",
+    },
+    readings: {
+      field: "items", count: 4,
+      wants: (id, s) => domainOf(id) === "sensor" && Boolean(s.attributes.unit_of_measurement)
+        && s.state !== "" && Number.isFinite(Number(s.state)),
+    },
+    controls: {
+      field: "items", count: 3,
+      wants: (id) => domainOf(id) === "number" || domainOf(id) === "select",
+    },
+    rows: { field: "rows", count: 6, wants: (id) => domainOf(id) === "sensor" },
+  };
+
+  /** A configuration the card picker can show a card with. The section card's
+   *  names the first of the integration's heat pumps; a page card's lists a
+   *  few of the integration's entities under their friendly names, or none
+   *  where there are none, which the cards draw as an empty frame. */
+  function stubConfig(kind, hass) {
+    const entries = ownEntries(hass);
+    if (kind === "section") {
+      const pump = entries.find((entry) => entry.device_id);
+      return { device_id: pump ? pump.device_id : "", section: STUB_SECTION };
+    }
+    const stub = STUBS[kind];
+    const states = (hass && hass.states) || {};
+    const items = entries
+      .map((entry) => entry.entity_id)
+      .filter((id) => stub.wants(id, states[id]))
+      .slice(0, stub.count)
+      .map((id) => ({ entity: id, name: String(states[id].attributes.friendly_name || id) }));
+    return { [stub.field]: items };
+  }
+
+  /** Whether a card's visibility, as the page writes it, lets it be seen:
+   *  every condition holds, an "or" when one of its own does, and a state
+   *  condition as Home Assistant reads it, with a missing entity unavailable.
+   *  A kind of condition the page does not write lets the card be seen. */
+  function visible(conditions, states) {
+    const all = states || {};
+    const holds = (condition) => {
+      if (!condition || typeof condition !== "object") return true;
+      if (condition.condition === "or") return (condition.conditions || []).some(holds);
+      if (condition.condition === "and") return (condition.conditions || []).every(holds);
+      if (condition.condition !== "state") return true;
+      const stateObj = all[condition.entity];
+      const state = stateObj ? stateObj.state : "unavailable";
+      if (condition.state_not !== undefined) return ![].concat(condition.state_not).includes(state);
+      if (condition.state !== undefined) return [].concat(condition.state).includes(state);
+      return true;
+    };
+    return !Array.isArray(conditions) || conditions.every(holds);
+  }
+
+  /** The editor Home Assistant draws for the section card from a schema: the
+   *  heat pump, among this integration's devices only, and the section. */
+  function configForm(lang) {
+    const words = WORDS[lang];
+    return {
+      schema: [
+        {
+          name: "device_id",
+          required: true,
+          selector: { device: { filter: { integration: DOMAIN } } },
+        },
+        {
+          name: "section",
+          required: true,
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: SECTIONS.map((id) => ({ value: id, label: SECTION_LABELS[lang][id] })),
+            },
+          },
+        },
+      ],
+      computeLabel: (schema) => words[schema.name],
+    };
+  }
+
+  // Node without the stub DOM: nothing to define, and nothing to hand over.
+  if (typeof customElements === "undefined") return;
+
+  /* ------------------------------------------------------------------ DOM */
+
+  const STYLE = `
+    :host { display: block; }
+    :host([hidden]) { display: none; }
+    /* The page's cards say display: block on their own host, which would beat
+       the browser's [hidden] on a card whose visibility says no. */
+    [hidden] { display: none !important; }
+    .stack { display: flex; flex-direction: column; gap: 8px; }
+    .message { display: block; padding: 12px 16px; color: var(--secondary-text-color); }
+  `;
+
+  /** One section of the CTC page: the page's own cards, as the integration
+   *  answers for the heat pump and the section in the configuration. */
+  class CtcEcoZenithSection extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      const style = document.createElement("style");
+      style.textContent = STYLE;
+      this._stack = document.createElement("div");
+      this._stack.className = "stack";
+      this._note = document.createElement("ha-card");
+      this._note.className = "message";
+      this._note.hidden = true;
+      this.shadowRoot.append(style, this._stack, this._note);
+      //: The request last sent, "<device_id>|<section>", and the answer last
+      //: drawn, as JSON: an answer like the last leaves the cards alone, with
+      //: their open notes and their search.
+      this._asked = null;
+      this._answer = null;
+      this._cards = [];
+      this._message = null;
+      this._failedAt = 0;
+      this._askedAt = 0;
+      this._preview = false;
+      this._unsubscribe = null;
+      this._subscribing = false;
+    }
+
+    static getStubConfig(hass) {
+      return stubConfig("section", hass);
+    }
+
+    static getConfigForm() {
+      return configForm(pickerLanguage());
+    }
+
+    setConfig(config) {
+      if (!config || !config.device_id) {
+        throw new Error(`${SECTION_CARD} needs device_id`);
+      }
+      if (!SECTIONS.includes(config.section)) {
+        throw new Error(
+          `${SECTION_CARD} has no section "${config.section}"; the sections are `
+            + SECTIONS.join(", ")
+        );
+      }
+      this._config = { ...config };
+      // Asked again whatever the configuration says now: the editor sends one
+      // per change, and an answer like the last is not drawn again.
+      this._asked = null;
+      if (this._hass) this._ask();
+    }
+
+    set hass(hass) {
+      this._hass = hass;
+      for (const card of this._cards) card.element.hass = hass;
+      if (this._config) {
+        const stale = this._asked !== this._request();
+        const retry = this._failedAt && Date.now() - this._failedAt >= RETRY_MS;
+        if (stale || retry) this._ask();
+      }
+      this._subscribe();
+      this._show();
+    }
+
+    get hass() {
+      return this._hass;
+    }
+
+    /** Home Assistant's editor and card picker set this. The card then says so
+     *  when the page has nothing in the section, rather than vanish. */
+    set preview(value) {
+      this._preview = Boolean(value);
+      this._show();
+    }
+
+    get preview() {
+      return this._preview;
+    }
+
+    /** Shown again, on a view opened anew: the section is asked for again, as
+     *  the page is built when it is opened, unless it was just asked for. */
+    connectedCallback() {
+      if (this._config && this._hass && Date.now() - this._askedAt >= RETRY_MS) this._ask();
+      this._subscribe();
+    }
+
+    disconnectedCallback() {
+      const unsubscribe = this._unsubscribe;
+      this._unsubscribe = null;
+      if (unsubscribe) Promise.resolve().then(unsubscribe).catch(() => {});
+    }
+
+    getCardSize() {
+      const size = this._cards.reduce((sum, card) => (
+        sum + (card.element.getCardSize ? Number(card.element.getCardSize()) || 1 : 1)
+      ), 0);
+      return size || 1;
+    }
+
+    getGridOptions() {
+      return { columns: "full", rows: "auto" };
+    }
+
+    _request() {
+      return `${this._config.device_id}|${this._config.section}`;
+    }
+
+    _ask() {
+      const asked = this._request();
+      this._asked = asked;
+      this._askedAt = Date.now();
+      this._failedAt = 0;
+      const request = {
+        type: COMMAND, device_id: this._config.device_id, section: this._config.section,
+      };
+      Promise.resolve()
+        .then(() => this._hass.callWS(request))
+        .then(
+          (answer) => { if (this._asked === asked) this._draw((answer && answer.cards) || []); },
+          (err) => { if (this._asked === asked) this._fail(err); }
+        );
+    }
+
+    /** Listen for the page changing, the way an open page does, and ask again
+     *  then. Only while the card is on a page, and once. */
+    _subscribe() {
+      if (this._unsubscribe || this._subscribing || !this.isConnected || !this._config) return;
+      const connection = this._hass && this._hass.connection;
+      if (!connection || typeof connection.subscribeEvents !== "function") return;
+      this._subscribing = true;
+      Promise.resolve()
+        .then(() => connection.subscribeEvents((event) => {
+          const data = (event && event.data) || {};
+          if (data.url_path === PAGE && this._config && this._hass) this._ask();
+        }, "lovelace_updated"))
+        .then(
+          (unsubscribe) => {
+            this._subscribing = false;
+            if (this.isConnected) this._unsubscribe = unsubscribe;
+            else Promise.resolve().then(unsubscribe).catch(() => {});
+          },
+          () => { this._subscribing = false; }
+        );
+    }
+
+    /** The section's cards, each the page's own card with the page's config. */
+    _draw(cards) {
+      const answer = JSON.stringify(cards);
+      if (answer === this._answer && this._message === null) return;
+      const drawn = [];
+      try {
+        for (const config of cards) {
+          const tag = String((config && config.type) || "").replace(/^custom:/, "");
+          const Card = Object.values(PAGE_CARDS).includes(tag) ? customElements.get(tag) : undefined;
+          if (!Card) continue;
+          const element = new Card();
+          element.setConfig(config);
+          if (this._hass) element.hass = this._hass;
+          drawn.push({ config, element });
+        }
+      } catch (err) {
+        // A card that will not take what the page gave it: said in its words.
+        this._fail(err);
+        return;
+      }
+      this._answer = answer;
+      this._message = null;
+      this._cards = drawn;
+      this._stack.replaceChildren(...drawn.map((card) => card.element));
+      this._show();
+    }
+
+    _fail(err) {
+      this._failedAt = Date.now();
+      this._answer = null;
+      this._cards = [];
+      this._stack.replaceChildren();
+      const words = WORDS[language(this._hass && this._hass.language)];
+      const code = err && err.code;
+      this._message = (code && words[code]) || (err && err.message) || words.failed;
+      this._show();
+    }
+
+    /** Which cards are seen, by the visibility the page gave them, and what
+     *  the card says in their place: a refusal always, and an empty section
+     *  only in the editor, where a card that vanished could not be found. */
+    _show() {
+      const states = (this._hass && this._hass.states) || {};
+      let seen = false;
+      for (const card of this._cards) {
+        const shown = visible(card.config.visibility, states);
+        card.element.hidden = !shown;
+        seen = seen || shown;
+      }
+      const answered = this._answer !== null;
+      const words = WORDS[language(this._hass && this._hass.language)];
+      let message = this._message;
+      if (message === null && answered && !seen && this._preview) message = words.empty;
+      this._stack.hidden = this._message !== null;
+      this._note.hidden = message === null;
+      const text = message === null ? "" : message;
+      if (this._note.textContent !== text) this._note.textContent = text;
+      this._hide(answered && !seen && message === null);
+    }
+
+    /** Hide the card or show it, and tell Lovelace, whose wrapper around a
+     *  card decides from the card's own hidden whether it takes room. */
+    _hide(hidden) {
+      if (Boolean(this.hidden) === hidden) return;
+      this.hidden = hidden;
+      if (typeof this.dispatchEvent === "function" && typeof Event !== "undefined") {
+        this.dispatchEvent(new Event("card-visibility-changed", { bubbles: true, composed: true }));
+      }
+    }
+  }
+
+  if (!customElements.get(SECTION_CARD)) customElements.define(SECTION_CARD, CtcEcoZenithSection);
+
+  for (const [kind, tag] of Object.entries(PAGE_CARDS)) {
+    const Card = customElements.get(tag);
+    if (Card) Card.getStubConfig = (hass) => stubConfig(kind, hass);
+  }
+
+  const scope = typeof window !== "undefined" ? window : globalThis;
+  scope.customCards = scope.customCards || [];
+  const picker = PICKER[pickerLanguage()];
+  const listed = [
+    [SECTION_CARD, "section"],
+    ...Object.entries(PAGE_CARDS).map(([kind, tag]) => [tag, kind]),
+  ];
+  for (const [type, kind] of listed) {
+    if (scope.customCards.some((card) => card.type === type)) continue;
+    const [name, description] = picker[kind];
+    scope.customCards.push({ type, name, description, preview: true, documentationURL: DOCS });
+  }
+})();

@@ -125,6 +125,7 @@ from .stats import async_setup_stats, async_stop_stats
 from .stats_extra import ErrorCounter, build_extra, entry_stem
 from .transitions import TransitionWatch, find_starts_per_day, sample_of
 from .web_api import CtcWebClient, CtcWebError
+from .websocket import async_register_websocket
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -132,22 +133,24 @@ _LOGGER = logging.getLogger(__name__)
 #: is kept, so this is about not missing a day rather than about resolution.
 COP_SAMPLE_INTERVAL = timedelta(hours=6)
 
-#: Set up from config entries alone. async_setup exists for the actions, and
-#: hassfest asks an integration that has one to say that it takes nothing
-#: from configuration.yaml.
+#: Set up from config entries alone. async_setup exists for the actions and
+#: the section card's websocket command, and hassfest asks an integration that
+#: has one to say that it takes nothing from configuration.yaml.
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the integration's actions, once for the domain (roadmap R76).
+    """Register what the integration offers once per run, whatever the number of pumps.
 
-    Here rather than with each entry, so they are there whether or not an
-    entry has loaded, and an automation that calls one at a moment no entry
-    is loaded is told so in words instead of finding no such action.
+    The actions (roadmap R76) are registered here rather than with each entry,
+    so they are there whether or not an entry has loaded, and an automation
+    that calls one at a moment no entry is loaded is told so in words instead
+    of finding no such action. The websocket command the section card asks
+    for its cards (websocket.py, roadmap L11) is registered alongside.
     """
     async_register_services(hass)
+    async_register_websocket(hass)
     return True
-
 
 
 class SeenStore(Store):
