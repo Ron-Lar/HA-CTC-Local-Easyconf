@@ -19,6 +19,8 @@ import ha_stub
 from conftest import load
 
 WRITTEN = datetime(2026, 10, 13, 9, 30, tzinfo=timezone.utc)
+#: When the value in force was set, before the keepalive's last write (F6.2).
+SET = datetime(2026, 10, 13, 9, 12, tzinfo=timezone.utc)
 DEVICE = {"identifiers": {("ctc_ecozenith", "192.0.2.55")}}
 
 
@@ -50,6 +52,9 @@ class Control:
 
     def written_at(self, address):
         return WRITTEN if address in self.active else None
+
+    def set_at(self, address):
+        return SET if address in self.active else None
 
     def written_attributes(self, address):
         if address not in self.active:
@@ -103,10 +108,17 @@ def test_each_held_register_with_its_name_value_and_moment_in_table_order(overri
     held = overrides.held(Control({1007: 2, 1010: 215}))
     assert held == [
         {"namn": "Styr rumsbörvärde", "register": "1010", "värde": 21.5,
-         "senast skriven": WRITTEN.isoformat(timespec="seconds")},
+         "satt": SET.isoformat(timespec="seconds")},
         {"namn": "Styr varmvattenläge", "register": "1007", "värde": "Komfort",
-         "senast skriven": WRITTEN.isoformat(timespec="seconds")},
+         "satt": SET.isoformat(timespec="seconds")},
     ]
+
+
+def test_the_list_carries_when_the_value_was_set_not_when_it_was_last_written(overrides):
+    """F6.2: the keepalive moves the last write every minute, and the list must not follow it."""
+    (held,) = overrides.held(Control({1010: 215}))
+    assert held["satt"] == SET.isoformat(timespec="seconds")
+    assert "senast skriven" not in held
 
 
 def test_a_mode_without_a_name_shows_its_code(overrides, const):
@@ -250,7 +262,7 @@ def test_the_sensor_counts_and_lists_what_is_held_in_both_languages(const):
     assert [item["namn"] for item in shown["styrningar"]] == ["Styr rumsbörvärde", "Styr varmvattenläge"]
     assert shown["overrides"][0] == {
         "name": "Styr rumsbörvärde", "register": "1010", "value": 21.5,
-        "last_written": WRITTEN.isoformat(timespec="seconds"),
+        "set_at": SET.isoformat(timespec="seconds"),
     }
     runtime.control.active.clear()
     assert entity.native_value == 0

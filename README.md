@@ -574,9 +574,13 @@ hot water setpoint have no such value:
 the stored heating mode (61542) has other modes than the zone mode, and 62001
 is the hot water stop temperature, not the setpoint. The sensor **Aktiva
 överstyrningar** counts what Home Assistant holds right now and lists each
-held register with its value and when a write last reached the controller,
-and the overview shows it, with **Släpp all styrning** beside it, whenever
-anything is held.
+held register with its value and when that value was set, *satt* and
+*set_at*: the write that put it in force or last changed it. The keepalive's
+rewrites of the same value do not move it, so the sensor gets a new state in
+the history only when an override is set, changed or released, not every
+minute; when a write last reached the controller is on each control, as
+*last_written*. The overview shows the sensor, with **Släpp all styrning**
+beside it, whenever anything is held.
 
 The stored settings in the 61500 block are exposed read only and never written.
 CTC states plainly that the number of write cycles there is limited and that
@@ -659,7 +663,7 @@ managers that read them should move to the English names now.
 | `styrning aktiv`, `ja` or `nej` | `control_active`, `true` or `false` | the controls |
 | `pumpens värde` | `pump_value` | the controls with a stored setting beside them, also while an override is in force |
 | `episoder`, each with `kod`, `text`, `start`, `slut`, `utetemperatur` | `episodes`, each with `code`, `text`, `start`, `end`, `outdoor_temperature` | the binary sensor *Larm* |
-| `styrningar`, each with `namn`, `register`, `värde`, `senast skriven` | `overrides`, each with `name`, `register`, `value`, `last_written` | the sensor *Aktiva överstyrningar* |
+| `styrningar`, each with `namn`, `register`, `värde`, `satt` | `overrides`, each with `name`, `register`, `value`, `set_at` | the sensor *Aktiva överstyrningar* |
 
 Values that are text, such as a reason, what a figure rests on or where the
 consumed energy was read, stay in Swedish under both names, like the entity

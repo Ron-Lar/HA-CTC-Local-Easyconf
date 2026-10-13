@@ -262,6 +262,19 @@ def test_the_readme_has_the_table_and_says_when_the_swedish_names_go(names):
         assert re.search(rf"\| `{re.escape(swedish)}`[^|]*\| `{english}`", section), swedish
     for swedish, english in names.EPISODE_KEYS.items():
         assert f"`{swedish}`" in section and f"`{english}`" in section, swedish
+    (row,) = [line for line in section.splitlines() if line.startswith("| `styrningar`")]
+    for swedish, english in names.OVERRIDE_KEYS.items():
+        assert f"`{swedish}`" in row and f"`{english}`" in row, swedish
+
+
+def test_an_override_says_when_it_was_set_under_both_names(names):
+    """F6.2: satt and set_at, which the keepalive's rewrites do not move, in place of the last write."""
+    assert names.OVERRIDE_KEYS["satt"] == "set_at"
+    assert "senast skriven" not in names.OVERRIDE_KEYS
+    item = {"namn": "Styr rumsbörvärde", "register": "1010", "värde": 21.5, "satt": "2026-10-13T09:12:00+00:00"}
+    assert names.override_in_english(item) == {
+        "name": "Styr rumsbörvärde", "register": "1010", "value": 21.5, "set_at": "2026-10-13T09:12:00+00:00",
+    }
 
 
 # ---------------------------------------------------------------- the card

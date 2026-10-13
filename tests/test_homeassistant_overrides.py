@@ -23,6 +23,8 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
+from homeassistant.const import EVENT_STATE_CHANGED  # noqa: E402
+from homeassistant.core import callback  # noqa: E402
 from homeassistant.util import dt as dt_util  # noqa: E402
 from pytest_homeassistant_custom_component.common import async_fire_time_changed  # noqa: E402
 from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
@@ -64,7 +66,9 @@ async def test_the_sensor_follows_every_write_and_release(hass):
     assert state.state == "1"
     (held,) = state.attributes["overrides"]
     assert held["name"] == "Styr rumsbörvärde" and held["register"] == "1010" and held["value"] == 21.5
-    assert held["last_written"] == hass.states.get(room).attributes["last_written"]
+    # Set by this write, which is also the last that reached the pump (F6.2).
+    assert held["set_at"] == hass.states.get(room).attributes["last_written"]
+    assert state.attributes["styrningar"][0]["satt"] == held["set_at"]
 
     await hass.services.async_call("select", "select_option", {"entity_id": mode, "option": "Komfort"}, blocking=True)
     state = hass.states.get(sensor)
@@ -105,6 +109,53 @@ async def test_an_override_the_pump_has_forgotten_leaves_the_count(hass):
     state = hass.states.get(sensor)
     assert state.state == "0", "räknaren står inte kvar på ett glömt värde"
     assert state.attributes["overrides"] == []
+
+
+async def test_the_sensor_stands_still_through_ten_minutes_of_keepalive(hass, freezer):
+    """F6.2: the list carries when the value was set, so the recorder gets no row a minute.
+
+    The keepalive writes 1010 every minute and the Modbus rounds write the
+    sensor every 30 s. The list used to carry when a write last reached the
+    pump, which moved with every keepalive, so the sensor got a state_changed
+    a minute, a row in states and one in state_attributes, while its count
+    stood still. The room setpoint's own attributes still move, as before.
+    """
+    entry = await _set_up(hass)
+    (client,) = FakeModbus.instances
+    entry.runtime_data.control._clock = lambda: dt_util.utcnow().timestamp()
+    sensor = _entity_id(hass, "sensor", "active_overrides")
+    room = _entity_id(hass, "number", "ctl_room_setpoint_1")
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5}, blocking=True)
+    (held,) = hass.states.get(sensor).attributes["overrides"]
+    set_at = held["set_at"]
+
+    changed: dict[str, int] = {sensor: 0, room: 0}
+
+    @callback
+    def _note(event) -> None:
+        entity_id = event.data["entity_id"]
+        if entity_id in changed:
+            changed[entity_id] += 1
+
+    hass.bus.async_listen(EVENT_STATE_CHANGED, _note)
+    for _step in range(20):
+        freezer.tick(timedelta(seconds=30))
+        async_fire_time_changed(hass)
+        await _let_the_background_run(hass)
+
+    assert client.writes.count((1010, 215)) == 11, "the set and ten keepalive writes"
+    assert changed[sensor] == 0, "inga rader i recordern för en styrning som står still"
+    assert changed[room] > 0, "the keepalive did run, and the control's own moment follows it"
+    state = hass.states.get(sensor)
+    assert state.state == "1"
+    (held,) = state.attributes["overrides"]
+    assert held["set_at"] == set_at
+
+    # A change of value is news, once.
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21}, blocking=True)
+    assert changed[sensor] == 1
+    (held,) = hass.states.get(sensor).attributes["overrides"]
+    assert held["set_at"] > set_at and held["value"] == 21.0
 
 
 async def test_an_override_set_between_two_ticks_is_given_up_at_its_expiry(hass, freezer):
