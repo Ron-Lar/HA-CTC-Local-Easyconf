@@ -200,6 +200,34 @@
     return Boolean(root) && root.activeElement === element;
   }
 
+  //: R39: what a list remembers for the browser tab, under this prefix and
+  //: the list's own key: what was typed in its search and whether its empty
+  //: rows are shown.
+  const KEEP_PREFIX = "ctc-ecozenith-rows:";
+
+  /** What was kept under `key` for this tab, or null. sessionStorage may be
+   *  missing or refuse (a private window, storage switched off, a sandboxed
+   *  frame), and every touch of it is in a try: the list then starts afresh,
+   *  as it always did. */
+  function recall(key) {
+    try {
+      const raw = globalThis.sessionStorage.getItem(key);
+      const kept = raw ? JSON.parse(raw) : null;
+      return kept && typeof kept === "object" ? kept : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /** Keep `value` under `key` for this tab, if the browser lets us. */
+  function keep(key, value) {
+    try {
+      globalThis.sessionStorage.setItem(key, JSON.stringify(value));
+    } catch (err) {
+      // Nowhere to keep it: the list works on and forgets on the next build.
+    }
+  }
+
   /** What the cards have in common: the explanation, the state, the service call. */
   class CtcCard extends HTMLElement {
     constructor(style) {
@@ -884,6 +912,16 @@
       .toolbar input { flex-basis: 100%; max-width: none; }
     }
     .count { color: var(--secondary-text-color); font-size: .9em; }
+    /* R39: the box that shows the empty rows too. It is no search field, so
+       the field's look above is taken off it again. */
+    .empties {
+      display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+      color: var(--secondary-text-color); font-size: .9em;
+    }
+    .toolbar .empties input {
+      flex: none; width: auto; max-width: none; margin: 0; padding: 0; border: none;
+      background: none; accent-color: var(--primary-color, #03a9f4);
+    }
     .grid { display: grid; gap: 0 24px; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
     .heading {
       grid-column: 1 / -1; font-size: .8rem; font-weight: 500; margin: 14px 0 4px;
@@ -909,7 +947,11 @@
   class CtcEcoZenithRows extends CtcCard {
     constructor() {
       super(ROWS_STYLE);
+      // What is typed in the search, as typed and as it is matched, and
+      // whether the empty rows are shown too (R39).
+      this._typed = "";
       this._query = "";
+      this._all = false;
     }
 
     setConfig(config) {
@@ -925,7 +967,10 @@
 
     _build() {
       const card = this._shell();
-      if (this._config.filter) card.appendChild(this._searchField());
+      if (this._config.filter) {
+        this._recall();
+        card.appendChild(this._searchField());
+      }
       const grid = document.createElement("div");
       grid.className = "grid";
       this._items = [];
@@ -958,15 +1003,59 @@
       input.type = "search";
       input.placeholder = this._config.filter === true ? "" : String(this._config.filter);
       input.setAttribute("aria-label", input.placeholder);
-      input.value = this._query;
+      input.value = this._typed;
       input.addEventListener("input", () => {
-        this._query = input.value.trim().toLowerCase();
+        this._typed = input.value;
+        this._query = this._typed.trim().toLowerCase();
+        this._keep();
         this._show();
       });
+      toolbar.appendChild(input);
+      if (this._config.show_empty) {
+        // R39: a row with nothing to show is left out unless this is ticked.
+        const label = document.createElement("label");
+        label.className = "empties";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = this._all;
+        box.addEventListener("change", () => {
+          this._all = Boolean(box.checked);
+          this._keep();
+          this._show();
+        });
+        label.append(box, String(this._config.show_empty));
+        toolbar.appendChild(label);
+      }
       this._count = document.createElement("span");
       this._count.className = "count";
-      toolbar.append(input, this._count);
+      // What the three numbers are: shown, with a value, all of them.
+      if (this._config.count) this._count.title = String(this._config.count);
+      toolbar.appendChild(this._count);
       return toolbar;
+    }
+
+    /** R39: where this list keeps its search and its box: the page may set a
+     *  key, and otherwise the first entity names the list, which on the CTC
+     *  page carries the pump's own prefix. */
+    _keepKey() {
+      const first = (this._config.rows || []).find((item) => item && item.entity);
+      return KEEP_PREFIX + String(this._config.storage_key || (first && first.entity) || "");
+    }
+
+    /** R39: the search and the box as this tab last left them. A new layout
+     *  (lovelace_updated) builds the card anew and used to throw the search
+     *  away; without sessionStorage the card keeps what it had itself. */
+    _recall() {
+      const kept = recall(this._keepKey());
+      if (kept) {
+        if (typeof kept.query === "string") this._typed = kept.query;
+        if (typeof kept.all === "boolean") this._all = kept.all;
+      }
+      this._query = this._typed.trim().toLowerCase();
+    }
+
+    _keep() {
+      keep(this._keepKey(), { query: this._typed, all: this._all });
     }
 
     _row(item) {
@@ -995,7 +1084,7 @@
         const why = (TOGGLES.get(note) || [])[0];
         if (why) why.click();
       });
-      return { item, element, note, value, sub, seen: undefined, gone: false };
+      return { item, element, note, value, sub, seen: undefined, gone: false, blank: false };
     }
 
     _update() {
@@ -1003,6 +1092,7 @@
       for (const row of this._items) {
         const stateObj = this._state(row.item.entity);
         row.gone = this._missing(row.item);
+        row.blank = this._blank(row.item, stateObj);
         // Only when the state itself changed: every update of any entity in
         // Home Assistant sets hass again.
         if (!stateObj || row.seen === stateObj) continue;
@@ -1013,11 +1103,30 @@
       this._show();
     }
 
-    /** What is on show: what has a value to show, and what the search asks for. */
+    /** R39: whether a row has nothing to show: no state at all, or unavailable
+     *  or unknown without a word of the page's own for it, as hide_unavailable
+     *  has it elsewhere. A word of the page's own says something: "ej satt"
+     *  on a control and "inget larm ännu" on the last alarm stay. */
+    _blank(item, stateObj) {
+      if (!stateObj) return true;
+      if (!HIDDEN_STATES.has(stateObj.state)) return false;
+      const own = ownWord(item.entity, stateObj, this._config.states, item.zero_means,
+                          item.unknown_means);
+      return own === undefined;
+    }
+
+    /** What is on show: what has a value to show, and what the search asks for.
+     *  With the page's box for empty rows (R39) a row with nothing to show is
+     *  left out until the box is ticked, and a search looks among those too:
+     *  what is asked for is shown whatever it reads. The count then says how
+     *  many are shown, how many have a value, and how many there are. */
     _show() {
       let shown = 0;
+      let valued = 0;
+      const hiding = Boolean(this._config.show_empty) && !this._all;
       for (const row of this._items) {
-        const hidden = row.gone || !this._matches(row);
+        if (!row.gone && !row.blank) valued += 1;
+        const hidden = row.gone || (this._query ? !this._matches(row) : hiding && row.blank);
         row.element.hidden = hidden;
         if (hidden) this._shut(row.item, row.note);
         else shown += 1;
@@ -1026,7 +1135,11 @@
       for (const heading of this._headings) {
         heading.element.hidden = !heading.rows.some((row) => !row.element.hidden);
       }
-      if (this._count) this._count.textContent = `${shown} / ${this._items.length}`;
+      if (this._count) {
+        this._count.textContent = this._config.show_empty
+          ? `${shown} / ${valued} / ${this._items.length}`
+          : `${shown} / ${this._items.length}`;
+      }
       if (this._empty) this._empty.hidden = !(this._config.filter && this._query && !shown);
     }
 

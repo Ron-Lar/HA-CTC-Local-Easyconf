@@ -564,7 +564,16 @@ def source(key: str, pages: list[Mapping[str, Any]] | None = None, interval: int
     if key in HARVEST:
         return "Integrationens egen bokföring av displayskörden"
     for page in pages or []:
-        if any(value.get("key") == key for value in page.get("values") or []):
+        for value in page.get("values") or []:
+            if value.get("key") != key:
+                continue
+            # R39: the screen and the place in the page's list, where the page
+            # gives them, since one page can have several rows by one name.
+            where = "".join(
+                f", {word} {value[field]}"
+                for field, word in (("screen", "skärm"), ("row", "rad"))
+                if value.get(field) is not None
+            )
             every = f", hämtas var {max(1, round(interval / 60))}:e minut" if interval else ""
-            return f"Displaysidan {page.get('title')}{every}"
+            return f"Displaysidan {page.get('title')}{where}{every}"
     return None

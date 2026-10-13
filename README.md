@@ -398,7 +398,13 @@ it is never out of date. Each heat pump gets four tabs.
 - **All values.** The full list with a search field over it, every value the
   installation offers, the display's own pages among them under the names the
   panel prints. Nothing is left out here whatever it reads, which makes it the
-  tab that answers whether a value exists at all.
+  tab that answers whether a value exists at all. A row with nothing to show,
+  unavailable or unknown, waits behind the box *Visa även tomma* until it is
+  ticked, and a search finds it there all the same; the count beside the box
+  says how many rows are shown, how many have a value and how many there are.
+  A display row's source line names its screen and its place on the page, so
+  two rows by one name can be told apart. The search and the box are kept for
+  as long as the browser tab is open.
 
 The coefficient of performance says under its figure what it rests on, the
 last day, the last seven or thirty days, a rolling year, the first year or the
@@ -424,7 +430,8 @@ panel answers it from the same small web server the integration harvests from.
 **Every value is explained.** Beside each one is a blue ⓘ, and it writes the
 explanation out underneath: what the value is, where it comes from, a Modbus
 register and whether it is a stored setting or a volatile control register, or
-the display page and how often it is read, and a link to Home Assistant's own
+the display page, the screen and the row's place on it, and how often it is
+read, and a link to Home Assistant's own
 dialog for the entity. In the list a tap anywhere on the row does the same. The
 ⓘ is the one way in for the keyboard and a screen reader too: a button of its
 own, one tab stop per value, which says whether its explanation is open and

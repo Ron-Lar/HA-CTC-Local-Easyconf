@@ -326,6 +326,10 @@ TEXT = {
         "graph_cop": "Värmefaktor per dygn",
         "filter": "Sök bland värdena",
         "empty": "Inget värde matchar sökningen.",
+        # R39: the box on All values that shows the empty rows too, and what
+        # the three numbers beside it are.
+        "show_empty": "Visa även tomma",
+        "count": "visade / med värde / totalt",
         "press": "Utför",
         "control_off": (
             "Styrning är avstängd. Slå på **Tillåt styrning av värmepumpen** i "
@@ -401,6 +405,8 @@ TEXT = {
         "graph_cop": "COP per day",
         "filter": "Search the values",
         "empty": "No value matches the search.",
+        "show_empty": "Show empty ones too",
+        "count": "shown / with a value / total",
         "press": "Run",
         "control_off": (
             "Control is switched off. Turn on **Allow controlling the heat pump** in "
@@ -907,7 +913,9 @@ def values_sections(
 
     No value is left out here, whatever it reads and whatever it has only ever
     read: this is the tab you open to find out whether a value exists at all. A
-    button is not a value, and is on the controls tab instead.
+    button is not a value, and is on the controls tab instead. What the card
+    hides is only on screen (R39): a row with nothing to show waits behind the
+    box for empty rows, and a search finds it there.
     """
     build = _Builder(pump, text, ha_version)
     rows: list[dict[str, Any]] = []
@@ -936,6 +944,10 @@ def values_sections(
     card = build.list_card(rows)
     card["filter"] = text["filter"]
     card["empty"] = text["empty"]
+    # R39: a row with nothing to show, unavailable or unknown, is left out of
+    # the list until this box is ticked, and a search still finds it.
+    card["show_empty"] = text["show_empty"]
+    card["count"] = text["count"]
     section = _section(_heading(text["values"], "mdi:format-list-bulleted"), [card],
                        column_span=4)
     return [section] if section else []
