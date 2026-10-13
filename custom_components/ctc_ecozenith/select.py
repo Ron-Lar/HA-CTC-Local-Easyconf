@@ -42,9 +42,14 @@ class CtcControlSelect(CoordinatorEntity, SelectEntity):
     Follows the Modbus coordinator, like the numbers, because with no override
     in force a select that has a mirror shows the pump's own mode (R49), the
     hot water mode stored in 61500, which someone can change at the panel at
-    any time. "Släpp styrningen" stays among the options for letting go; it is
-    what a select without a mirror shows while idle, and what one with a
-    mirror shows while the mirror cannot be read.
+    any time. "Släpp styrningen" stays among the options for letting go, and
+    it is what a select without a mirror shows while idle. One with a mirror
+    shows unknown while idle and the mirror cannot be read, a lost Modbus
+    round, a 61500 that did not answer or a code the list has no name for,
+    rather than "Släpp styrningen":
+    that is an option somebody can choose, and showing it would put a
+    release that never happened into the history and set off an automation
+    that waits for it (F2.3, F6.1).
     """
 
     _attr_has_entity_name = True
@@ -77,16 +82,27 @@ class CtcControlSelect(CoordinatorEntity, SelectEntity):
         manager or an automation that picks a mode during a round that failed
         would have its choice dropped without a word. The write itself says
         whether it reached the pump; a lost round only takes the mirror away,
-        and the select then shows "Släpp styrningen" while idle.
+        and a select with a mirror then shows unknown while idle, until a
+        round answers again. One without a mirror shows "Släpp styrningen"
+        while idle whatever Modbus does, since it never showed the pump's.
         """
         return True
 
     @property
-    def current_option(self) -> str:
+    def current_option(self) -> str | None:
+        """The mode held, or while idle the pump's own mode, or the release without a mirror.
+
+        No last known mode while the mirror cannot be read: the coordinator
+        does not keep the code of a block that was silent in a round that
+        answered, and the numbers show nothing either from a round that
+        failed, so the select says unknown rather than guess.
+        """
         raw = self._runtime.control.get(self._register.address)
         if raw is not None:
             return self._enum.get(raw, RELEASE)
-        return pump_option(self._runtime.modbus, self._register) or RELEASE
+        if self._register.mirror is None:
+            return RELEASE
+        return pump_option(self._runtime.modbus, self._register)
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:

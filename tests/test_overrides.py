@@ -229,13 +229,36 @@ def test_a_mode_the_pump_already_has_is_written_when_chosen(const):
     assert entity.current_option == "Normal"
 
 
-def test_a_lost_round_keeps_the_select_available_and_idle_on_the_release(const):
+def test_a_lost_round_keeps_the_select_available_and_idle_on_unknown(const):
+    """F2.3, F6.1: an unread 61500 is unknown, not a release nobody made."""
     select = load("select")
     runtime = _runtime(const, data={"set_dhw_mode": "Normal"}, codes={"set_dhw_mode": 1}, success=False)
     entity = select.CtcControlSelect(runtime, _register(const, "ctl_dhw_mode"))
     assert entity.available is True
-    assert entity.current_option == select.RELEASE
+    assert entity.current_option is None
     assert entity.extra_state_attributes["pump_value"] is None
+    # A block that was silent in a round that answered, and a code without a name.
+    for data, codes in (({}, {}), ({"set_dhw_mode": "Okänd"}, {"set_dhw_mode": 7})):
+        runtime.modbus = _modbus(const, data, codes)
+        assert entity.current_option is None, data
+    # Held, the mode held is what it shows, whatever the round did.
+    runtime.modbus = _modbus(const, success=False)
+    runtime.control.active[1007] = 2
+    assert entity.current_option == "Komfort"
+
+
+def test_a_lost_round_keeps_the_numbers_available_and_writable(const):
+    """F2.1: a value set from an action during a round that failed is written, not skipped."""
+    number = load("number")
+    room = _register(const, "ctl_room_setpoint_1")
+    runtime = _runtime(const, data={"set_room_1": 20.5}, success=False)
+    entity = number.CtcControlNumber(runtime, room)
+    assert entity.available is True
+    assert entity.native_value is None, "idle, with no mirror to show: unknown"
+    run(entity.async_set_native_value(21.5))
+    assert runtime.control.sets == [(1010, 215)]
+    assert entity.native_value == 21.5
+    assert entity.extra_state_attributes["control_active"] is True
 
 
 def test_the_zone_mode_and_the_price_mode_stay_on_the_release_while_idle(const):
@@ -246,6 +269,9 @@ def test_the_zone_mode_and_the_price_mode_stay_on_the_release_while_idle(const):
         assert entity.current_option == select.RELEASE, key
         shown = entity.extra_state_attributes
         assert "pump_value" not in shown and shown["control_active"] is False, key
+        # Without a mirror nothing is lost with a round, so the release stays.
+        runtime.modbus.last_update_success = False
+        assert entity.current_option == select.RELEASE, key
 
 
 # ------------------------------------------------------------------ the sensor

@@ -512,7 +512,8 @@ def test_the_select_shows_the_same_two(manager, const):
     select = load("select")
     entity = select.CtcControlSelect(FakeRuntime(manager, const), _register(const, "ctl_dhw_mode"))
     assert "senast skriven" not in entity.extra_state_attributes
-    assert entity.current_option == select.RELEASE
+    # Idle with 61500 not read: unknown, not a release nobody made (F2.3).
+    assert entity.current_option is None
     run(manager.async_set(1007, 2))
     assert entity.current_option == "Komfort"
     shown = entity.extra_state_attributes

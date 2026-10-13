@@ -91,6 +91,23 @@ class CtcControlNumber(CoordinatorEntity, NumberEntity):
         )
 
     @property
+    def available(self) -> bool:
+        """Available whatever the last Modbus round did, like the selects (F2.1).
+
+        Home Assistant skips an unavailable entity in an action, so an energy
+        manager or an automation that sets a value during a round that failed
+        would have it dropped with no more than a warning in the log, and an
+        energy manager that counts the call as sent may hold off for an hour.
+        An unavailable entity also loses its attributes, so a held number would
+        stop saying that it is held while the sensor Aktiva överstyrningar
+        still counts it. The write itself says whether it reached the pump; a
+        lost round only takes the mirror away, and an idle number then shows
+        unknown until the next round answers. Not only while held: an idle
+        number would otherwise drop the first value set after a release.
+        """
+        return True
+
+    @property
     def native_value(self) -> float | None:
         """Return the override in force, or the unit's own setting when idle."""
         raw = self._runtime.control.get(self._register.address)

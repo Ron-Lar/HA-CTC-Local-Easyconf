@@ -1,10 +1,12 @@
 """What Home Assistant holds, under a real Home Assistant core (roadmap R49).
 
 The sensor Aktiva överstyrningar follows every write, release and override
-given up; the hot water mode shows the pump's own program from 61500 while
+given up, at the moment the pump lets go, and stands still through the
+keepalive; the hot water mode shows the pump's own program from 61500 while
 idle, carries it beside a held mode, and still writes a mode the list already
-shows; and a lost Modbus round leaves the select available, so an action that
-picks a mode is never dropped for it. What can be read without a core is in
+shows; and a lost Modbus round leaves every control available, so an action
+that sets a value or picks a mode is never dropped for it, with an unread
+61500 shown as unknown. What can be read without a core is in
 test_overrides.py.
 
 Shares the stand-ins and fixtures of test_homeassistant.py and runs the same
@@ -192,9 +194,14 @@ async def test_an_override_set_between_two_ticks_is_given_up_at_its_expiry(hass,
     await tick(39)
     assert hass.states.get(sensor).state == "1"
     assert entry.runtime_data.control.active == {1010: 205}
+    # The number is available through the lost rounds (F2.1), so it says so too.
+    assert hass.states.get(room).attributes["control_active"] is True
     await tick(1.001)  # ok_at plus 300 s, and the next tick is 20 s away
     assert hass.states.get(sensor).state == "0", "släppt när pumpen har glömt, inte vid nästa minut"
     assert entry.runtime_data.control.active == {}
+    state = hass.states.get(room)
+    assert state.attributes["control_active"] is False
+    assert "valid_until" not in state.attributes
 
 
 async def test_the_hot_water_mode_shows_the_pumps_program_and_holds_it_when_chosen(hass):
@@ -236,21 +243,55 @@ async def test_a_number_carries_the_pumps_value_beside_its_own(hass):
     assert "pump_value" not in hass.states.get(setpoint).attributes
 
 
-async def test_a_lost_round_keeps_the_select_available_while_the_numbers_go(hass):
-    await _set_up(hass)
+async def test_a_lost_round_keeps_the_controls_available_and_an_action_is_written(hass):
+    """F2.1, F2.3: nothing an action sets in a lost round is dropped, and no release is shown.
+
+    The numbers used to go unavailable with the round, so Home Assistant
+    skipped a set_value with no more than a warning, and an energy manager
+    that counted it as sent held off for an hour. The hot water mode showed
+    Släpp styrningen and then Normal again, two changes nobody made.
+    """
+    entry = await _set_up(hass)
     (client,) = FakeModbus.instances
     mode = _entity_id(hass, "select", "ctl_dhw_mode")
     room = _entity_id(hass, "number", "ctl_room_setpoint_1")
     sensor = _entity_id(hass, "sensor", "active_overrides")
     client.answers = False
     await _advance(hass, 31)
-    assert hass.states.get(room).state == "unavailable"
+    assert not entry.runtime_data.modbus.last_update_success, "the round was lost"
+    state = hass.states.get(room)
+    assert state.state == "unknown", "talet är kvar men utan spegel i vila"
+    assert state.attributes["control_active"] is False
     state = hass.states.get(mode)
-    assert state.state == RELEASE, "ingen spegel att lita på efter ett tappat varv"
+    assert state.state == "unknown", "ett oläst 61500 är okänt, inget släpp"
     assert state.attributes["pump_value"] is None
     assert hass.states.get(sensor).state == "0"
-    # And back: the pump's own program again.
+
+    # The line answers writes again before the next round: set_value is written.
     client.answers = True
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 20}, blocking=True)
+    assert client.writes == [(1010, 200)]
+    state = hass.states.get(room)
+    assert state.state == "20.0" and state.attributes["control_active"] is True
+    assert "last_written" in state.attributes and "valid_until" in state.attributes
+    assert hass.states.get(sensor).state == "1"
+
+    # And back: the pump's own program again, and the held value beside its own.
     await _advance(hass, 31)
     assert hass.states.get(mode).state == "Normal"
-    assert hass.states.get(room).state == "20.5"
+    state = hass.states.get(room)
+    assert state.state == "20.0" and state.attributes["pump_value"] == 20.5
+
+
+async def test_a_held_number_keeps_its_attributes_through_a_lost_round(hass):
+    await _set_up(hass)
+    (client,) = FakeModbus.instances
+    room = _entity_id(hass, "number", "ctl_room_setpoint_1")
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 22}, blocking=True)
+    client.answers = False
+    await _advance(hass, 31)
+    state = hass.states.get(room)
+    assert state.state == "22.0"
+    assert state.attributes["control_active"] is True and state.attributes["styrning aktiv"] == "ja"
+    assert "valid_until" in state.attributes
+    assert state.attributes["pump_value"] is None, "pumpens värde är inte läst i det varvet"
