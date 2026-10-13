@@ -1,5 +1,8 @@
-# The same rules as HA-Nibe-Easyconf, so a contributor meets one style across
-# these integrations (roadmap R57). CI pins the ruff version in
+# HA-Nibe-Easyconf's rules, so a contributor meets one style across these
+# integrations (roadmap R57). Where this file goes further than Nibe's, the
+# comment at the place says why: the section the test helpers are sorted into,
+# the long Swedish lines of explanations.py and const.py, and the dashes the
+# tests spell out so as to look for them. CI pins the ruff version in
 # .github/workflows/validate.yaml: a new ruff release adds rules, and CI should
 # go red over a change in this repository, not over one in ruff.
 #
@@ -19,12 +22,6 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 ignore = [
     # Home Assistant entity classes set attributes rather than properties.
     "RUF012",
-    # The texts are Swedish and written with their own letters and signs: å, ä,
-    # ö, ⓘ, the typographic quotes and the dashes the tests look for so as to
-    # keep them out of the texts. None of them is a look-alike to correct.
-    "RUF001",
-    "RUF002",
-    "RUF003",
 ]
 
 [lint.isort]
@@ -63,3 +60,8 @@ section-order = [
 # as the parameter of the same name. To pyflakes that parameter redefines the
 # import; to pytest it is how the fixture is reached.
 "tests/test_homeassistant_*.py" = ["F811"]
+# The tests spell out the dash (U+2013) they look for in the Swedish texts so as
+# to keep it out of them, and only that is let through here: the package itself
+# stays under RUF001, RUF002 and RUF003. RUF001 does not catch an em dash
+# (U+2014), so ruff is no guard against that one anywhere.
+"tests/*.py" = ["RUF001"]
