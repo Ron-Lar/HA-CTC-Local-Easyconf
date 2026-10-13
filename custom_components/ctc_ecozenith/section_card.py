@@ -12,12 +12,15 @@ card.
 What comes back is cut out of the page itself rather than built beside it: the
 tab the section is on is built by the very function that builds it for the
 page, from the very description of the pump the page is built from
-(dashboard._collect), and the section is picked out of the result by its
-heading. So the section card shows exactly what the page shows in that section,
-the rule that leaves out a reading only ever zero included, and follows the
-page when the page changes. Nothing is added: the cards come back as the page
-has them, and only the integration's own cards, which are all the section card
-can draw.
+(dashboard._collect), in the language the page is built in, and the section is
+picked out of the result by its heading. The page has one language for all its
+pumps, the first one's (dashboard_views.page_language), which the websocket
+command works out over every running pump and passes on; a second pump whose
+panel speaks another language is drawn in the page's words, not its own. So the
+section card shows exactly what the page shows in that section, the rule that
+leaves out a reading only ever zero included, and follows the page when the
+page changes. Nothing is added: the cards come back as the page has them, and
+only the integration's own cards, which are all the section card can draw.
 
 A section is named by an id that stays put when its heading is translated or
 reworded (SECTIONS). Most are the ids the page itself uses; the hot water is on
@@ -88,7 +91,10 @@ def label(section: str, lang: str) -> str:
 
 
 def section_cards(
-    pump: Mapping[str, Any], section: str, ha_version: tuple[int, int]
+    pump: Mapping[str, Any],
+    section: str,
+    ha_version: tuple[int, int],
+    lang: str | None = None,
 ) -> list[dict[str, Any]]:
     """The cards of one section of the pump's page, as the page has them.
 
@@ -97,14 +103,20 @@ def section_cards(
     or nothing in it this installation has. Raises KeyError for a section that
     is not in SECTIONS, which the websocket command's schema keeps out.
 
-    The page is built in the pump's own language, the language of its panel.
+    ``lang`` is the language the page is built in, which is the first pump's
+    for every pump on it (dashboard_views.page_language over all the running
+    pumps); the section's words and the heading it is found by are both in it.
+    Without it the section is built in the pump's own language, the language
+    of its panel, which is the page's only while the pump is the first by name
+    or its panel speaks the first one's language.
+
     The status is the first section whose heading is the pump's name, since it
     is built first; every other section is the last whose heading is its own,
     so that a pump somebody named "Nyckeltal" still finds its key figures
     after its status.
     """
     tab, heading_key = SECTIONS[section]
-    text = views.TEXT[views.language(pump.get("language"))]
+    text = views.TEXT[views.language(pump.get("language") if lang is None else lang)]
     heading = str(pump.get("name") or views.TITLE) if heading_key is None else text[heading_key]
     matches = [
         found for found in _TABS[tab](pump, text, ha_version)

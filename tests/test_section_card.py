@@ -3,11 +3,13 @@
 The section card draws what the integration answers for a heat pump and a
 section, and the answer is cut out of the page: these tests hold it to being
 exactly what the whole page, built as the sidebar builds it, has in that
-section, for both houses' pumps and in both languages; to offering every
-section of the page whose cards it can draw, so that a section another change
-adds to the page cannot quietly go missing from the card; and to telling the
-two hot water sections apart. Checked without Home Assistant, from the pumps
-dashboard.py would hand over (tests/fixtures/pumps.json).
+section, for both houses' pumps and in both languages, and for the second of
+two pumps whose panels speak different languages, which the page builds in the
+first one's; to offering every section of the page whose cards it can draw, so
+that a section another change adds to the page cannot quietly go missing from
+the card; and to telling the two hot water sections apart. Checked without
+Home Assistant, from the pumps dashboard.py would hand over
+(tests/fixtures/pumps.json).
 """
 
 from __future__ import annotations
@@ -155,6 +157,57 @@ def test_the_section_follows_the_pumps_language(dashboard_views, section_card, p
     assert sv["filter"] == "Sök bland värdena"
     assert en["filter"] == "Search the values"
     assert en["more_info"] == dashboard_views.TEXT["en"]["more_info"]
+
+    # Two pumps whose panels speak different languages. The page builds both
+    # in the first one's, by name, so a section of the second, asked in the
+    # page's language, is what the page has there to the letter, whichever
+    # order the pumps come in.
+    first = copy.deepcopy(pumps["vsh"])
+    first["language"] = "sv"
+    second = copy.deepcopy(pumps["pt"])
+    second["language"] = "en"
+    assert first["name"].casefold() < second["name"].casefold()
+    sv_text = dashboard_views.TEXT["sv"]
+    for order in ([first, second], [second, first]):
+        lang = dashboard_views.page_language(order, "en")
+        assert lang == "sv"
+        config = dashboard_views.build_dashboard(order, "en", NEW_HA)
+        for section, tab in (("temperatures", "performance"), ("values", "values")):
+            heading = sv_text[section_card.SECTIONS[section][1]]
+            for pump, suffix in ((first, "-1"), (second, "-2")):
+                view = next(v for v in config["views"] if v["path"] == tab + suffix)
+                (page,) = [s for s in view["sections"] if s["cards"][0]["heading"] == heading]
+                cards = section_card.section_cards(pump, section, NEW_HA, lang=lang)
+                assert cards == page["cards"][1:], (section, suffix)
+            (card,) = cards
+            assert card["more_info"] == sv_text["more_info"] == "Mer info"
+            assert card["explain"] == sv_text["explain"]
+            # Without the page's language the second pump speaks its own
+            # panel's, which is what the section card used to show.
+            (own,) = section_card.section_cards(second, section, NEW_HA)
+            assert own["more_info"] == dashboard_views.TEXT["en"]["more_info"]
+        (values,) = section_card.section_cards(second, "values", NEW_HA, lang=lang)
+        assert values["filter"] == "Sök bland värdena"
+        assert values["show_empty"] == sv_text["show_empty"]
+        assert values["count"] == sv_text["count"]
+
+
+def test_the_page_language_is_the_first_pumps_by_name_or_the_fallback(
+    dashboard_views, pumps
+):
+    first = copy.deepcopy(pumps["vsh"])
+    second = copy.deepcopy(pumps["pt"])
+    first["language"], second["language"] = "en", "sv"
+    assert dashboard_views.page_language([second, first], "sv") == "en"
+    assert dashboard_views.page_language([second], "en") == "sv"
+    # While no pump runs, the fallback, read as the page reads any setting.
+    assert dashboard_views.page_language([], "sv-SE") == "sv"
+    assert dashboard_views.page_language([], None) == "en"
+    # The page is built in it.
+    config = dashboard_views.build_dashboard([second, first], "sv", NEW_HA)
+    assert config["views"][0]["title"] == (
+        f"{first['name']}: {dashboard_views.TEXT['en']['overview'].lower()}"
+    )
 
 
 def test_an_unknown_section_is_refused(section_card, pumps):

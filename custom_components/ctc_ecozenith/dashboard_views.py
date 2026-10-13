@@ -977,6 +977,19 @@ def _sort(pumps: Iterable[Any]) -> list[Mapping[str, Any]]:
     return sorted(wanted, key=lambda p: str(p.get("name") or "").casefold())
 
 
+def page_language(pumps: Iterable[Any], fallback: str | None) -> str:
+    """The one language the whole page is built in, for every pump on it.
+
+    The language of the first pump's panel, with the pumps in the page's own
+    order (by name), or ``fallback`` while no pump runs. The page and the
+    section card (section_card.py, asked through websocket.py) both take it
+    from here, so that a section of a second pump whose panel speaks another
+    language reads on a dashboard of its own as it does on the page.
+    """
+    ordered = _sort(pumps)
+    return language(ordered[0].get("language") if ordered else fallback)
+
+
 def waiting_message(waiting: Iterable[Mapping[str, Any]], text: Mapping[str, str]) -> str:
     """What the page says while no pump runs: why, when a pump is being retried.
 
@@ -1003,12 +1016,13 @@ def build_dashboard(
 ) -> dict[str, Any]:
     """The whole page: four tabs per heat pump, in the order the questions come.
 
+    Every pump's tabs are in one language, the first pump's (page_language).
     ``waiting`` names the pumps Home Assistant is retrying, with the reason it
     gives, so that a page with no running pump can say why rather than that
     nothing is running.
     """
     pumps = _sort(pumps)
-    lang = language(pumps[0].get("language") if pumps else fallback_language)
+    lang = page_language(pumps, fallback_language)
     text = TEXT[lang]
     if not pumps:
         return message_dashboard(waiting_message(waiting, text), lang)
