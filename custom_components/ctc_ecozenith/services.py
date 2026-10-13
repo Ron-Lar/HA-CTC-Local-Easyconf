@@ -11,14 +11,15 @@ Three, registered once for the domain from async_setup:
   manager that lets go of a power limit used to let go of the hot water as well.
 * ``reread_menu`` reads the display's menu again, the reading "read the menu
   again" in the options makes, for one entry or every loaded entry with a
-  display. A panel that is in use is said at once and never waited for.
+  display. A panel that is in use is said at once and never waited for. Where
+  some entries were read and others not, the answer names all three kinds.
 * ``cop_sample`` writes the two lifetime counters down as a sample of the
   coefficient of performance now, rather than at the six hour timer, and
   answers with the counters.
 
 The write guard is untouched: release writes nothing, and nothing here
 reaches the Modbus client other than through the control manager. The menu
-is walked only under the runtime's one panel lock, like every other walk.
+is walked only under the entry's one panel lock, like every other walk.
 """
 
 from __future__ import annotations
@@ -58,6 +59,11 @@ ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 #: The entity platforms a control register is one of.
 CONTROL_PLATFORMS = ("number", "select")
 
+#: What a list of entries in an answer reads as when it has none in it. A
+#: placeholder is put in as it is, whatever the language of the text around
+#: it, so a word would be English in a Swedish sentence; a count is neither.
+NONE_LISTED = "0"
+
 RELEASE_SCHEMA = vol.Schema({vol.Required(ATTR_ENTITY_ID): cv.entity_ids})
 ENTRY_SCHEMA = vol.Schema({vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string})
 
@@ -78,6 +84,11 @@ def _failed(key: str, **placeholders: str) -> HomeAssistantError:
         translation_key=key,
         translation_placeholders=placeholders or None,
     )
+
+
+def _listed(titles: list[str]) -> str:
+    """The entries of one kind in an answer, by title, or NONE_LISTED for none."""
+    return ", ".join(titles) if titles else NONE_LISTED
 
 
 def _loaded(entry: ConfigEntry | None) -> bool:
@@ -156,20 +167,35 @@ def async_register_services(hass: HomeAssistant) -> None:
             if not entries:
                 raise _refuse("no_display_loaded")
         version = str((await async_get_integration(hass, DOMAIN)).version)
+        read: list[str] = []
         busy: list[str] = []
         missed: list[str] = []
         for entry in entries:
+            if not _loaded(entry):
+                # Unloaded while an earlier entry's menu was walked.
+                missed.append(entry.title)
+                continue
             try:
-                reading = await async_reread_menu_now(hass, entry, version)
+                written = await async_reread_menu_now(hass, entry, version)
             except PanelBusy:
                 busy.append(entry.title)
                 continue
-            if not reading.pages or not reading.complete:
-                missed.append(entry.title)
+            (read if written else missed).append(entry.title)
+        if not busy and not missed:
+            return
+        # Every kind is named, the missed beside the taken, so whoever asks
+        # again can ask for the entries that were not read on their own
+        # (config_entry_id) instead of walking a panel that was just read
+        # once more. A menu that was written is reloading its entry, so an
+        # answer with one read never says that nothing has changed.
+        read_list, busy_list, missed_list = _listed(read), _listed(busy), _listed(missed)
+        if read:
+            raise _failed("menu_partly_read", read=read_list, busy=busy_list, missed=missed_list)
+        if busy and missed:
+            raise _failed("menu_busy_and_not_read", busy=busy_list, missed=missed_list)
         if busy:
-            raise _failed("panel_busy", entries=", ".join(busy))
-        if missed:
-            raise _failed("menu_not_read", entries=", ".join(missed))
+            raise _failed("panel_busy", entries=busy_list)
+        raise _failed("menu_not_read", entries=missed_list)
 
     async def _cop_sample(call: ServiceCall) -> ServiceResponse:
         """Take a sample of the counters now, and answer with them per entry."""

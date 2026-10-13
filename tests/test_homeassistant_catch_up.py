@@ -11,6 +11,12 @@ incomplete, and the menu has to get its three tries either way, with the one
 Modbus client still open; a retry that succeeds still writes the menu and
 reloads, once.
 
+The reread_menu action (R76) reads the same menu. A catch-up whose pause ends
+while the action walks queues on the panel lock, and the lock is fair, so it
+used to get the panel before the action's write and sweep the whole menu a
+second time (F1.1). Here it finds the menu read and walks nothing, and one
+whose pause ends after the action's reading waits a pause from that reading.
+
 Shares the stand-ins and fixtures of test_homeassistant.py and runs the same
 way, from a virtual environment that has Home Assistant and
 pytest-homeassistant-custom-component installed:
@@ -21,6 +27,7 @@ pytest-homeassistant-custom-component installed:
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import patch
 
 import pytest
@@ -39,6 +46,7 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
 from test_homeassistant_menu import VSH, VSH_PAGES, _pages_in  # noqa: E402
 
 from homeassistant.config_entries import ConfigEntryState  # noqa: E402
+from homeassistant.exceptions import HomeAssistantError  # noqa: E402
 from homeassistant.loader import async_get_integration  # noqa: E402
 
 import custom_components.ctc_ecozenith as integration  # noqa: E402
@@ -55,6 +63,11 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
 from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
 
 READ_IDENTITY = f"custom_components.{DOMAIN}.async_read_identity"
+
+#: Where the reread_menu action's walk is patched in: catalogue's own, which
+#: async_rescan_pages calls under the panel lock. The catch-up's walk is the
+#: one the shared stubs patch in the package.
+ACTION_WALK = f"custom_components.{DOMAIN}.catalogue.async_discover_pages"
 
 #: The heat pump's screen on an i255, made up: the sweep finds it by the firmware date.
 HEATPUMP_SCREEN = 138
@@ -149,3 +162,109 @@ async def test_the_retry_after_the_screen_was_written_still_writes_the_menu_and_
     assert entry.options[CONF_IDENTITY_SCREENS] == {"heatpump": HEATPUMP_SCREEN}, "skärmen står kvar"
     assert len(FakeModbus.instances) == 2, "menyn laddar om, en gång"
     assert entry.state is ConfigEntryState.LOADED
+
+
+# ------------------------------- a reading the action made is not made again
+
+
+def _whole_menu() -> MenuReading:
+    return MenuReading(pages=VSH, complete=True, root=20, home_found=True,
+                       tile_found=True, root_entered=True)
+
+
+async def test_a_catch_up_whose_pause_ends_while_the_action_walks_walks_nothing_more(
+    hass, stubs, monkeypatch
+):
+    version = str((await async_get_integration(hass, DOMAIN)).version)
+    retry = integration.MENU_READ_RETRY.total_seconds() + 60
+    entry = await _set_up_owing_the_menu(hass, IDENTITY)
+    await _let_the_background_run(hass)
+    # The first background reading missed; the catch-up sleeps out its pause.
+    assert stubs.discover.await_count == 1
+    assert integration._MENU_TRIES[entry.entry_id] == 1
+
+    events = ["catch-up walk"]
+
+    def catch_up_walk(*args, **kwargs) -> MenuReading:
+        events.append("catch-up walk")
+        return MenuReading()
+
+    stubs.discover.side_effect = catch_up_walk
+    gate = asyncio.Event()
+
+    async def action_walk(client, require_root=False):
+        events.append("action walk")
+        await gate.wait()
+        return _whole_menu()
+
+    update = hass.config_entries.async_update_entry
+
+    def writing(entry_, **kwargs):
+        if kwargs.get("options", {}).get(CONF_MENU_VERSION) == version:
+            events.append("write")
+        return update(entry_, **kwargs)
+
+    monkeypatch.setattr(hass.config_entries, "async_update_entry", writing)
+    panel = entry.runtime_data.web_client.panel
+    with patch(ACTION_WALK, action_walk):
+        # Not a task of Home Assistant's, so waiting for the core's tasks does
+        # not wait for the action.
+        action = asyncio.ensure_future(
+            hass.services.async_call(
+                DOMAIN, "reread_menu", {"config_entry_id": entry.entry_id}, blocking=True
+            )
+        )
+        await _let_the_background_run(hass)
+        assert panel.locked() and events == ["catch-up walk", "action walk"]
+
+        # The pause ends while the action holds the panel: the catch-up counts
+        # its try and queues on the lock, ahead of the action's write.
+        await _advance(hass, retry)
+        assert integration._MENU_TRIES[entry.entry_id] == 2
+        assert events == ["catch-up walk", "action walk"]
+
+        gate.set()
+        await action
+        await hass.async_block_till_done()
+        await _let_the_background_run(hass)
+
+    # One sweep for the action, none more for the catch-up, and the write
+    # before any walk that could follow.
+    assert events == ["catch-up walk", "action walk", "write"]
+    assert stubs.discover.await_count == 1
+    assert entry.options[CONF_MENU_VERSION] == version
+    assert _pages_in(entry, CONF_MENU) == VSH_PAGES
+    # The try counted for the skipped reading is not given back: the action's
+    # reading started the count over.
+    assert entry.entry_id not in integration._MENU_TRIES
+    assert entry.state is ConfigEntryState.LOADED
+    assert len(FakeModbus.instances) == 2, "skrivningen laddar om, en gång"
+
+
+async def test_a_catch_up_whose_pause_ends_after_the_action_read_waits_a_pause_from_that_reading(
+    hass, stubs
+):
+    retry = integration.MENU_READ_RETRY.total_seconds() + 60
+    entry = await _set_up_owing_the_menu(hass, IDENTITY)
+    await _let_the_background_run(hass)
+    assert stubs.discover.await_count == 1
+
+    # The action reads during the pause and misses: nothing is written, and
+    # its reading counts as the last attempt.
+    interrupted = MenuReading(pages=VSH[:1], complete=False, home_found=True,
+                              tile_found=True, root_entered=True)
+    with patch(ACTION_WALK, return_value=interrupted) as action_walk:
+        with pytest.raises(HomeAssistantError) as failed:
+            await hass.services.async_call(
+                DOMAIN, "reread_menu", {"config_entry_id": entry.entry_id}, blocking=True
+            )
+    assert failed.value.translation_key == "menu_not_read"
+    assert action_walk.await_count == 1
+
+    # The pause the catch-up was sleeping ends: it does not walk right after
+    # the action's reading, it waits a pause from it.
+    await _advance(hass, retry)
+    assert stubs.discover.await_count == 1, "ingen vandring direkt efter åtgärdens"
+    await _advance(hass, retry)
+    assert stubs.discover.await_count == 2
+    assert integration._MENU_TRIES[entry.entry_id] == 1

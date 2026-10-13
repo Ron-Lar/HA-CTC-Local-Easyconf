@@ -93,8 +93,8 @@ def test_every_refusal_the_actions_raise_has_a_text_with_its_placeholders():
     raised = dict(re.findall(r'_(?:refuse|failed)\(\s*"([a-z_]+)"((?:, [a-z_]+=[^,)]+)*)', services))
     assert set(raised) == {
         "not_a_control", "unknown_entry", "entry_not_loaded", "no_display",
-        "no_display_loaded", "panel_busy", "menu_not_read", "no_counters",
-        "no_counters_loaded",
+        "no_display_loaded", "panel_busy", "menu_not_read", "menu_busy_and_not_read",
+        "menu_partly_read", "no_counters", "no_counters_loaded",
     }
     for text in TEXTS:
         exceptions = _json(text)["exceptions"]
@@ -138,6 +138,59 @@ def test_release_writes_nothing_and_reread_waits_for_no_panel():
     assert "await async_rescan_pages(client)" in now
     assert "menu_read_from_the_options(" in now
     assert now.index("not reading.complete") < now.index("_menu_changes(")
+
+
+def test_the_action_writes_options_worked_out_under_the_lock_and_only_to_its_own_runtime():
+    # F1.3: the options from the moment of the write, and nothing written to
+    # an entry that was reloaded or unloaded beneath the walk.
+    init = _source("__init__.py")
+    now = init.split("async def async_reread_menu_now(")[1].split("\nasync def ")[0]
+    write = now.split("async with client.panel:")[1]
+    assert "_menu_changes(" not in now.split("async with client.panel:")[0]
+    assert write.index("_still_loaded_with(entry, runtime)") < write.index("_menu_changes(")
+    assert write.rindex("_still_loaded_with(entry, runtime)") > write.index("async_flush()")
+    still = init.split("def _still_loaded_with(")[1].split("\nasync def ")[0]
+    assert "ConfigEntryState.LOADED" in still and "is runtime" in still
+
+
+def test_the_panel_lock_is_the_entrys_and_outlives_a_reload():
+    init = _source("__init__.py")
+    setup = init.split("async def async_setup_entry(")[1].split("\nasync def ")[0]
+    assert "web_client.panel = panel_lock(entry.entry_id)" in setup
+    assert setup.index("web_client.panel = panel_lock(") < setup.index("CtcWebCoordinator(")
+    remove = init.split("async def async_remove_entry(")[1]
+    assert "_PANEL_LOCKS.pop(entry.entry_id" in remove
+    unload = init.split("async def async_unload_entry(")[1].split("\nasync def ")[0]
+    assert "_PANEL_LOCKS" not in unload, "en omladdning behåller låset"
+
+
+def test_a_catch_up_queued_behind_another_reading_walks_nothing():
+    # F1.1: the last attempt read before the lock is taken and compared once it is.
+    init = _source("__init__.py")
+    body = init.split("async def _async_reread_menu(")[1].split("\ndef ")[0]
+    taken = body.index("async with client.panel:")
+    assert body.index("_MENU_LAST.get(entry.entry_id)") < taken
+    after = body[taken:]
+    assert after.index("_MENU_LAST.get(entry.entry_id) != attempted") < after.index(
+        "async_discover_pages("
+    )
+    assert "_MENU_TRIES" not in after.split("async_discover_pages(")[0]
+
+
+def test_an_answer_over_several_pumps_names_every_kind_and_says_nothing_changed_only_when_so():
+    services = _source("services.py")
+    handler = services.split("async def _reread_menu(")[1].split("async def _cop_sample(")[0]
+    # Partly read is decided before any of the answers that say nothing changed.
+    partly = handler.index('_failed("menu_partly_read"')
+    for key in ("menu_busy_and_not_read", "panel_busy", "menu_not_read"):
+        assert partly < handler.index(f'_failed("{key}"'), key
+    english = _json("strings.json")["exceptions"]
+    swedish = _json("translations/sv.json")["exceptions"]
+    assert "Nothing has been changed" not in english["menu_partly_read"]["message"]
+    assert "Inget har ändrats" not in swedish["menu_partly_read"]["message"]
+    assert "Inget har ändrats" in swedish["menu_busy_and_not_read"]["message"]
+    # An empty list is a count, not a word in one language.
+    assert re.search(r'NONE_LISTED = "0"', services)
 
 
 # ------------------------------------------------------- the key and the register
