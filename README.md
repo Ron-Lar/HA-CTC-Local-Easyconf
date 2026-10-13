@@ -888,6 +888,14 @@ and week groups wherever it is spelt, the display's host name included. The
 code is `diagnostics_data.py`; read the file through before you attach it all
 the same.
 
+## Releases
+
+Every release is made from a tag that names the version in `manifest.json`:
+the release workflow checks that the two agree, runs the tests and publishes
+the release HACS installs from, with the tag's message as its notes. A fix for
+something that stops a sensor is released the same day, not saved for the next
+version.
+
 ## Tests
 
 The suite in `tests/` runs without Home Assistant installed and is what CI
