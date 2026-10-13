@@ -1106,7 +1106,14 @@ and why. hassfest reads that file only for Home Assistant's own integrations,
 so `tests/test_quality_scale.py` runs hassfest's checks for the rules marked
 done and keeps the manifest from claiming a tier before every rule of it is
 met. `tests/test_ha_floor.py` holds the Home Assistant version in `hacs.json`
-to what the code uses, and to the one stated under [Install](#install).
+to the one stated under [Install](#install) and to `NEEDS`, the Home Assistant
+names that set the floor, each found by name in the source; a need no longer
+found fails there until the smoke run under the release before it confirms
+that it is gone and its line is taken out. The smoke run against the floor
+finds a newer module, function, class or attribute wherever the source reaches
+for it, but not a method on an object (`hass.config_entries`, a `ConfigEntry`,
+a selector) or the arguments it takes: code that starts using one newer than
+the floor adds its line to `NEEDS` by hand.
 
 ## Licence
 
