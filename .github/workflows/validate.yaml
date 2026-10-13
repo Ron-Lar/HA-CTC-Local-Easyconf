@@ -52,8 +52,10 @@ jobs:
       fail-fast: false
       matrix:
         # Both houses run the integration on 3.14, the Python Home Assistant
-        # has required since 2026.3; 3.13 is what the oldest release hacs.json
-        # admits was built for (R60).
+        # has required since 2026.3 and so the only one the floor in hacs.json
+        # admits (R56). 3.13, the Python of the releases before 2026.3, stays
+        # in the matrix so that lowering the floor below 2026.3 is not also
+        # the first run on 3.13 (R60).
         python: ["3.13", "3.14"]
         # The adapter is run against the floor the manifest allows, the version
         # Home Assistant's own modbus integration ships, and whatever PyPI has
