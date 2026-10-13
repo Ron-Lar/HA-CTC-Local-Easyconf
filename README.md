@@ -1002,11 +1002,25 @@ off again at the panel; neither has a login (see
 
 ## Releases
 
-Every release is made from a tag that names the version in `manifest.json`:
-the release workflow checks that the two agree, runs the tests and publishes
-the release HACS installs from, with the tag's message as its notes. A fix for
-something that stops a sensor is released the same day, not saved for the next
-version.
+Every release is made from a tag that names the version in `manifest.json`,
+on a commit that is on `main`. The release workflow checks both, and it waits
+for the whole validation on that commit, not only for the tests: hassfest,
+the HACS checks, ruff, the test matrix, and a real Home Assistant on the
+houses' release and on the floor in `hacs.json`. Only then does it publish the
+release HACS installs from. `main` and the tag go up in one push, both or
+neither:
+
+```sh
+git tag -a --cleanup=whitespace v0.21.0 -F notes.md && git push --atomic origin main v0.21.0
+```
+
+Headings with `#` in `notes.md` need `--cleanup=whitespace`: without it,
+`git tag` strips every line that starts with `#` as a comment. The notes are
+the tag's message when it has more than one line, else the subjects of the
+commits since the tag before (`scripts/release_notes.py`). A tag that is not
+on `main` stops at the check; push `main` and re-run the failed jobs. A fix
+for something that stops a sensor is released the same day, not saved for the
+next version.
 
 ## Tests
 

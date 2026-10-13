@@ -20,9 +20,17 @@ import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github" / "workflows" / "validate.yaml"
+RELEASE = ROOT / ".github" / "workflows" / "release.yml"
 
 #: The pymodbus each floor in hacs.json pins in its package_constraints.txt.
 FLOOR_PYMODBUS = {"2026.5.0": "3.11.2"}
+
+#: How a release is tagged and pushed, the same in release.yml and the README.
+RELEASE_COMMAND = re.compile(
+    r"git tag -a --cleanup=whitespace (v\d+\.\d+\.\d+) -F notes\.md"
+    r" && git push --atomic origin main \1$",
+    re.MULTILINE,
+)
 
 
 def _text() -> str:
@@ -40,8 +48,8 @@ def _latest_leg_allowance() -> str:
     return lines[0].split(":", 1)[1].strip()
 
 
-def _allowed_to_fail(expression: str, *, leg: str, event: str) -> bool:
-    """Evaluate the workflow expression the way GitHub would, for one job."""
+def _evaluate(expression: str, *, event: str, leg: str | None = None) -> bool:
+    """Evaluate a workflow expression the way GitHub would, for one job."""
     assert expression.startswith("${{") and expression.endswith("}}"), expression
     code = expression[3:-2].replace("&&", " and ").replace("||", " or ")
     # Only names, quoted strings, comparisons and parentheses: nothing to run.
@@ -51,6 +59,10 @@ def _allowed_to_fail(expression: str, *, leg: str, event: str) -> bool:
         "github": SimpleNamespace(event_name=event),
     }
     return bool(eval(code, {"__builtins__": {}}, scope))
+
+
+def _allowed_to_fail(expression: str, *, leg: str, event: str) -> bool:
+    return _evaluate(expression, event=event, leg=leg)
 
 
 @pytest.mark.parametrize("event", ["push", "pull_request"])
@@ -78,14 +90,27 @@ def test_the_weekly_run_exists_and_the_latest_leg_takes_whatever_pypi_has():
     assert re.search(r'pymodbus: \[.*"latest"\]', text)
 
 
-def _job(name: str) -> str:
+def _job(name: str, workflow: pathlib.Path = WORKFLOW) -> str:
     """The lines of one job, from its key to the next job's."""
-    lines = _text().splitlines()
+    lines = workflow.read_text(encoding="utf-8").splitlines()
     start = lines.index(f"  {name}:")
     end = next(
         (i for i in range(start + 1, len(lines)) if re.match(r"^  \S", lines[i])), len(lines)
     )
     return "\n".join(lines[start:end])
+
+
+def _jobs(workflow: pathlib.Path = WORKFLOW) -> list[str]:
+    lines = workflow.read_text(encoding="utf-8").splitlines()
+    after = lines[lines.index("jobs:") + 1 :]
+    return [match[1] for line in after if (match := re.match(r"^  ([\w-]+):$", line))]
+
+
+def _triggers(workflow: pathlib.Path) -> list[str]:
+    lines = workflow.read_text(encoding="utf-8").splitlines()
+    after = lines[lines.index("on:") + 1 :]
+    block = after[: next(i for i, line in enumerate(after) if not line.strip())]
+    return [match[1] for line in block if (match := re.match(r"^  ([\w-]+):", line))]
 
 
 def test_the_floor_s_pymodbus_is_a_pinned_leg_on_3_14():
@@ -107,6 +132,64 @@ def test_the_floor_s_pymodbus_is_a_pinned_leg_on_3_14():
     )
     for event in ("push", "pull_request", "schedule", "workflow_dispatch"):
         assert not _allowed_to_fail(_latest_leg_allowance(), leg=pin, event=event), event
+
+
+def test_validate_can_be_called_and_the_release_waits_for_it():
+    """A tag's release waits for all of validate.yaml on its commit (F2.1, R73, R75)."""
+    assert re.search(r"^  workflow_call:$", _text(), re.MULTILINE)
+    validate = _job("validate", RELEASE)
+    assert re.search(r"^    uses: \./\.github/workflows/validate\.yaml$", validate, re.MULTILINE)
+    # The called run keeps the read-only token release.yml gives every job.
+    assert not re.search(r"^    permissions:", validate, re.MULTILINE)
+    assert re.search(
+        r"^permissions:\n  contents: read$", RELEASE.read_text(encoding="utf-8"), re.MULTILINE
+    )
+    assert re.search(r"^    needs: \[check, validate\]$", _job("release", RELEASE), re.MULTILINE)
+
+
+def test_the_validation_a_tag_calls_runs_as_a_push_to_main():
+    """A called workflow sees its caller's event, which for release.yml is always a push (F2.1).
+
+    So the houses' release, the floor and the core suite all run, the latest
+    legs may fail as on any push, and the newest release waits for Monday.
+    """
+    assert _triggers(RELEASE) == ["push"]
+    runs = {}
+    for name in _jobs():
+        condition = re.search(r"^    if: (.+)$", _job(name), re.MULTILINE)
+        runs[name] = condition is None or _evaluate(condition[1], event="push")
+    gate = {"hassfest", "hacs", "ruff", "tests", "smoke-house", "smoke-floor", "ha-tests"}
+    assert gate <= set(runs), set(runs)
+    assert runs.pop("smoke-latest") is False
+    assert all(runs.values()), runs
+    assert _allowed_to_fail(_latest_leg_allowance(), leg="latest", event="push")
+
+
+def test_a_tag_off_main_is_not_released():
+    """The check fetches every branch and tests the checked-out commit against main (F2.2, R73).
+
+    HEAD rather than GITHUB_SHA, so that an annotated tag cannot make the
+    test name the tag object instead of its commit.
+    """
+    check = _job("check", RELEASE)
+    assert re.search(r"^          fetch-depth: 0$", check, re.MULTILINE)
+    step = next(line for line in check.splitlines() if "merge-base" in line)
+    assert "git merge-base --is-ancestor HEAD origin/main ||" in step
+    assert "GITHUB_SHA" not in step
+    assert "::error::" in step and "exit 1" in step
+    assert check.index("merge-base") < check.index("pytest -q")
+
+
+@pytest.mark.parametrize("path", [RELEASE, ROOT / "README.md"], ids=["release.yml", "README"])
+def test_the_release_command_keeps_headings_and_pushes_main_with_the_tag(path):
+    """Headings survive the tag, and main goes up with it (F2.3, F2.2).
+
+    git tag strips every line that starts with # unless told otherwise, and a
+    push of the tag alone leaves main behind. Not --cleanup=verbatim: with a
+    signed tag and a notes.md without a final newline, the signature would
+    land in the notes.
+    """
+    assert RELEASE_COMMAND.search(path.read_text(encoding="utf-8")), path.name
 
 
 def test_the_hacs_job_blocks_every_run():
