@@ -1072,9 +1072,10 @@ CI runs it against the release the maintainer's houses run, against the floor
 `hacs.json` promises, and every Monday against the newest release with
 `--strict`, which also fails on Home Assistant's notices that the integration
 uses something on its way out. CI further runs the suite on Python 3.13 and
-3.14 against three pymodbus versions, the whole suite under
-`pytest-homeassistant-custom-component`, ruff with the rules in `ruff.toml`,
-hassfest and the HACS checks.
+3.14 against four pymodbus versions (the manifest's floor, the two Home
+Assistant pins in the floor in `hacs.json` and in the houses' release, and the
+newest), the whole suite under `pytest-homeassistant-custom-component`, ruff
+with the rules in `ruff.toml`, hassfest and the HACS checks.
 
 ### A display page from a new model
 
