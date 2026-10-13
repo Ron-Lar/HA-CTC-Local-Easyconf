@@ -1340,7 +1340,7 @@
   //: what the editor calls each (section_card.label). tests/test_card_picker.py
   //: holds the two sides equal.
   const SECTIONS = [
-    "status", "quick_controls", "key_readings",
+    "status", "overrides", "quick_controls", "key_readings",
     "heating_controls", "hot_water_controls", "power_controls",
     "temperatures", "hot_water", "energy", "compressor", "cycles", "settings", "unit", "other",
     "values",
@@ -1348,6 +1348,7 @@
   const SECTION_LABELS = {
     sv: {
       status: "Översikt: Drift",
+      overrides: "Översikt: Styrs från Home Assistant",
       quick_controls: "Översikt: Snabbstyrning",
       key_readings: "Översikt: Nyckeltal",
       heating_controls: "Styrning: Värme",
@@ -1365,6 +1366,7 @@
     },
     en: {
       status: "Overview: Operation",
+      overrides: "Overview: Held by Home Assistant",
       quick_controls: "Overview: Quick controls",
       key_readings: "Overview: Key readings",
       heating_controls: "Controls: Heating",
@@ -1551,8 +1553,9 @@
   }
 
   /** Whether a card's visibility, as the page writes it, lets it be seen:
-   *  every condition holds, an "or" when one of its own does, and a state
-   *  condition as Home Assistant reads it, with a missing entity unavailable.
+   *  every condition holds, an "or" when one of its own does, and a state or
+   *  numeric state condition as Home Assistant reads it, with a missing entity
+   *  unavailable and a state that is no number below and above every bound.
    *  A kind of condition the page does not write lets the card be seen. */
   function visible(conditions, states) {
     const all = states || {};
@@ -1560,6 +1563,16 @@
       if (!condition || typeof condition !== "object") return true;
       if (condition.condition === "or") return (condition.conditions || []).some(holds);
       if (condition.condition === "and") return (condition.conditions || []).every(holds);
+      if (condition.condition === "numeric_state") {
+        // What Home Assistant holds in the pump (R49): its cards are seen
+        // while the count is above zero.
+        const stateObj = all[condition.entity];
+        const value = stateObj ? Number(stateObj.state) : NaN;
+        if (Number.isNaN(value)) return false;
+        const above = condition.above == null ? NaN : Number(condition.above);
+        const below = condition.below == null ? NaN : Number(condition.below);
+        return (Number.isNaN(above) || value > above) && (Number.isNaN(below) || value < below);
+      }
       if (condition.condition !== "state") return true;
       const stateObj = all[condition.entity];
       const state = stateObj ? stateObj.state : "unavailable";

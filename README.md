@@ -509,7 +509,7 @@ sections are those of the page, by tab:
 
 | Tab | `section` |
 |---|---|
-| Overview | `status`, `quick_controls`, `key_readings` |
+| Overview | `status`, `overrides`, `quick_controls`, `key_readings` |
 | Controls | `heating_controls`, `hot_water_controls`, `power_controls` |
 | Performance | `temperatures`, `hot_water`, `energy`, `compressor`, `cycles`, `settings`, `unit`, `other` |
 | All values | `values` |
@@ -521,7 +521,9 @@ installation has only ever reported as zero left out the same way, and nothing
 the page does not show. The texts are never copied into your dashboard, so they
 follow the integration when it is updated. A section the page leaves out for
 your pump, such as the controls while control is switched off, leaves the card
-empty, and in the editor it says so. Anyone signed in can see the card, as
+empty, and in the editor it says so. The `overrides` section, what Home
+Assistant holds in the pump, is drawn only while it holds anything, as on the
+page. Anyone signed in can see the card, as
 anyone signed in can open the page. The graphs are Home Assistant's own cards
 and are not offered; put a history or statistics graph beside the section card.
 

@@ -28,6 +28,20 @@ def section_card():
     return load("section_card")
 
 
+def _held(pump):
+    """The pump with what Home Assistant holds in it counted (roadmap R49).
+
+    The fixture's registries predate the sensor, and without it the page has
+    no such section, so a test that is to see the section adds it.
+    """
+    pump = copy.deepcopy(pump)
+    pump["entities"]["active_overrides"] = "sensor.ctc_ecozenith_i255_aktiva_overstyrningar"
+    pump["names"]["active_overrides"] = "Aktiva överstyrningar"
+    pump["entities"]["release_control"] = "button.ctc_ecozenith_i255_slapp_all_styrning"
+    pump["names"]["release_control"] = "Släpp all styrning"
+    return pump
+
+
 def _page_section(views, pump, section_card, section):
     """The section as the whole page has it, or None where the page leaves it out."""
     tab, heading_key = section_card.SECTIONS[section]
@@ -39,12 +53,12 @@ def _page_section(views, pump, section_card, section):
     return found[0] if found else None
 
 
-@pytest.mark.parametrize("house", ["vsh", "pt"])
+@pytest.mark.parametrize("house", ["vsh", "pt", "vsh_held"])
 @pytest.mark.parametrize("lang", ["sv", "en"])
 def test_every_section_is_what_the_whole_page_has_there(
     dashboard_views, section_card, pumps, house, lang
 ):
-    pump = pumps[house]
+    pump = _held(pumps["vsh"]) if house == "vsh_held" else pumps[house]
     pump["language"] = lang
     for section in section_card.SECTIONS:
         cards = section_card.section_cards(pump, section, NEW_HA)
@@ -61,8 +75,8 @@ def test_every_section_of_the_page_with_cards_of_its_own_has_an_id(
     # A section another change adds to the page, with the page's own cards in
     # it, has to be offered by the section card too, or a dashboard could not
     # show it. Graphs and notes are Home Assistant's cards and are not offered.
-    for house in ("vsh", "pt"):
-        pump = pumps[house]
+    for house in ("vsh", "pt", "vsh_held"):
+        pump = _held(pumps["vsh"]) if house == "vsh_held" else pumps[house]
         offered = [
             section_card.section_cards(pump, section, NEW_HA) for section in section_card.SECTIONS
         ]
@@ -146,6 +160,30 @@ def test_the_section_follows_the_pumps_language(dashboard_views, section_card, p
 def test_an_unknown_section_is_refused(section_card, pumps):
     with pytest.raises(KeyError):
         section_card.section_cards(pumps["vsh"], "graph_cop", NEW_HA)
+
+
+def test_what_home_assistant_holds_is_a_section_of_its_own_while_it_holds_anything(
+    dashboard_views, section_card, pumps
+):
+    # Without the sensor, as with control switched off, the page has no such
+    # section and neither has the card.
+    assert section_card.section_cards(pumps["vsh"], "overrides", NEW_HA) == []
+    pump = _held(pumps["vsh"])
+    chips, release = section_card.section_cards(pump, "overrides", NEW_HA)
+    assert chips["type"] == dashboard_views.CHIPS_CARD
+    assert release["type"] == dashboard_views.CONTROLS_CARD
+    assert [item["entity"] for item in release["items"]] == [pump["entities"]["release_control"]]
+    # Both carry the page's own rule, which the section card applies.
+    held = [{"condition": "numeric_state", "entity": pump["entities"]["active_overrides"],
+             "above": 0}]
+    assert chips["visibility"] == held and release["visibility"] == held
+    assert section_card.label("overrides", "sv") == "Översikt: Styrs från Home Assistant"
+    assert section_card.label("overrides", "en") == "Overview: Held by Home Assistant"
+    # The status and the quick controls are where they were.
+    (status,) = section_card.section_cards(pump, "status", NEW_HA)
+    (quick,) = section_card.section_cards(pump, "quick_controls", NEW_HA)
+    assert status["type"] == dashboard_views.CHIPS_CARD
+    assert quick["type"] == dashboard_views.CONTROLS_CARD
 
 
 def test_the_labels_name_the_tab_and_the_heading_and_read_apart(section_card):
