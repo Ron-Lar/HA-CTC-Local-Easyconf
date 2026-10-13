@@ -265,7 +265,7 @@ def test_an_empty_rereading_keeps_the_stored_menu(catalogue, const):
     assert not fresh, "en läsning som inte skedde stämplar ingen version"
 
 
-def test_a_rereading_that_gave_something_replaces_the_menu(catalogue, const):
+def test_a_rereading_that_gave_something_folds_into_the_menu(catalogue, const):
     stored = [page(const, 20), page(const, 21)]
     discovered = [page(const, 20), page(const, 21), page(const, 22)]
     menu, fresh = catalogue.menu_after_rescan(stored, [page(const, 20)], discovered)

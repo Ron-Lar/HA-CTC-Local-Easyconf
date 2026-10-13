@@ -752,10 +752,19 @@ class CtcWebClient:
                 and not await self.async_goto_operation_root()
             ):
                 return False
+            # Every step of a route was recorded because it led to a new page,
+            # so a step that leaves the panel where it was means the way is
+            # not there just now: the i550 Pro's root draws some tiles only in
+            # some operating states. The walk ends there, one tap spent, and
+            # does not press on into whatever the next step would hit.
+            here = await self.async_current_page()
             for x, y in route:
-                here = await self.async_current_page()
                 await self.async_click(page_map.get(here, []), x, y)
-            return await self.async_current_page() == target
+                landed = await self.async_current_page()
+                if landed == here:
+                    return False
+                here = landed
+            return here == target
 
         if target == self.root:
             if await self._async_back_to_root():

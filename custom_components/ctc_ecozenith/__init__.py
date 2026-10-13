@@ -760,11 +760,25 @@ def _menu_changes(
     """
     stored_menu = pages_from_storage(options.get(CONF_MENU))
     stored_selection = pages_from_storage(options.get(CONF_SLOW_PAGES))
+    # Both are asked: an installation from before the whole menu was kept
+    # has only its harvested pages, and a page that stands in one but not the
+    # other must not be lost by a reading that misses it either.
+    root = reading.root if reading.root is not None else options.get(CONF_MENU_ROOT)
     menu, selected = merge_menu(
-        stored_menu,
+        union_by_page(stored_menu, stored_selection),
         [page.page for page in stored_selection],
         reading.pages,
+        root=root,
+        screen_pages=reading.screen_pages,
     )
+    reached = {page.page for page in reading.pages}
+    if kept := [page.page for page in menu if page.page not in reached]:
+        _LOGGER.info(
+            "The reading of the display's menu did not reach page(s) %s; they are kept "
+            "as they were, since a page can be hidden in some operating states, and "
+            "a page is let go by unticking it",
+            ", ".join(str(page) for page in kept),
+        )
     # A row the display hides at this moment stays on its page (a slot that
     # shows the compressor's speed or a status by turns), and every row
     # carries the key it had where that was another, so the set-up the write

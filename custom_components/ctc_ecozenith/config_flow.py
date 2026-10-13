@@ -1039,11 +1039,20 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         menu_read_from_the_options(self._entry.entry_id, self.hass.loop.time(), reading)
         # An interrupted sweep is offered for what it found, beside the stored
         # pages it did not reach, and is not fresh: nothing disappears and the
-        # version is not stamped. See catalogue.menu_after_rescan.
+        # version is not stamped. A whole one keeps a stored page it did not
+        # reach while the page still belongs: ticked, as the first form left
+        # the tick boxes, reached by a route, and in the display's screen map.
+        # See catalogue.menu_after_rescan.
+        settings = {**self._entry.options, **self._pending}
         stored_menu = pages_from_storage(self._entry.options.get(CONF_MENU))
-        stored_selection = pages_from_storage(self._entry.options.get(CONF_SLOW_PAGES))
+        stored_selection = pages_from_storage(settings.get(CONF_SLOW_PAGES))
         pages, self._fresh = menu_after_rescan(
-            stored_menu, stored_selection, reading.pages, reading.complete
+            stored_menu,
+            stored_selection,
+            reading.pages,
+            reading.complete,
+            root=reading.root if reading.root is not None else settings.get(CONF_MENU_ROOT),
+            screen_pages=reading.screen_pages,
         )
         # Each row carries the key it had where that was another, so the
         # set-up the save brings moves its entity and stored values over
@@ -1058,7 +1067,6 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
 
         # Offered as the first form left them, so a tick box or an interval
         # changed there is what this form shows.
-        settings = {**self._entry.options, **self._pending}
         already = [page.page for page in pages_from_storage(settings.get(CONF_SLOW_PAGES, []))]
         return self.async_show_form(
             step_id="rescan",
@@ -1068,5 +1076,6 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
                 int(settings.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)),
                 bool(settings.get(CONF_RESTORE_PAGE, True)),
             ),
-            description_placeholders={"count": str(len(self._pages))},
+            # The pages the reading found, not the stored ones kept beside them.
+            description_placeholders={"count": str(len(reading.pages) or len(self._pages))},
         )

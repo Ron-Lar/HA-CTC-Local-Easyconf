@@ -125,3 +125,30 @@ async def test_an_interrupted_rereading_keeps_the_stored_menu_and_its_stamp(hass
     assert _pages_in(entry, CONF_MENU) == [*VSH_PAGES, 27]
     assert _pages_in(entry, CONF_SLOW_PAGES) == [*VSH_PAGES, 27], "den nya sidan kryssas i"
     assert entry.state is ConfigEntryState.LOADED
+
+
+async def test_a_whole_rereading_that_misses_a_page_keeps_it_ticked(hass, stubs):
+    """A page the sweep did not reach this time stays in the menu and the harvest.
+
+    PT's i550 Pro draws the tile to Kompressor VP1 only in some operating
+    states, and the reading owed after an update can sweep to its end while
+    the tile is away. The reading is whole and is stamped, but the page it did
+    not reach stays, ticked, so its rows keep their entities.
+    """
+    stored = pages_to_storage(VSH)
+    missing = 22
+    stubs.discover.return_value = MenuReading(
+        pages=[page for page in VSH if page.page != missing], complete=True
+    )
+    entry = await _set_up(
+        hass, **{CONF_MENU_VERSION: "0.9.0", CONF_MENU: stored, CONF_SLOW_PAGES: stored}
+    )
+    assert entry.state is ConfigEntryState.LOADED
+    await _let_the_background_run(hass)
+
+    version = str((await async_get_integration(hass, DOMAIN)).version)
+    assert stubs.discover.await_count == 1
+    assert entry.options[CONF_MENU_VERSION] == version, "en hel läsning stämplas"
+    assert _pages_in(entry, CONF_MENU) == VSH_PAGES, "sidan som inte nåddes står kvar"
+    assert _pages_in(entry, CONF_SLOW_PAGES) == VSH_PAGES, "och skördas fortfarande"
+    assert entry.state is ConfigEntryState.LOADED

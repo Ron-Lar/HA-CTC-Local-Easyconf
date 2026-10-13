@@ -103,9 +103,10 @@ def test_the_first_form_rides_along_to_the_rescan_step_and_is_saved_with_it():
     assert save.index("**self._pending,") < save.index("CONF_SLOW_PAGES: pages_to_storage(keep)"), (
         "omsökningsformulärets egna fält vinner över det första"
     )
-    # And the rescan form is offered as the first form left things.
-    offered = rescan.split("menu_after_rescan(")[1]
-    assert "settings = {**self._entry.options, **self._pending}" in offered
+    # And the rescan form is offered as the first form left things; the
+    # folding already asks those tick boxes which unreached pages still belong.
+    before_reading, offered = rescan.split("menu_after_rescan(", 1)
+    assert "settings = {**self._entry.options, **self._pending}" in before_reading
     assert (
         "settings.get(CONF_SLOW_INTERVAL" in offered
         and "settings.get(CONF_RESTORE_PAGE" in offered

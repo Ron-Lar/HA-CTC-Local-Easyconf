@@ -46,12 +46,17 @@ def test_a_page_the_menu_gained_is_harvested(catalogue, const):
     assert selected == [1, 9]
 
 
-def test_a_page_that_is_gone_is_forgotten(catalogue, const):
-    previous = [page(const, 1), page(const, 2)]
+def test_a_page_the_reading_did_not_reach_is_kept(catalogue, const):
+    # Until 0.21.1 a page missing from a whole reading was forgotten. On PT the
+    # i550 Pro's root hides the tile to Kompressor VP1 while it charges hot
+    # water, so that rule took the page out of the menu and the harvest; a
+    # page now leaves only by the owner's hand (test_unreached_page.py).
+    behind_a_tab = const.SlowPage(page=2, title="Sida 2", screens=[20], route=[(80, 255)])
+    previous = [page(const, 1), behind_a_tab]
     discovered = [page(const, 1)]
     menu, selected = catalogue.merge_menu(previous, [1, 2], discovered)
-    assert [p.page for p in menu] == [1]
-    assert selected == [1]
+    assert [p.page for p in menu] == [1, 2]
+    assert selected == [1, 2]
 
 
 # --------------------------------------------- reading the menu again, or trying to
