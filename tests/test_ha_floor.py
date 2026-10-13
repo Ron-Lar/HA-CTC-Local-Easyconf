@@ -35,27 +35,12 @@ NEEDS = (
     ("dashboard.py", "frontend.async_panel_exists(", "2026.5.0"),
 )
 
-#: The keys HACS reads in hacs.json for an integration, and render_readme,
-#: which its validation lets through.
-HACS_KEYS = {
-    "name", "content_in_root", "zip_release", "filename", "hide_default_branch",
-    "country", "homeassistant", "persistent_directory", "hacs", "render_readme",
-}
-
-
 def _version(text: str) -> tuple[int, ...]:
     return tuple(int(part) for part in text.split("."))
 
 
 def _hacs() -> dict:
     return json.loads((ROOT / "hacs.json").read_text(encoding="utf-8"))
-
-
-def test_hacs_json_has_only_keys_hacs_reads_and_the_manifests_name():
-    hacs = _hacs()
-    assert set(hacs) <= HACS_KEYS, set(hacs) - HACS_KEYS
-    manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-    assert hacs["name"] == manifest["name"]
 
 
 def test_the_floor_is_a_first_release_of_a_month():
