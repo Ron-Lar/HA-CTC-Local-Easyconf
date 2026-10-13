@@ -1,14 +1,18 @@
 """What HACS checks before the integration can join its default list (R75).
 
 The pull request to hacs/default runs the HACS action against the repository
-without any ignore, hassfest, and its own checks: a release, an owner, a
-description, issues and topics. Most of that lives on GitHub. What lives in
-the repository is held here, so that the release the request points at cannot
-fail on it: hacs.json with only the keys HACS's own schema lets through (it
-refuses any other), the manifest with the keys and links HACS requires of an
-integration, one integration under custom_components, the brand icon HACS's
-brands check looks for in the integration's own brand directory, a licence
-and a README.
+without any ignore, which among the rest wants a description, issues and
+topics, then hassfest, and then hacs/default's own checks: a release, an
+owner, an editable pull request, and a repository neither in the list already
+nor among the removed ones. So the request is opened from beolink's own fork
+with "Allow edits by maintainers" ticked (the Editable PR job), and its one
+new line goes where scripts/is_sorted.py wants it, sorted with str.casefold.
+Most of that lives on GitHub. What lives in the repository is held here, so
+that the release the request points at cannot fail on it: hacs.json with
+only the keys HACS's own schema lets through (it refuses any other), the
+manifest with the keys and links HACS requires of an integration, one
+integration under custom_components, the brand icon HACS's brands check looks
+for in the integration's own brand directory, a licence and a README.
 """
 
 from __future__ import annotations
