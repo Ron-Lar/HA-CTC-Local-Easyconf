@@ -233,7 +233,8 @@ CONTROL: dict[str, str] = {
     "ctl_dhw_mode": (
         "Varmvattenprogram: Ekonomi för litet behov, Normal, Komfort för stort behov, eller Manuell. "
         "Utan styrning visas pumpens eget program, Inställt varmvattenläge (61500). Släpp "
-        "styrningen lämnar tillbaka till det."
+        "styrningen lämnar tillbaka till det. Kan 61500 inte läsas, till exempel under ett "
+        "Modbusvarv som inte gick fram, står läget som okänt tills nästa varv svarar."
     ) + _PUMP_VALUE + _VOLATILE,
     "ctl_dhw_setpoint": (
         "Önskad varmvattentemperatur. Pumpen har inget register som visar sin egen inställning, "
@@ -257,9 +258,9 @@ CONTROL: dict[str, str] = {
         "Släpper all styrning från Home Assistant på en gång. Inget skrivs: Home Assistant slutar "
         "skriva, och pumpen går tillbaka till sina egna inställningar inom cirka fem minuter, "
         "eftersom den glömmer en styrning som inte skrivs om. Ett enskilt läge släpps med valet "
-        "Släpp styrningen i sin lista. Ett tal har ingen sådan plats; det släpps här tillsammans "
-        "med allt annat, eller ensamt med åtgärden ctc_ecozenith.release, som inte heller skriver "
-        "något."
+        "Släpp styrningen i sin lista. Ett tal har ingen sådan plats i en lista. Medan det styrs "
+        "har dess rad en egen knapp Släpp, och det kan också släppas ensamt med åtgärden "
+        "ctc_ecozenith.release. Ingen av dem skriver något, och resten av styrningen står kvar."
     ),
 }
 

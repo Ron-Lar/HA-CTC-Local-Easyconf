@@ -543,10 +543,12 @@ last write. That expiry is the safety net. If Home Assistant stops, the heat
 pump quietly returns to its own settings.
 
 A mode is released by choosing *Släpp styrningen*. A setpoint has no such
-position, so **Släpp all styrning** stops every override at once: Home Assistant
-stops writing, and the controller goes back to its own settings within about
-five minutes. The action `ctc_ecozenith.release` lets go of one control, or a
-few, and leaves the rest held; see [Actions](#actions).
+position in a list; while one is held, its row on the CTC page has a
+**Släpp** button of its own, and the action `ctc_ecozenith.release` lets go of
+one control, or a few, and leaves the rest held; see [Actions](#actions).
+**Släpp all styrning** stops every override at once. None of them writes
+anything: Home Assistant stops writing, and the controller goes back to its own
+settings within about five minutes.
 
 What Home Assistant shows is what the controller holds. An override counts as
 in force only from a write that actually reached the unit, each control entity
@@ -560,6 +562,12 @@ energy manager that reads the entity should treat that combination as a lost
 command rather than as somebody's manual change. The release comes at
 *valid_until* itself, not at the keepalive's next minute.
 
+The controls stay available when a Modbus round fails, so a value or a mode
+set from an action in that moment is written rather than skipped, and a held
+control keeps its attributes. A round that failed only takes the pump's own
+value away: an idle control that shows it then shows *unknown* until the next
+round answers.
+
 Every control says whether it is held, in *control_active*, and a control
 with a stored setting beside it also carries the pump's own value, in
 *pump_value*, while Home Assistant holds a value of its own as much as while
@@ -568,11 +576,16 @@ heater limits and the hot water mode, and for extra hot water the time left
 as the pump reports it in 61503, whose relation to the control has not been
 tried on a running unit yet. While nothing is held the hot water mode shows
 the pump's own program from 61500 rather than *Släpp styrningen*, which stays
-in the list for letting go; choosing a mode, from an automation or an energy
+in the list for letting go. When 61500 could not be read, in a Modbus round
+that failed or one where the block did not answer, the hot water mode shows
+*unknown* rather than *Släpp styrningen*, so the history never shows a release
+that did not happen. Choosing a mode, from an automation or an energy
 manager, writes it as before, whatever the list showed. The zone mode and the
 hot water setpoint have no such value:
 the stored heating mode (61542) has other modes than the zone mode, and 62001
-is the hot water stop temperature, not the setpoint. The sensor **Aktiva
+is the hot water stop temperature, not the setpoint. With no stored mode to
+show, the zone mode and the price mode show *Släpp styrningen* while idle,
+whatever Modbus does. The sensor **Aktiva
 överstyrningar** counts what Home Assistant holds right now and lists each
 held register with its value and when that value was set, *satt* and
 *set_at*: the write that put it in force or last changed it. The keepalive's
