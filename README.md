@@ -711,10 +711,14 @@ Every control says whether it is held, in *control_active*, and a control
 with a stored setting beside it also carries the pump's own value, in
 *pump_value*, while Home Assistant holds a value of its own as much as while
 it does not: the room setpoint, the compressor's top speed, the two immersion
-heater limits and the hot water mode, and for extra hot water the time left
-as the pump reports it in 61503, which did not follow the control the one time
-it was tried, on an i255: it stayed at zero through seven minutes of the
-control held at one hour. While nothing is held the hot water mode shows
+heater limits and the hot water mode. Extra hot water carries none and stands
+empty while nothing is held. The controller's *Extra varmvatten kvar* (61503)
+did not follow it the one time it was tried, on an i255: it stayed at zero
+through seven minutes of the control held at one hour, with every write
+reaching the unit, so the control does not pass 61503 off as the time left.
+Whether the controller starts its timer again at each of the keepalive's
+rewrites is not known; the control is written and kept alive like the others.
+While nothing is held the hot water mode shows
 the pump's own program from 61500 rather than *Släpp styrningen*, which stays
 in the list for letting go. When 61500 could not be read, in a Modbus round
 that failed or one where the block did not answer, the hot water mode shows

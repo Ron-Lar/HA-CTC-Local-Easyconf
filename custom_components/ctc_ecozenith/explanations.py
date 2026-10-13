@@ -404,9 +404,19 @@ MODBUS: dict[str, Text] = {
         "The hot water program set in the heat pump: Ekonomi (economy) for a small need of hot "
         "water, Normal, or Komfort (comfort) for a large one.",
     ),
+    # R50: what the one test on an i255 showed, 2026-10-13. 1006 held at one
+    # hour for seven minutes, every write reaching the unit, and 61503 at 0.
     "set_extra_dhw": Text(
-        "Hur lång tid Extra varmvatten har kvar.",
-        "How much time Extra hot water has left.",
+        "Hur lång tid Extra varmvatten har kvar, enligt CTC:s registerlista. Registret följde "
+        "inte en start från Home Assistant när det provades på en i255: det stod på 0 i sju "
+        "minuter medan Styr extra varmvatten hölls på en timme. Om det följer en start på "
+        "pumpens panel är inte provat, och om pumpen startar om sin timer vid varje omskrivning "
+        "från Home Assistant är inte känt.",
+        "How long Extra hot water has left, according to CTC's register list. The register did "
+        "not follow a start from Home Assistant when it was tried on an i255: it stayed at 0 for "
+        "seven minutes while Control extra hot water was held at one hour. Whether it follows a "
+        "start made at the heat pump's panel has not been tried, and whether the heat pump "
+        "restarts its timer at each rewrite from Home Assistant is not known.",
     ),
     "set_room_1": Text(
         "Rumstemperaturen som är inställd för värmesystem 1 i pumpens meny.",
@@ -513,13 +523,23 @@ CONTROL: dict[str, Text] = {
         "stop temperature (62001) is something else, the temperature at which the charging "
         "stops, and is therefore not shown as the heat pump's value.",
     ) + _VOLATILE,
+    # R50: no pumpens värde, and no claim to show the time left. 61503 did not
+    # follow a start from here in the one test on an i255.
     "ctl_extra_dhw": Text(
-        "Startar Extra varmvatten i så här många timmar. Utan styrning visas tiden som är kvar. "
-        "Attributet pumpens värde (pump_value) visar Extra varmvatten kvar (61503) så som pumpen "
-        "svarar, även medan Home Assistant håller ett eget värde.",
-        "Starts Extra hot water for this many hours. With no override in force the time left is "
-        "shown. The attribute pump_value shows Extra hot water left (61503) as the heat pump "
-        "answers it, also while Home Assistant holds a value of its own.",
+        "Startar Extra varmvatten i så här många timmar. Reglaget visar bara det Home Assistant "
+        "håller och står tomt utan styrning. Pumpens Extra varmvatten kvar (61503) följde "
+        "nämligen inte en start härifrån när det provades på en i255: registret stod på 0 i sju "
+        "minuter medan reglaget hölls på en timme och varje skrivning nådde pumpen. Någon "
+        "märkbar ändring i pumpens drift syntes inte heller, men tanken var då redan över "
+        "stopptemperaturen. Om pumpen startar om sin timer vid varje omskrivning eller räknar "
+        "ner från den första är inte känt.",
+        "Starts Extra hot water for this many hours. The control shows only what Home Assistant "
+        "holds and stands empty while nothing is held. The heat pump's Extra hot water left "
+        "(61503) did not follow a start from here when it was tried on an i255: the register "
+        "stayed at 0 for seven minutes while the control was held at one hour and every write "
+        "reached the heat pump. No noticeable change in the heat pump's operation was seen "
+        "either, but the tank was already above its stop temperature. Whether the heat pump "
+        "restarts its timer at each rewrite or counts down from the first one is not known.",
     ) + _VOLATILE,
     "ctl_price_mode": Text(
         "Talar om vilken elpriskategori som gäller: låg, normal eller hög. Vad pumpen gör vid "

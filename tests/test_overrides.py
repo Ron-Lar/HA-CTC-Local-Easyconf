@@ -188,14 +188,15 @@ def test_a_number_without_a_mirror_has_no_pumps_value(const):
     assert "pumpens värde" not in shown and "pump_value" not in shown
 
 
-def test_the_extra_hot_water_carries_61503_as_it_reads(const):
+def test_the_extra_hot_water_carries_nothing_of_61503(const):
+    # R50: 61503 stood at 0 through seven minutes of 1006 held at one hour on
+    # an i255, so it is no mirror of the control (test_extra_hot_water.py).
     number = load("number")
     extra = _register(const, "ctl_extra_dhw")
-    assert extra.mirror == 61503
+    assert extra.mirror is None
     runtime = _runtime(const, {1006: 2}, data={"set_extra_dhw": 0.0})
     shown = number.CtcControlNumber(runtime, extra).extra_state_attributes
-    # Whatever 61503 reads while 1006 is held, it is what the pump says; R50 settles the rest.
-    assert shown["pump_value"] == 0.0 and shown["control_active"] is True
+    assert "pump_value" not in shown and shown["control_active"] is True
 
 
 # --------------------------------------------------------------- the selects
@@ -331,8 +332,10 @@ def test_the_sensor_is_explained_and_says_where_it_comes_from(explanations):
 
 
 def test_the_controls_explain_the_pumps_value_and_where_there_is_none(explanations):
-    for key in ("ctl_room_setpoint_1", "ctl_dhw_mode", "ctl_max_rps", "ctl_extra_dhw"):
+    for key in ("ctl_room_setpoint_1", "ctl_dhw_mode", "ctl_max_rps"):
         assert "pumpens värde (pump_value)" in explanations.explain(key), key
+    # R50: extra hot water has none, and says why instead.
+    assert "pump_value" not in explanations.explain("ctl_extra_dhw")
     assert "62001" in explanations.explain("ctl_dhw_setpoint")
     assert "61542" in explanations.explain("ctl_zone_mode_1")
     assert "61500" in explanations.explain("ctl_dhw_mode")

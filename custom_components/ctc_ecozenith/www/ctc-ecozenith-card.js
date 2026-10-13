@@ -84,8 +84,9 @@
    *  and off are looked up by device class first ("problem_on") and then
    *  plainly ("on"): Home Assistant would word them in the user's language
    *  instead, and put "Not running" and "Off" beside Swedish labels. A control
-   *  in "unknown" has no value yet (the hot water setpoint has no mirror
-   *  register, so it is unknown until something is written) and says so
+   *  in "unknown" has no value yet (the hot water setpoint and extra hot
+   *  water have no mirror register, so they are unknown until something is
+   *  written) and says so
    *  rather than "Unknown". A 0 the pump means as no limit at all is a word
    *  too, for the keys the page marks with `zeroMeans`, and only for the
    *  pump's own value: a 0 somebody wrote through the control is a 0. An
@@ -139,8 +140,9 @@
    *  A number or list with a mirror carries pump_value also when the mirror
    *  did not answer, empty, and stays available through a lost Modbus round
    *  with the state unknown, while one without a mirror, the hot water
-   *  setpoint, carries no pump_value at all and is unknown until something is
-   *  written. The two read "not read" and "not set", each with its own note. */
+   *  setpoint or extra hot water, carries no pump_value at all and is unknown
+   *  until something is written. The two read "not read" and "not set", each
+   *  with its own note. */
   function unread(attributes) {
     const carried = ["pump_value", "pumpens värde"].some(
       (name) => Object.prototype.hasOwnProperty.call(attributes, name));
@@ -995,8 +997,9 @@
       const attributes = (this._state(entityId) || {}).attributes || {};
       const step = Number(attributes.step) || 1;
       const states = this._config.states || {};
-      // A number without a value yet: the hot water setpoint has no mirror
-      // register, so it is unknown until something is written, and one with a
+      // A number without a value yet: the hot water setpoint and extra hot
+      // water have no mirror register (61503 did not follow 1006, R50), so
+      // they are unknown until something is written, and one with a
       // mirror is unknown while idle through a Modbus round that was lost
       // (F2.1), which the reading and the note then say instead. The browser
       // would draw its slider with the knob in the middle, as if someone had
