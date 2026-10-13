@@ -1,0 +1,75 @@
+name: Release
+
+# A tag vX.Y.Z that names manifest.json's version makes the GitHub release
+# HACS installs from, titled "CTC Local Easyconf vX.Y.Z" (roadmap R73):
+#
+#   git tag -a v0.21.0 -F notes.md && git push origin v0.21.0
+#
+# The notes are the annotated tag's message when it says more than one line,
+# else the subjects of the commits since the tag before (release_notes.py).
+# HACS takes the tree from the release, so there is no zip and no changelog
+# file. A release that exists already is left as it is, and the run is green.
+# Switch this workflow off (gh workflow disable release.yml) before tags are
+# forced again, or every forced tag makes a release.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: the tag names the manifest's version and the tests pass
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag names the manifest's version
+        run: |
+          manifest=$(python3 -c 'import json; print(json.load(open("custom_components/ctc_ecozenith/manifest.json"))["version"])')
+          if [ "${GITHUB_REF_NAME}" != "v${manifest}" ]; then
+            echo "::error::the tag ${GITHUB_REF_NAME} is not manifest.json's version ${manifest}"
+            exit 1
+          fi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: pip install -r requirements-test.txt
+      - run: pytest -q
+
+  release:
+    name: the release, unless it exists already
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history and every tag, for the commits since the last one.
+          fetch-depth: 0
+      - name: Leave an existing release alone
+        id: existing
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
+            echo "::notice::the release ${GITHUB_REF_NAME} exists already and is left as it is"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Write the notes
+        if: ${{ steps.existing.outputs.exists == 'false' }}
+        run: |
+          # actions/checkout leaves the pushed tag pointing at its commit,
+          # which loses an annotated tag's message: fetch the tag itself.
+          git fetch --force --no-tags origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          python3 scripts/release_notes.py "${GITHUB_REF_NAME}" > notes.md
+          cat notes.md
+      - name: Make the release
+        if: ${{ steps.existing.outputs.exists == 'false' }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" --verify-tag \
+            --title "CTC Local Easyconf ${GITHUB_REF_NAME}" --notes-file notes.md
