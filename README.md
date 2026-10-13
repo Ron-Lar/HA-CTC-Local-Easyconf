@@ -125,8 +125,9 @@ began, with its length and the outdoor temperature at the time as attributes,
 which is where a healthy unit and an iced up one part ways. The defrost timer in
 register 62137 is shown as the controller gives it; its unit is not confirmed.
 
-**The transitions as events.** The same watch feeds an event entity, Händelser,
-with the event types `kompressor_start`, `kompressor_stopp`, `avfrostning_start`,
+**The transitions as events.** The same watch feeds an event entity, *Events*
+(*Händelser* in a Swedish Home Assistant), with the event types
+`kompressor_start`, `kompressor_stopp`, `avfrostning_start`,
 `avfrostning_slut`, `larm`, `larm_borta`, `smartgrid_andrad` and
 `systemstatus_andrad`. Each carries the code before and after, their labels, the
 outdoor temperature and, for a stop or the end of a defrost, the length in
@@ -146,10 +147,10 @@ own catalogue, `[E017] Givare solpaneler ut`, in the header icon at the top left
 of a page and in the status field of a heat pump page, and the integration reads
 those two places off the values it has already harvested: nothing is navigated
 for it, nothing is polled faster, and the catalogue is never enumerated. The
-sensor *Senaste larm* holds the latest alarm as the panel printed it, with the
-code, the text, when it began, when it went away and the outdoor temperature at
-the start as attributes, and the binary *Larm* carries the last ten episodes
-under *episodes*. A sensor alarm such as E017 leaves the heat pump running, so
+sensor *Last alarm* (*Senaste larm*) holds the latest alarm as the panel
+printed it, with the code, the text, when it began, when it went away and the
+outdoor temperature at the start as attributes, and the binary *Alarm* (*Larm*)
+carries the last ten episodes under *episodes*. A sensor alarm such as E017 leaves the heat pump running, so
 the binary, which reads the Modbus status, can be off while the sensor shows an
 alarm. Where the panel prints the alarm has been seen on one page of one model
 so far, the history page of an i550 Pro, and is to be confirmed the next time a
@@ -214,8 +215,9 @@ So the display is treated as a supplement, not the base:
   put back on the page it was found on, so a panel left on another page does
   not stop the harvest for good. The first skip and the resumption are each one
   line in the log.
-- The device's diagnostic sensor *Senaste displayskörd* says when the display
-  was last read, and in its attributes how many harvests in a row were skipped
+- The device's diagnostic sensor *Last display harvest* (*Senaste
+  displayskörd*) says when the display was last read, and in its attributes
+  how many harvests in a row were skipped
   or failed, when the next attempt is, the reason for the last empty one, and
   which pages were read and missed. The CTC page names a pump that Home
   Assistant is retrying, with the reason, instead of saying that nothing runs.
@@ -257,9 +259,10 @@ every form of them, on both models tested.
 3. Tick the display pages you want harvested. The menu is read from the unit
    itself, so the list matches your model and your installed options. The
    titles are the display's own, in Swedish, the language the integration reads
-   the display in, whatever the panel is set to. Everything is ticked to begin
-   with; switch off what you do not want. For the coefficient of performance,
-   keep the page with the stored or historical operation data.
+   the display in, whatever the panel is set to, and so are the names of the
+   display rows' entities; see [Language](#language). Everything is ticked to
+   begin with; switch off what you do not want. For the coefficient of
+   performance, keep the page with the stored or historical operation data.
 
 **When Modbus does not answer.** If the display answers and Modbus does not, a
 step of its own says where on the panel Modbus TCP is turned on, and takes the
@@ -447,9 +450,9 @@ it is never out of date. Each heat pump gets four tabs.
   figures as large numbers. The status chips that are booleans, an alarm, a
   block, a defrost, a running compressor or heater, SmartGrid, are on the line
   only while they are on, in the theme's colour for what they mean: an alarm is
-  a red chip, and a quiet pump shows no row of "Av". While Home Assistant holds
-  any control register, a small section says how many, with **Släpp all
-  styrning** beside the count.
+  a red chip, and a quiet pump shows no row of "Off". While Home Assistant
+  holds any control register, a small section says how many, with **Release
+  all control** beside the count.
 - **Controls.** Everything writable, as the thing it is, a mode picked from a
   list, a setpoint slid or typed, grouped by what it does to the house rather
   than by entity domain: heating, hot water, operation and power. Letting go of
@@ -465,24 +468,26 @@ it is never out of date. Each heat pump gets four tabs.
   installation offers, the display's own pages among them under the names the
   panel prints. Nothing is left out here whatever it reads, which makes it the
   tab that answers whether a value exists at all. A row with nothing to show,
-  unavailable or unknown, waits behind the box *Visa även tomma* until it is
-  ticked, and a search finds it there all the same; the count beside the box
+  unavailable or unknown, waits behind the box *Show empty ones too* until it
+  is ticked, and a search finds it there all the same; the count beside the box
   says how many rows are shown, how many have a value and how many there are.
   A display row's source line names its screen and its place on the page, so
   two rows by one name can be told apart. The search and the box are kept for
   as long as the browser tab is open.
 
-A control Home Assistant holds right now is marked **Styrd** after its name,
-among the controls and in All values, and the mark's hover text says what
-holding means: Home Assistant writes the value again every minute, and the pump
-forgets it about five minutes after the last write. Where the integration gives
-the pump's own value under the override, it stands under the row as *pumpen
-själv*. A held number has a **Släpp** button that lets go of that one alone,
-through the integration's release service, without writing anything; a mode is
-let go of with its own option, *Släpp styrningen*. At rest a mode list among the
-controls stands on *Släpp styrningen* with the pump's own mode under it as
-*pumpen själv*, so any mode, the one the pump runs included, can be picked and
-held. Searching All values for *styrd* lists everything held.
+A control Home Assistant holds right now is marked **Overridden** (*Styrd* on a
+Swedish page) after its name, among the controls and in All values, and the
+mark's hover text says what holding means: Home Assistant writes the value
+again every minute, and the pump forgets it about five minutes after the last
+write. Where the integration gives the pump's own value under the override, it
+stands under the row as *pump's own* (*pumpen själv*). A held number has a
+**Release** button that lets go of that one alone, through the integration's
+release service, without writing anything; a mode is let go of with its own
+option, *Släpp styrningen*, which keeps that Swedish name in every language.
+At rest a mode list among the controls stands on *Släpp styrningen* with the
+pump's own mode under it, so any mode, the one the pump runs included, can be
+picked and held. Searching All values for *overridden* (*styrd*) lists
+everything held.
 
 The coefficient of performance says under its figure what it rests on, the
 last day, the last seven or thirty days, a rolling year, the first year or the
@@ -519,7 +524,8 @@ which text it opens, and the name carries no hover text that would read the
 explanation a second time. The explanations come
 from CTC's BMS manual and CTC's own description of the operation data rows, and
 say so where a register's meaning is not confirmed on a running unit. They are
-in Swedish, like the entity names.
+written in Swedish and in English, and the page shows them in Home Assistant's
+language; see [Language](#language).
 
 **What is on the page is decided by your installation.** Heat pumps, indoor
 units, software revisions and settings differ, and the controller answers for
@@ -604,12 +610,49 @@ their entities as a list, under `items` or, for the list, `rows`, and the picker
 starts them with a few of the integration's own. The page's explanations come
 only with the section card.
 
+## Language
+
+The integration follows the language Home Assistant is set to, under
+*Settings, System, General*: Swedish when that is Swedish, English for every
+other language. That covers the CTC page, its headings, its words for states
+and every explanation and source line behind the ⓘ, and the names of the
+integration's own entities, which come from its translations. The setup and
+options forms, the repairs view and the actions have always followed Home
+Assistant's language the same way.
+
+Some things stay as they are whatever the language:
+
+- **The display rows are named by the panel.** Each display row's entity is
+  called by the page title and the row the panel prints, and the integration
+  reads the panel's menu and captions in Swedish, whatever language the panel
+  itself is set to; that setting is unchanged. So on an English Home Assistant
+  the display's rows keep Swedish names such as *Driftinfo, Historik: Avgiven
+  värme totalt*, explained in English.
+- **States, modes and options are the controller's Swedish words.** The status
+  sensors read *Värmepump övre* or *Till varmvatten*, a mode list offers
+  *Ekonomi*, *Normal* and *Komfort*, and every control list keeps *Släpp
+  styrningen* for letting go, in every language: automations, energy managers
+  and the history are built on those exact values. The explanations say what
+  each of them means.
+- **Entity ids never change.** Home Assistant makes an entity's id once, from
+  its name in the language of the day it is first added, and keeps it. An
+  installation from before the translations keeps every id it has, such as
+  `sensor.ctc_ecozenith_i255_utetemperatur`, and only the name shown changes,
+  to *Outdoor temperature* on an English Home Assistant. A new installation
+  gets ids from the names in its language, `sensor.ctc_ecozenith_i255_outdoor_temperature`
+  in English and the Swedish ids as before in Swedish. A name you gave an
+  entity yourself is kept.
+- **Attribute values in text stay Swedish**, such as the reason under the
+  coefficient of performance; the attribute names have English twins, see
+  [Attribute names](#attribute-names).
+
 ## In the Energy dashboard
 
 Two of the Modbus readings belong in Home Assistant's Energy dashboard, as
-individual devices: **Kompressorenergi**, register 62341, the electricity
-supplied to the heat pump, and **Elpatron energi**, register 62191, the
-immersion heater's. Both are the controller's lifetime counters in kWh, with
+individual devices: **Compressor energy**, in Swedish **Kompressorenergi**,
+register 62341, the electricity supplied to the heat pump, and **Immersion
+heater energy**, in Swedish **Elpatron energi**, register 62191, the immersion
+heater's. Both are the controller's lifetime counters in kWh, with
 the state class `total_increasing`, so the dashboard takes them as they are.
 Where the display's history page has *Tillförd energi totalt* and *Energi el
 total*, those are the same two counters (9166 kWh against 9166.0 on an i255);
@@ -635,11 +678,13 @@ often as needed, and the controller forgets them roughly five minutes after the
 last write. That expiry is the safety net. If Home Assistant stops, the heat
 pump quietly returns to its own settings.
 
-A mode is released by choosing *Släpp styrningen*. A setpoint has no such
-position in a list; while one is held, its row on the CTC page has a
-**Släpp** button of its own, and the action `ctc_ecozenith.release` lets go of
-one control, or a few, and leaves the rest held; see [Actions](#actions).
-**Släpp all styrning** stops every override at once. None of them writes
+A mode is released by choosing *Släpp styrningen*, the option's name in every
+language. A setpoint has no such position in a list; while one is held, its row
+on the CTC page has a **Release** button (*Släpp*) of its own, and the action
+`ctc_ecozenith.release` lets go of one control, or a few, and leaves the rest
+held; see [Actions](#actions). The button **Release all control** (*Släpp all
+styrning* in a Swedish Home Assistant) stops every override at once. None of
+them writes
 anything: Home Assistant stops writing, and the controller goes back to its own
 settings within about five minutes.
 
@@ -659,8 +704,8 @@ The controls stay available when a Modbus round fails, so a value or a mode
 set from an action in that moment is written rather than skipped, and a held
 control keeps its attributes. A round that failed only takes the pump's own
 value away: an idle control that shows it then shows *unknown* until the next
-round answers, which the CTC page writes as *ej läst* (*not read*) rather than
-*ej satt*.
+round answers, which the CTC page writes as *not read* (*ej läst* on a Swedish
+page) rather than *not set* (*ej satt*).
 
 Every control says whether it is held, in *control_active*, and a control
 with a stored setting beside it also carries the pump's own value, in
@@ -680,14 +725,14 @@ hot water setpoint have no such value:
 the stored heating mode (61542) has other modes than the zone mode, and 62001
 is the hot water stop temperature, not the setpoint. With no stored mode to
 show, the zone mode and the price mode show *Släpp styrningen* while idle,
-whatever Modbus does. The sensor **Aktiva
-överstyrningar** counts what Home Assistant holds right now and lists each
+whatever Modbus does. The sensor **Active overrides** (*Aktiva
+överstyrningar*) counts what Home Assistant holds right now and lists each
 held register with its value and when that value was set, *satt* and
 *set_at*: the write that put it in force or last changed it. The keepalive's
 rewrites of the same value do not move it, so the sensor gets a new state in
 the history only when an override is set, changed or released, not every
 minute; when a write last reached the controller is on each control, as
-*last_written*. The overview shows the sensor, with **Släpp all styrning**
+*last_written*. The overview shows the sensor, with **Release all control**
 beside it, whenever anything is held.
 
 The stored settings in the 61500 block are exposed read only and never written.
@@ -753,8 +798,9 @@ control registers, and the first writes nothing at all.
 
 ## Attribute names
 
-The attributes automations are most likely to read had Swedish names, like the
-entities. Each now has an English twin, and both are sent in this version with
+The attributes automations are most likely to read had Swedish names, as the
+entities had before they followed Home Assistant's language. Each now has an
+English twin, and both are sent in this version with
 the same value, except where the table says otherwise. **The Swedish names will
 be removed in the next major version**, so templates, automations and energy
 managers that read them should move to the English names now.
@@ -767,7 +813,7 @@ managers that read them should move to the English names now.
 | `avgiven värme kWh` | `heat_out_kwh` | the coefficient of performance sensors |
 | `tillförd energi kWh` | `energy_in_kwh` | the coefficient of performance sensors |
 | `tillförd energi ur`, `displayen` or `Modbus 62341` | `energy_in_from`, the same text | the coefficient of performance sensors |
-| `kod` | `code` | a status sensor answering a code it has no label for, and *Senaste larm* |
+| `kod` | `code` | a status sensor answering a code it has no label for, and *Last alarm* |
 | `källa` | `source` | every display row |
 | `sida` | `page` | every display row |
 | `skärm` | `screen` | every display row |
@@ -776,13 +822,14 @@ managers that read them should move to the English names now.
 | `gäller till` | `valid_until` | the controls, while an override is in force |
 | `styrning aktiv`, `ja` or `nej` | `control_active`, `true` or `false` | the controls |
 | `pumpens värde` | `pump_value` | the controls with a stored setting beside them, also while an override is in force |
-| `episoder`, each with `kod`, `text`, `start`, `slut`, `utetemperatur` | `episodes`, each with `code`, `text`, `start`, `end`, `outdoor_temperature` | the binary sensor *Larm* |
-| `styrningar`, each with `namn`, `register`, `värde`, `satt` | `overrides`, each with `name`, `register`, `value`, `set_at` | the sensor *Aktiva överstyrningar* |
+| `episoder`, each with `kod`, `text`, `start`, `slut`, `utetemperatur` | `episodes`, each with `code`, `text`, `start`, `end`, `outdoor_temperature` | the binary sensor *Alarm* |
+| `styrningar`, each with `namn`, `register`, `värde`, `satt` | `overrides`, each with `name`, `register`, `value`, `set_at` | the sensor *Active overrides* |
 
-Values that are text, such as a reason, what a figure rests on or where the
-consumed energy was read, stay in Swedish under both names, like the entity
-names and the explanations. The other attributes keep their Swedish names for
-now.
+Values that are text, such as a reason, what a figure rests on, where the
+consumed energy was read or a held control's name in *overrides*, stay in
+Swedish under both names whatever language Home Assistant speaks, like the
+states; see [Language](#language). The other attributes keep their Swedish
+names for now.
 
 ## Known limits
 
