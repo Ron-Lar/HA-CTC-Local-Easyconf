@@ -11,7 +11,7 @@ mirrors how the panel itself is laid out.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 import logging
 import re
@@ -687,7 +687,9 @@ async def async_discover_pages(
 ) -> MenuReading:
     """Walk the operation data subtree and describe every page it contains.
 
-    The panel moves while this runs and is put back where it started. Only the
+    The panel moves while this runs and is put back where it started: on a
+    page of the menu by the route the sweep recorded to it, and on the root or
+    the home screen the way the sweep came in (see _async_restore). Only the
     operation data subtree is entered, and only once its root has been found
     and verified. That subtree is read only on every CTC model checked, so a
     tap landing slightly off cannot change a setting; the menus around it are
@@ -765,7 +767,13 @@ async def async_discover_pages(
                 if getattr(reading, step) is not True:
                     setattr(reading, step, None)
     finally:
-        await _async_restore(client, page_map, origin, found)
+        # Every page the sweep reached from the root has the route it was
+        # reached by, a page without a reading of its own included, so a
+        # panel that started on one of them is walked back there by it.
+        routes = (
+            {page.page: page.route for page in discovered} if found is not None else None
+        )
+        await _async_restore(client, page_map, origin, found, routes)
 
     if gaps and reading.error is None:
         # A page read with a gap is a page not read: left out, and the
@@ -1114,11 +1122,77 @@ async def _async_operation_root(
     return root, home
 
 
+#: How a walk back to a page by its recorded route ended (_async_put_back).
+ARRIVED = "arrived"
+#: The panel is on some other page, from which the chrome still steps back.
+ASTRAY = "astray"
+#: The panel is on a page whose back button did nothing: a dialog, or
+#: something else the walk cannot leave by stepping back.
+STUCK = "stuck"
+#: How many times the chrome is pressed, at most, on the way back to a page.
+_BACK_HOPS = 6
+
+
+async def _async_put_back(
+    client: CtcWebClient,
+    page_map: dict[int, list[int]],
+    page: int,
+    route: list[tuple[int, int]],
+    root: int,
+    home: int,
+) -> str:
+    """Walk the panel to a page of the operation data menu by its recorded route.
+
+    The route starts at the root, so the panel is first stepped back with
+    the chrome until it shows the page itself, the root or the home screen,
+    whichever comes first: a page the panel passes on its way up is not left
+    for the root and walked down to again. From the home screen the way in
+    is the operation data tile, and the chrome is never pressed there, since
+    on the home screen that spot opens the quick menu. From the root the
+    route is replayed one step at a time, every step worked out from the
+    page the panel shows, and a step that leaves the panel where it was ends
+    the walk: every step was recorded because it led somewhere, so the way
+    is not there just now (the i550 Pro's root draws some of its tiles only
+    in some operating states), and nothing is pressed on into whatever the
+    next step would hit. No step of a recorded route is under the heading,
+    since the sweep never presses there.
+
+    Returns ARRIVED, ASTRAY or STUCK.
+    """
+    here = await client.async_current_page()
+    seen: set[int] = set()
+    while here not in (page, root, home):
+        if here in seen or len(seen) >= _BACK_HOPS:
+            return ASTRAY
+        seen.add(here)
+        await client.async_click(page_map.get(here, []), *CHROME_BUTTON)
+        after = await client.async_current_page()
+        if after == here:
+            return STUCK
+        here = after
+    if here == page:
+        return ARRIVED
+    if here == home:
+        if not await client.async_goto_operation_root():
+            return ASTRAY
+        here = await client.async_current_page()
+        if here != root:
+            return ARRIVED if here == page else ASTRAY
+    for x, y in route:
+        await client.async_click(page_map.get(here, []), x, y)
+        landed = await client.async_current_page()
+        if landed == here:
+            return ASTRAY
+        here = landed
+    return ARRIVED if here == page else ASTRAY
+
+
 async def _async_restore(
     client: CtcWebClient,
     page_map: dict[int, list[int]],
     origin: int,
     found: tuple[int, int] | None,
+    routes: Mapping[int, list[tuple[int, int]]] | None = None,
 ) -> None:
     """Put the panel back on the page it was showing before we started.
 
@@ -1126,12 +1200,22 @@ async def _async_restore(
     found, the panel stands on a page the search could not recognise, and
     pressing its back button is exactly what the search just did without
     getting anywhere; the panel is left where it is rather than pressed blind,
-    which is the home screen as a rule. With the root found, stepping back is
-    tried first, but never on the home screen, whose top right button opens
-    the quick menu, and never again on a page where the button did nothing.
-    From the home screen the only known way in leads to the root, so that is
-    taken only when the root is where the panel started; otherwise the home
-    screen is where it stays.
+    which is the home screen as a rule.
+
+    A page the walk reached by a recorded route, ``routes`` by page with the
+    root's own empty route among them, is put back the way the walk reached
+    it (_async_put_back): stepped back to from below, or walked down to from
+    the root, and from the home screen by the tile and the route. A walk back
+    that loses the way steps back to the home screen and leaves the panel
+    there, so a panel that started inside the menu ends where it started or
+    on the home screen, never on a page in between.
+
+    Any other page is outside the menu, or a page the walk did not reach.
+    Stepping back is tried, but never on the home screen, whose top right
+    button opens the quick menu, and never again on a page where the button
+    did nothing. From the home screen the only known way in leads to the
+    root, so that is taken only when the root is where the panel started;
+    otherwise the home screen is where it stays.
     """
     try:
         here = await client.async_current_page()
@@ -1146,6 +1230,17 @@ async def _async_restore(
             )
             return
         root, home = found
+        route = (routes or {}).get(origin)
+        if route is not None:
+            ended = await _async_put_back(client, page_map, origin, list(route), root, home)
+            if ended == ASTRAY:
+                _LOGGER.debug(
+                    "The recorded route back to page %s did not arrive, so the panel is "
+                    "left on the home screen",
+                    origin,
+                )
+                await _async_back_to(client, page_map, home, hops=_BACK_HOPS)
+            return
         if here != home:
             if await _async_back_to(client, page_map, origin, hops=6, stop_at=home):
                 return

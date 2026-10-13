@@ -17,9 +17,10 @@ the way the two models in the houses lay theirs out:
   pages one level further down behind a strip of their own. The root here is
   simplified, six controls, so that the budget reaches the heat pump's strip.
   On PT's real i550 Pro it does not: the budget runs out before Kompressor
-  VP1 (page 42, screen 138) is reached, a gap the sweep lives with until the
-  roadmap's L7 finds the way there. Nothing here imitates that root, since
-  its definition was never captured; L7's own tests are the place for it.
+  VP1 (page 42, screen 138) is reached, a gap the sweep lives with. The
+  search the owner starts from the options (page_search.py, roadmap L7)
+  finds the way there instead, and its tests in test_page_search.py build a
+  root that spends a budget the same way.
 
 Each page carries a header icon at the top left that leads out of the menu to
 the installer's settings, and the home screen's own button opens the quick
@@ -27,17 +28,15 @@ menu: the two places a press must never go. The sweep is held to what it
 promises: the pages, their routes and their readings exactly; no press under
 the heading but the panel's own button, and that never on the home screen; at
 most its budget of presses; every press worked out from the page the panel is
-showing; the panel back where it started; and, without a root, no control
-pressed at all.
-
-One promise does not hold, and the test that says so is marked xfail: a panel
-that started on a page inside the menu is not put back there but left on the
-home screen. See test_a_panel_started_inside_the_menu_is_put_back_there.
+showing; the panel back where it started, on a page inside the menu by the
+route the sweep recorded to it and no press more; and, without a root, no
+control pressed at all.
 """
 
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import inspect
 import json
 
@@ -597,30 +596,101 @@ INSIDE = [
 def test_a_panel_started_inside_the_menu_ends_on_that_page_or_at_home(
     catalogue, web_api, model, start
 ):
-    # What holds today, and will hold once the next test passes: never
-    # anywhere but where it started or the home screen.
+    # The promise that holds even where the way back is gone (see
+    # test_a_route_that_no_longer_arrives_leaves_the_panel_on_the_home_screen):
+    # never anywhere but where it started or the home screen.
     build, _root, _menu = MENUS[model]
     panel = build(start=start)
     sweep(catalogue, web_api, panel)
     assert panel.page in (start, HOME)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason=(
-        "async_discover_pages promises the panel 'is put back where it started', but "
-        "catalogue._async_restore only steps back from where the sweep ended (the root) "
-        "and never replays the route the reading recorded to the start page, so a panel "
-        "that started on a page inside the operation data menu is left on the home screen"
-    ),
-)
 @pytest.mark.parametrize(("model", "start"), INSIDE)
 def test_a_panel_started_inside_the_menu_is_put_back_there(catalogue, web_api, model, start):
     build, _root, _menu = MENUS[model]
     panel = build(start=start)
     sweep(catalogue, web_api, panel)
     assert panel.page == start
+
+
+def expected_routes(const, model: str) -> dict[int, list]:
+    """The route the sweep records to every page of a menu it reaches, readings or not."""
+    table = i255_expected(const) if model == "i255" else i550_expected(const)
+    routes = {page: route for page, _title, _screens, route, _values in table}
+    if model == "i550":
+        # The heat pump page carries the strip and no reading, so it is not
+        # offered; the sweep reaches it all the same, by the heat pump picture.
+        routes[VP] = [centre(VP_BOX)]
+    return routes
+
+
+def sweep_noting_the_restore(catalogue, web_api, panel, monkeypatch, before=None) -> list:
+    """Sweep, and return the presses the restore made; ``before`` runs as it starts."""
+    real = catalogue._async_restore
+    start: list[int] = []
+
+    async def noting(*args, **kwargs):
+        start.append(len(panel.presses))
+        if before is not None:
+            before()
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(catalogue, "_async_restore", noting)
+    run(catalogue.async_discover_pages(panel.client(web_api)))
+    (begun,) = start
+    return panel.presses[begun:]
+
+
+@pytest.mark.parametrize(("model", "start"), INSIDE)
+def test_the_panel_is_put_back_by_the_recorded_route_and_no_press_more(
+    catalogue, web_api, const, monkeypatch, model, start
+):
+    # The sweep ends on the root, and from there the route it recorded to the
+    # start page is the shortest way back it knows: every press of the
+    # restore is a step of that route, worked out from the page the panel
+    # shows, none under the heading and none on the home screen. A page
+    # without a reading of its own, the i550 Pro's heat pump page that only
+    # carries the strip, is put back the same way.
+    build, root, _menu = MENUS[model]
+    panel = build(start=start)
+    restore = sweep_noting_the_restore(catalogue, web_api, panel, monkeypatch)
+    assert panel.presses[len(panel.presses) - len(restore) - 1].landed == root
+    assert [(p.x, p.y) for p in restore] == expected_routes(const, model)[start]
+    assert all(p.aimed and p.y >= 45 and p.page != HOME for p in restore)
+    assert panel.page == start
+
+
+@pytest.mark.parametrize("model", sorted(MENUS))
+def test_a_route_that_no_longer_arrives_leaves_the_panel_on_the_home_screen(
+    catalogue, web_api, monkeypatch, model
+):
+    # The tile to the start page is drawn when the sweep passes it and gone
+    # when the restore wants it back, as the i550 Pro's root draws some tiles
+    # only in some operating states: the step that moves nothing ends the
+    # walk, and the panel is stepped back to the home screen, not left on the
+    # root or pressed on into whatever the next step would hit.
+    build, root, _menu = MENUS[model]
+    start, first = (HEAT_PUMP, I255_TABS[1]) if model == "i255" else (VP1, VP_BOX)
+    panel = build(start=start)
+
+    def hide_the_first_step():
+        for screen in panel.pages[root]:
+            panel.screens[screen] = [
+                replace(spec, visible=False) if spec == first else spec
+                for spec in panel.screens[screen]
+            ]
+
+    restore = sweep_noting_the_restore(
+        catalogue, web_api, panel, monkeypatch, before=hide_the_first_step
+    )
+    assert panel.page == HOME
+    # One press on the hidden tile's place, which moved nothing, then the
+    # panel's own button from the root to the home screen; nothing else.
+    assert [(p.page, (p.x, p.y), p.landed) for p in restore] == [
+        (root, centre(first), root),
+        (root, BACK, HOME),
+    ]
+    assert all(p.aimed for p in restore)
 
 
 # ---------------------------------------------------------- without a root
