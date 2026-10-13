@@ -13,6 +13,12 @@ aria-controls naming the note, which gets an id of its own. The row is no
 button and no tab stop; a click on it is passed on to the "i". The name has no
 hover text. Every chip has its own note, led by its name. The ring is 2 px.
 The glyph stays U+24D8, as on the NIBE card.
+
+Since the "i" is the one tab stop per value it is named after its value,
+"Förklaring: Utetemperatur" (F3.1), and the controls themselves carry their
+value's name, the list, the slider, the field and a button alike (F3.8). A
+note left open before a new setConfig on the same card opens with the first
+click again (F3.7).
 """
 
 from __future__ import annotations
@@ -97,7 +103,8 @@ def test_the_row_is_no_button_and_its_i_is_the_one_toggle():
     assert found["opened"] == {"aria": {"controls": first, "expanded": "true"}, "hidden": False}
     assert found["closed"] == {"aria": {"controls": first, "expanded": "false"}, "hidden": True}
     assert found["glyph"] == "24d8"
-    assert found["label"] == "Förklaring"
+    # The "i" is the one tab stop per value, so it says which value it is for.
+    assert found["label"] == "Förklaring: Utetemperatur"
 
 
 @pytest.mark.parametrize("name, field, items", [
@@ -199,6 +206,97 @@ def test_a_row_the_search_hides_closes_its_note_and_opens_with_one_click_when_ba
       console.log(JSON.stringify({{hidden, reopened: !note.hidden}}));
     """)
     assert found == {"hidden": {"note": True, "expanded": "false"}, "reopened": True}
+
+
+@pytest.mark.parametrize("name, field, items", [
+    ("ctc-ecozenith-chips", "items", CHIPS),
+    ("ctc-ecozenith-readings", "items", ROWS[1:]),
+    ("ctc-ecozenith-controls", "items", ROWS[1:] + [
+        {"entity": "number.dhw", "name": "Varmvattenbörvärde", "explanation": "Börvärdet."},
+    ]),
+    ("ctc-ecozenith-rows", "rows", ROWS),
+])
+def test_every_i_is_named_after_its_value(name, field, items):
+    # F3.1: since the row is no button the "i" is the only tab stop per value,
+    # and 120 of them all called "Förklaring" did not say which was which.
+    # The second "i" of a control without a value is named the same way.
+    found = _node(f"""
+      const card = page.mountCard(CARD, {json.dumps(name)},
+        {{{json.dumps(field)}: {json.dumps(items)}, explain: "Förklaring"}}, STATES);
+      const plain = page.mountCard(CARD, {json.dumps(name)}, {{{json.dumps(field)}: {json.dumps(items)}}}, STATES);
+      console.log(JSON.stringify({{
+        labels: by(card, "why").map((w) => w.getAttribute("aria-label")),
+        plain: by(plain, "why").map((w) => w.getAttribute("aria-label")),
+      }}));
+    """)
+    names = [item["name"] for item in items if "entity" in item]
+    # A control also has an "i" beside its widget, for when it has no value,
+    # named the same as the one after its name.
+    assert len(found["labels"]) >= len(names)
+    assert set(found["labels"]) == {f"Förklaring: {n}" for n in names}
+    # Without the page's word for it the "i" is an Explanation, still named.
+    assert set(found["plain"]) == {f"Explanation: {n}" for n in names}
+
+
+def test_every_control_is_named_after_its_value():
+    # F3.8: the list, the slider, the field and a button said only their
+    # value and their role, "Normal, popup button", "50, slider".
+    found = _node("""
+      const states = {
+        "select.dhw_mode": {state: "Normal", attributes: {options: ["Släpp styrningen", "Normal"]}},
+        "number.max_rps": {state: "50", attributes: {min: 0, max: 120, step: 1}},
+        "number.room": {state: "21.5", attributes: {min: 10, max: 30, step: 0.1}},
+        "button.release_all": {state: "unknown", attributes: {}},
+      };
+      const items = [
+        {entity: "select.dhw_mode", name: "Varmvattenprogram"},
+        {entity: "number.max_rps", name: "Max varvtal"},
+        {entity: "number.room", name: "Rumsbörvärde"},
+        {entity: "button.release_all", name: "Släpp all styrning"},
+        {entity: "number.unnamed", widget: "field"},
+      ];
+      states["number.unnamed"] = {state: "5", attributes: {min: 0, max: 10, step: 1}};
+      const card = page.mountCard(CARD, "ctc-ecozenith-controls", {items, press: "Tryck"}, states);
+      const label = (test) => page.all(card, test).map((e) => e.getAttribute("aria-label"));
+      console.log(JSON.stringify({
+        select: label((e) => e.tagName === "select"),
+        range: label((e) => e.tagName === "input" && e.type === "range"),
+        number: label((e) => e.tagName === "input" && e.type === "number"),
+        button: label((e) => e.tagName === "button" && !e.className),
+      }));
+    """)
+    assert found == {
+        "select": ["Varmvattenprogram"],
+        "range": ["Max varvtal"],
+        # A control without a name is named after its entity.
+        "number": ["Rumsbörvärde", "number.unnamed"],
+        "button": ["Tryck: Släpp all styrning"],
+    }
+
+
+def test_a_note_left_open_before_a_new_configuration_opens_with_the_first_click():
+    # F3.7: what is open was kept per entity and outlived setConfig, which
+    # draws the notes anew and closed, so the first click closed a note that
+    # was already closed and only the second opened it.
+    found = _node(f"""
+      const config = {{rows: {json.dumps(ROWS)}, explain: "Förklaring"}};
+      const card = page.mountCard(CARD, "ctc-ecozenith-rows", config, STATES);
+      by(card, "why")[0].fire("click");
+      const before = !by(card, "note")[0].hidden;
+      card.setConfig(config);
+      const drawn = {{open: !by(card, "note")[0].hidden, expanded: aria(by(card, "why")[0]).expanded}};
+      by(card, "why")[0].fire("click");
+      const first = {{open: !by(card, "note")[0].hidden, expanded: aria(by(card, "why")[0]).expanded}};
+      by(card, "why")[0].fire("click");
+      const second = !by(card, "note")[0].hidden;
+      console.log(JSON.stringify({{before, drawn, first, second}}));
+    """)
+    assert found == {
+        "before": True,
+        "drawn": {"open": False, "expanded": "false"},
+        "first": {"open": True, "expanded": "true"},
+        "second": False,
+    }
 
 
 def test_the_focus_ring_is_two_pixels_and_the_row_has_none_of_its_own():

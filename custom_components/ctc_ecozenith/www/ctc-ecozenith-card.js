@@ -247,13 +247,18 @@
   /** The blue "i" that opens an explanation. Every value the page shows has one:
    *  a value is only worth reading if you know what it is. It is the one
    *  toggle for its note (R41), and says so: aria-controls names the note,
-   *  which gets an id of its own here, and aria-expanded follows it. */
-  function explainButton(label, note, toggle) {
+   *  which gets an id of its own here, and aria-expanded follows it. Its
+   *  name is the word for explanation and the value's name, "Förklaring:
+   *  Utetemperatur": since the row is no button, the "i" is the one tab stop
+   *  per value, and a hundred of them all called "Förklaring" told a screen
+   *  reader user nothing about which value each one was for. */
+  function explainButton(label, note, toggle, name) {
     const why = document.createElement("button");
     why.className = "why";
     why.type = "button";
     why.textContent = "ⓘ";
-    why.setAttribute("aria-label", label || "Explanation");
+    const word = label || "Explanation";
+    why.setAttribute("aria-label", name ? `${word}: ${name}` : word);
     if (!note.id) note.id = `ctc-ecozenith-note-${++noteIds}`;
     why.setAttribute("aria-controls", note.id);
     why.setAttribute("aria-expanded", String(!note.hidden));
@@ -349,15 +354,19 @@
       name.className = "label";
       name.append(item.name || item.entity);
       if (item.explanation) {
-        name.appendChild(
-          explainButton(this._config.explain, note, () => this._toggle(item, note))
-        );
+        name.appendChild(explainButton(
+          this._config.explain, note, () => this._toggle(item, note), item.name || item.entity
+        ));
       }
       return name;
     }
 
+    /** Open the note or close it, from what the note itself shows: what is
+     *  open is kept per entity and outlives a new setConfig on the same
+     *  element, which draws its notes anew and closed, so asking that first
+     *  made the next click close a note already closed. */
     _toggle(item, note) {
-      const open = !this._open.has(item.entity);
+      const open = Boolean(note.hidden);
       if (open) this._open.add(item.entity);
       else this._open.delete(item.entity);
       this._fill(note, item, open);
@@ -899,10 +908,17 @@
         }, DEBOUNCE_MS);
       };
 
+      // What the control is for, said to a screen reader on the control
+      // itself, as the release button does: the name stands in a span of its
+      // own beside it, with the "i" and the mark Styrd in it as well, so
+      // pointing at that span would read them too.
+      const name = String(item.name || item.entity);
+
       if (domain === "button") {
         const button = document.createElement("button");
         button.type = "button";
         button.textContent = this._config.press || "Press";
+        button.setAttribute("aria-label", `${button.textContent}: ${name}`);
         button.addEventListener("click", () => send(null));
         container.appendChild(button);
         return () => {
@@ -913,6 +929,7 @@
 
       if (domain === "select") {
         const select = document.createElement("select");
+        select.setAttribute("aria-label", name);
         // Every arrow key in a closed list is a change; only the last is sent.
         // A refused write puts back what the list should show, whether or not
         // it still has the focus, as a refused slider does: the keyboard
@@ -965,7 +982,7 @@
       // set it there, and whoever dragged it wrote a value they never meant.
       // The row is marked unset instead: the style hides the knob and dims the
       // track, the reading says so, and an "i" beside it opens the row's note.
-      const why = explainButton(this._config.explain, note, () => this._toggle(item, note));
+      const why = explainButton(this._config.explain, note, () => this._toggle(item, note), name);
       why.hidden = true;
       const mark = (unset) => {
         container.dataset.unset = unset ? "1" : "0";
@@ -978,6 +995,7 @@
       if (kind === "slider") {
         const slider = document.createElement("input");
         slider.type = "range";
+        slider.setAttribute("aria-label", name);
         slider.min = attributes.min;
         slider.max = attributes.max;
         slider.step = step;
@@ -1037,6 +1055,7 @@
 
       const field = document.createElement("input");
       field.type = "number";
+      field.setAttribute("aria-label", name);
       if (attributes.min !== undefined) field.min = attributes.min;
       if (attributes.max !== undefined) field.max = attributes.max;
       field.step = attributes.step || "any";
