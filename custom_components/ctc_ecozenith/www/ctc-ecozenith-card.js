@@ -18,8 +18,9 @@
  * own dialog for the entity, which is what the NIBE page settled on. The "i" is the
  * one toggle for its note (R41): a button, with aria-expanded and aria-controls
  * pointing at the note, and no hover text on the name, which made a screen reader
- * read every explanation twice. In the list a click on the row is passed on to it.
- * Every string goes into the page as text, never as HTML.
+ * read every explanation twice. In the list a click on the row is passed on to it,
+ * and a row without an explanation, and so without an "i", opens Home Assistant's
+ * dialog instead. Every string goes into the page as text, never as HTML.
  *
  * The pure helpers at the top of the closure are what decides a write, which
  * control a number gets and what a typed field is taken to say, and what a state
