@@ -18,7 +18,10 @@ rests on, stay the integration's Swedish text under both names.
 
 ``pumpens värde`` and ``styrningar`` came with roadmap R49 and were given
 their twins from the start: the pump's own value beside a control, and what
-the sensor Aktiva överstyrningar holds.
+the sensor Aktiva överstyrningar holds. So were ``elpatron kWh`` and
+``kompressor kWh`` with roadmap R28, the two energies beside the share of
+auxiliary heat; ``underlag``, ``dygn i underlaget`` and ``skäl`` on those
+sensors are the coefficient of performance's names.
 
 Free of Home Assistant, so the names can be checked without an installation.
 """
@@ -47,6 +50,10 @@ ENGLISH: Final[dict[str, str]] = {
     "episoder": "episodes",
     "pumpens värde": "pump_value",
     "styrningar": "overrides",
+    # R28: the two energies beside the share of auxiliary heat, twinned from
+    # the start like R49's.
+    "elpatron kWh": "immersion_kwh",
+    "kompressor kWh": "compressor_kwh",
 }
 
 #: The keys inside each alarm episode, Swedish to English, for ``episodes``.

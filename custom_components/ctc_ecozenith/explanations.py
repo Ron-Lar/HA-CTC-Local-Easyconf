@@ -43,6 +43,7 @@ from .cop import (
     DAY_MIN_HOURS,
     MIN_CONSUMPTION_KWH,
     MIN_CONSUMPTION_KWH_DAY,
+    RUNNING_HOURS,
     WINDOWS,
     YEAR_MAX_DAYS,
 )
@@ -136,6 +137,40 @@ _HARVEST_MINUTES_EN = f"{DEFAULT_SLOW_INTERVAL // 60} minutes"
 _SKIPS = {1: "ett varv", 2: "två varv", 3: "tre varv"}.get(HARVEST_SKIP_LIMIT, f"{HARVEST_SKIP_LIMIT} varv")
 _SKIPS_EN = {1: "one round", 2: "two rounds", 3: "three rounds"}.get(
     HARVEST_SKIP_LIMIT, f"{HARVEST_SKIP_LIMIT} rounds"
+)
+
+#: The share of auxiliary heat (R28), in the words every span shares: what it
+#: is, what the edges mean and what it is never made of, and why the longer
+#: spans wait.
+_SHARE_WHAT = Text(
+    "Spetsvärmeandel: hur stor del av elen som gick till elpatronen, alltså elpatronens "
+    "energi (register 62191) delat med elpatronens och kompressorns energi tillsammans. "
+    "Kompressorns energi är samma räknare som värmefaktorn delar med.",
+    "Share of auxiliary heat: how much of the electricity went to the immersion heater, that "
+    "is the immersion heater's energy (register 62191) divided by the immersion heater's and "
+    "the compressor's energy together. The compressor's energy is the same counter the "
+    "coefficient of performance divides by.",
+)
+_SHARE_EDGES = Text(
+    "100 procent visas bara när kompressorns räknare har stått still medan elpatronens har "
+    "rört sig. Står kompressorns räknare på noll fast kompressorn har gått i minst "
+    f"{RUNNING_HOURS} timmar (register 62214) visas ingen andel alls, eftersom styrenheten då "
+    "inte fyller räknaren. Saknas talet säger attributet skäl (reason) varför, och elpatron "
+    "kWh och kompressor kWh (immersion_kwh och compressor_kwh) visar energin i underlaget. "
+    "Räknas aldrig ur displayens rader för 30 dagar och skickas inte med statistiken.",
+    "100 per cent is shown only when the compressor's counter has stood still while the "
+    "immersion heater's has moved. If the compressor's counter stands at zero although the "
+    f"compressor has run for at least {RUNNING_HOURS} hours (register 62214), no share is "
+    "shown at all, since the controller then does not fill the counter. Where there is no "
+    "figure, the attribute skäl (reason) says why, and elpatron kWh and kompressor kWh "
+    "(immersion_kwh and compressor_kwh) show the energy it rests on. Never worked out from "
+    "the display's 30 day rows and not sent with the statistics.",
+)
+_SHARE_SAMPLED = Text(
+    "Elpatronens räknare sparas i integrationens egna avläsningar sedan andelen kom till, så "
+    "andelen kommer när en sådan avläsning är gammal nog.",
+    "The immersion heater's counter is kept in the integration's own readings since the share "
+    "was added, so the share appears once such a reading is old enough.",
 )
 
 #: When the day's starts and defrosts begin again from nought. The watch that
@@ -777,6 +812,49 @@ DERIVED: dict[str, Text] = {
         f"supplied electricity since commissioning. Shown once at least {_COP_FLOOR_LIFETIME} kWh "
         "has been used.",
     ),
+    # R28: the immersion heater's share of the electricity, over the
+    # coefficient of performance's spans but the first year.
+    "aux_share_day": Text(
+        f"{_SHARE_WHAT} Senaste dygnet, ur två avläsningar av räknarna {_DAY_HOURS} isär. "
+        f"Visas när minst {_COP_FLOOR_DAY} kWh har förbrukats sammanlagt. {_SHARE_EDGES}",
+        f"{_SHARE_WHAT.en} The last day, from two readings of the counters {_DAY_HOURS_EN} "
+        f"apart. Shown once at least {_COP_FLOOR_DAY} kWh has been used in all. "
+        f"{_SHARE_EDGES.en}",
+    ),
+    "aux_share_week": Text(
+        f"{_SHARE_WHAT} Senaste {WINDOWS['week'][0]} dygnen, mot integrationens egen avläsning "
+        f"{_WEEK_DAYS} gammal. Visas när minst {_COP_FLOOR_DAY} kWh per dygn i underlaget har "
+        f"förbrukats sammanlagt, alltså {_COP_FLOOR_WEEK} kWh på en vecka. {_SHARE_SAMPLED} "
+        f"{_SHARE_EDGES}",
+        f"{_SHARE_WHAT.en} The last {WINDOWS['week'][0]} days, against the integration's own "
+        f"reading {_WEEK_DAYS_EN} old. Shown once at least {_COP_FLOOR_DAY} kWh per day of the "
+        f"span has been used in all, that is {_COP_FLOOR_WEEK} kWh over a week. "
+        f"{_SHARE_SAMPLED.en} {_SHARE_EDGES.en}",
+    ),
+    "aux_share_month": Text(
+        f"{_SHARE_WHAT} Senaste {WINDOWS['month'][0]} dygnen, mot integrationens egen avläsning "
+        f"{_MONTH_DAYS} gammal. Visas när minst {_COP_FLOOR_DAY} kWh per dygn i underlaget har "
+        f"förbrukats sammanlagt, alltså {_COP_FLOOR_MONTH} kWh på en månad. {_SHARE_SAMPLED} "
+        f"{_SHARE_EDGES}",
+        f"{_SHARE_WHAT.en} The last {WINDOWS['month'][0]} days, against the integration's own "
+        f"reading {_MONTH_DAYS_EN} old. Shown once at least {_COP_FLOOR_DAY} kWh per day of the "
+        f"span has been used in all, that is {_COP_FLOOR_MONTH} kWh over a month. "
+        f"{_SHARE_SAMPLED.en} {_SHARE_EDGES.en}",
+    ),
+    "aux_share_year": Text(
+        f"{_SHARE_WHAT} Ett rullande år, mot en egen avläsning {_YEAR_DAYS} gammal. Visas när "
+        f"minst {_COP_FLOOR_LIFETIME} kWh har förbrukats sammanlagt under året. {_SHARE_SAMPLED} "
+        f"{_SHARE_EDGES}",
+        f"{_SHARE_WHAT.en} A rolling year, against a reading of its own {_YEAR_DAYS_EN} old. "
+        f"Shown once at least {_COP_FLOOR_LIFETIME} kWh has been used in all over the year. "
+        f"{_SHARE_SAMPLED.en} {_SHARE_EDGES.en}",
+    ),
+    "aux_share_lifetime": Text(
+        f"{_SHARE_WHAT} Hela livslängden: räknarna som de står sedan driftstarten. Visas när "
+        f"minst {_COP_FLOOR_LIFETIME} kWh har förbrukats sammanlagt. {_SHARE_EDGES}",
+        f"{_SHARE_WHAT.en} The whole lifetime: the counters as they stand since commissioning. "
+        f"Shown once at least {_COP_FLOOR_LIFETIME} kWh has been used in all. {_SHARE_EDGES.en}",
+    ),
 }
 
 #: The integration's own account of how it reads the display.
@@ -1302,6 +1380,11 @@ _SOURCES: dict[str, Text] = {
     "made": Text("Räknas ur serienumret", "Worked out from the serial number"),
 }
 _COP_SOURCE = Text("Räknas ur energiräknarna", "Worked out from the energy counters")
+_SHARE_SOURCE = Text(
+    "Räknas ur elpatronens energi, Modbus-register 62191, och kompressorns energiräknare",
+    "Worked out from the immersion heater's energy, Modbus register 62191, and the "
+    "compressor's energy counter",
+)
 _IDENTITY_SOURCE = Text("Displayens systeminformation", "The display's system information")
 _HARVEST_SOURCE = Text(
     "Integrationens egen bokföring av displayskörden",
@@ -1365,6 +1448,8 @@ def source(
         found = _SOURCES.get(key)
     if found is None and key.startswith("cop_"):
         found = _COP_SOURCE
+    if found is None and key.startswith("aux_share_"):
+        found = _SHARE_SOURCE
     if found is None and key in IDENTITY:
         found = _IDENTITY_SOURCE
     if found is None and key in HARVEST:

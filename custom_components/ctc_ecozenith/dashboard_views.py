@@ -93,11 +93,18 @@ UNAVAILABLE = "unavailable"
 _COP_PREFIX = "cop_"
 _COP_SUB = ("underlag", "basis")
 _COP_REASON = ("skäl", "reason")
+#: The share of auxiliary heat (R28) tells its story the same way, under the
+#: same names, so it is drawn the same way. Unlike a coefficient of
+#: performance it is often a true zero, an immersion heater that did nothing,
+#: which is the answer and not hardware that is missing: the rule that leaves
+#: out a reading only ever zero passes it over.
+_SHARE_PREFIX = "aux_share_"
+_STORY_PREFIXES = (_COP_PREFIX, _SHARE_PREFIX)
 
 
 def _hidden_states(key: str) -> list[str]:
     """The states in which a value has nothing to show and its card hides it."""
-    return [UNAVAILABLE] if key.startswith(_COP_PREFIX) else list(HIDDEN_STATES)
+    return [UNAVAILABLE] if key.startswith(_STORY_PREFIXES) else list(HIDDEN_STATES)
 
 #: Where an entity this layout does not know yet, from a newer integration,
 #: says it comes from. Its explanation is TEXT's unknown_explanation.
@@ -201,6 +208,10 @@ _READINGS = (
       "tank_lower_setpoint", "set_extra_dhw", "dhw_circulation", "dhw_temp_raw")),
     ("energy", "mdi:lightning-bolt",
      ("cop_day", "cop_week", "cop_month", "cop_year", "cop_first_year", "cop_lifetime",
+      # R28: how much of the electricity went to the immersion heater, beside
+      # the coefficient of performance it is the other half of.
+      "aux_share_day", "aux_share_week", "aux_share_month", "aux_share_year",
+      "aux_share_lifetime",
       HEAT_POWER, SUPPLIED_POWER,
       ENERGY_OUT, "compressor_kwh", ENERGY_IN, "immersion_kwh",
       "immersion_upper_kw", "immersion_lower_kw",
@@ -638,7 +649,11 @@ class _Builder:
             value.get("key"): (value, page)
             for page in self.pages for value in page.get("values") or []
         }
-        self.unused = set(pump.get("unused") or [])
+        # A share of auxiliary heat at zero is an answer, never missing
+        # hardware, so it is never among the readings left out for it.
+        self.unused = {
+            key for key in pump.get("unused") or [] if not str(key).startswith(_SHARE_PREFIX)
+        }
         self.placed: set[str] = set()
         #: The language the explanations are given in: the language of the
         #: words the tab is built with, which is the page's.
@@ -711,7 +726,7 @@ class _Builder:
             item["zero_means"] = "no_limit"
         if real in _NONE_YET:
             item["unknown_means"] = _NONE_YET[real]
-        if real.startswith(_COP_PREFIX):
+        if real.startswith(_STORY_PREFIXES):
             # The figure says what it rests on and, while it has none, why: the
             # card draws the one or the other in small text under it.
             item["sub"] = list(_COP_SUB)

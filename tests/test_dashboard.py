@@ -697,6 +697,9 @@ def test_every_key_on_the_page_is_a_unique_id_the_integration_creates(dashboard_
     created |= set(re.findall(r'\("([a-z_]+)", "', identity.group(1)))
     spans = re.search(r"for span in \(([^)]*)\)", _source("sensor.py")).group(1)
     created |= {f"cop_{span}" for span in re.findall(r'"([a-z_]+)"', spans)}
+    # The share of auxiliary heat over its spans (R28), built beside them.
+    assert 'unique_id(runtime.device, f"aux_share_{span}")' in _source("sensor.py")
+    created |= {f"aux_share_{span}" for span in load("cop").SHARE_SPANS}
     # Entities with a key of their own, spelled out in the unique id: the
     # button, the sensor that accounts for the display harvest, and the events.
     for name in ("button.py", "sensor.py", "event.py"):

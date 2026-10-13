@@ -107,6 +107,30 @@ quotient that cannot be right. The sensor stays available and empty rather than
 going unavailable, because an unavailable entity shows no attributes and the
 reason is the point.
 
+**The share of auxiliary heat, *Spetsvärmeandel*, over the same spans but the
+first year.** How much of the electricity went to the immersion heater: its
+counter, Modbus register 62191, against the sum of it and the compressor's
+counter, the same consumed energy the coefficient of performance divides by,
+in per cent. The integration keeps the immersion heater's counter in its own
+samples since the share came in, so the lifetime share is there at once, the
+day's after a day, and the week's, the month's and the rolling year's when a
+sample with the counter is that old; samples from before have no immersion
+heater and are passed over. The floors are the coefficient of performance's,
+on the two energies together. A hundred per cent only when the compressor's
+counter stood still while the immersion heater's moved, as on an i550 Pro whose
+compressor counter has never counted, and an immersion heater that has used 1
+of 9358 kWh reads 0.0, with the kilowatt hours beside it as *immersion_kwh* and
+*compressor_kwh*. Without a figure it says why under *reason*: too little
+energy, both counters standing still, a counter that went backwards, samples
+from before the counter was kept, a register that has not answered, or a
+compressor counter at zero although the compressor has run for a day (Modbus
+62214), a controller that does not fill it, in which case no share is given
+at all. It is never read off the display's "/30 dagar" rows and is not sent
+with the statistics. A system coefficient of performance with the immersion
+heater counted in is not offered: where the immersion heater is a rounding
+error it is the same figure, and where the compressor counter stands still it
+is 1.0 by definition.
+
 **Starts, run length and the mean run.** The status register says what the heat
 pump is doing every half minute, and the integration watches it from one round
 to the next: when the compressor last started, how many times it has started
@@ -793,7 +817,8 @@ control registers, and the first writes nothing at all.
   `recorded`, whether this call kept a new sample. A sample is the counters as
   they were last read, never the clock, so a reading that is already a sample
   is not taken twice and a counter page that has not been reached lately gives
-  none.
+  none. The sample also keeps the immersion heater's counter as it stood at
+  that moment, for the share of auxiliary heat, where it was read then.
 
   ```yaml
   action: ctc_ecozenith.cop_sample
@@ -811,12 +836,14 @@ managers that read them should move to the English names now.
 
 | Swedish name, until the next major version | English name | On |
 |---|---|---|
-| `skäl` | `reason` | the coefficient of performance sensors |
-| `underlag` | `basis` | the coefficient of performance sensors |
-| `dygn i underlaget` | `days_in_basis` | the coefficient of performance sensors |
+| `skäl` | `reason` | the coefficient of performance and auxiliary heat share sensors |
+| `underlag` | `basis` | the coefficient of performance and auxiliary heat share sensors |
+| `dygn i underlaget` | `days_in_basis` | the coefficient of performance and auxiliary heat share sensors |
 | `avgiven värme kWh` | `heat_out_kwh` | the coefficient of performance sensors |
 | `tillförd energi kWh` | `energy_in_kwh` | the coefficient of performance sensors |
 | `tillförd energi ur`, `displayen` or `Modbus 62341` | `energy_in_from`, the same text | the coefficient of performance sensors |
+| `elpatron kWh` | `immersion_kwh` | the auxiliary heat share sensors |
+| `kompressor kWh` | `compressor_kwh` | the auxiliary heat share sensors |
 | `kod` | `code` | a status sensor answering a code it has no label for, and *Last alarm* |
 | `källa` | `source` | every display row |
 | `sida` | `page` | every display row |
