@@ -801,6 +801,8 @@ class CtcShareSensor(CoordinatorEntity, SensorEntity):
     # month of it can be drawn.
     _attr_state_class = SensorStateClass.MEASUREMENT
 
+    #: The Swedish name of each span, which translations/sv.json carries word
+    #: for word under the translation key aux_share_<span>.
     NAMES = {
         "day": "Spetsvärmeandel, dygn",
         "week": "Spetsvärmeandel, vecka",
@@ -814,7 +816,7 @@ class CtcShareSensor(CoordinatorEntity, SensorEntity):
         self._runtime = runtime
         self._span = span
         self._attr_unique_id = unique_id(runtime.device, f"aux_share_{span}")
-        self._attr_name = self.NAMES[span]
+        self._attr_translation_key = f"aux_share_{span}"
         self._attr_device_info = runtime.device
 
     @property

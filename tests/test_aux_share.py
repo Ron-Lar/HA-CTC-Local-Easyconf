@@ -440,7 +440,10 @@ def test_a_share_sensor_per_span_wherever_there_is_a_coefficient_of_performance(
     assert tuple(shares) == cop.SHARE_SPANS == ("day", "week", "month", "year", "lifetime")
     for span, entity in shares.items():
         assert entity._attr_unique_id == f"ctc_ecozenith_pump_aux_share_{span}"
-        assert entity._attr_name.startswith("Spetsvärmeandel")
+        # Named by its translation (R23): sv.json carries NAMES word for word.
+        assert entity._attr_translation_key == f"aux_share_{span}"
+        assert "_attr_name" not in vars(entity)
+        assert sensor.CtcShareSensor.NAMES[span].startswith("Spetsvärmeandel")
         assert entity._attr_native_unit_of_measurement == "%"
         assert entity._attr_suggested_display_precision == 1
         assert entity._attr_state_class == sensor.SensorStateClass.MEASUREMENT

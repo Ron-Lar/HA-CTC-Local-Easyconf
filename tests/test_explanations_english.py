@@ -32,7 +32,10 @@ def _composed(explanations) -> dict[str, object]:
     for table in ("MODBUS", "CONTROL", "DERIVED", "IDENTITY", "HARVEST"):
         texts.update({f"{table}:{key}": text for key, text in getattr(explanations, table).items()})
     texts.update({f"DISPLAY:{prefix}": text for prefix, text in explanations._DISPLAY})
-    for part in ("_UNNAMED", "_GENERIC", "_COUNT_RESETS", "_VOLATILE", "_PUMP_VALUE"):
+    for part in (
+        "_UNNAMED", "_GENERIC", "_COUNT_RESETS", "_VOLATILE", "_PUMP_VALUE",
+        "_SHARE_WHAT", "_SHARE_EDGES", "_SHARE_SAMPLED",
+    ):
         texts[part] = getattr(explanations, part)
     return texts
 
@@ -196,6 +199,40 @@ def test_the_floors_and_ages_in_english_are_the_code_s(cop, const, explanations)
     assert _pair(r"(\d+) to (\d+) days old", en("cop_year")) == (
         const.COP_WINDOW_DAYS, cop.YEAR_MAX_DAYS,
     )
+
+
+def test_the_share_s_floors_and_ages_in_english_are_the_code_s(cop, const, explanations):
+    # The share of auxiliary heat (R28) waits on the coefficient of
+    # performance's floors and ages, and says so in English as in Swedish.
+    def en(key):
+        return explanations.explain(key, "en")
+
+    for span in cop.SHARE_SPANS:
+        text = en(f"aux_share_{span}")
+        assert text.startswith(explanations._SHARE_WHAT.en), span
+        assert text.endswith(explanations._SHARE_EDGES.en), span
+        assert (explanations._SHARE_SAMPLED.en in text) == (span in ("week", "month", "year"))
+        assert _one(r"at least (\d+) hours \(register 62214\)", text) == cop.RUNNING_HOURS
+    assert _one(r"at least (\d+) kWh has been used", en("aux_share_day")) == (
+        cop.MIN_CONSUMPTION_KWH_DAY
+    )
+    assert _pair(r"(\d+) to (\d+) hours apart", en("aux_share_day")) == (
+        cop.DAY_MIN_HOURS, cop.DAY_MAX_HOURS,
+    )
+    for span, total in (("week", "a week"), ("month", "a month")):
+        days, tolerance = cop.WINDOWS[span]
+        text = en(f"aux_share_{span}")
+        assert _one(r"The last (\d+) days", text) == days, span
+        assert _pair(r"reading (\d+) to (\d+) days old", text) == (days, days + tolerance), span
+        assert _one(r"at least (\d+) kWh per day", text) == cop.MIN_CONSUMPTION_KWH_DAY, span
+        assert _one(rf"that is (\d+) kWh over {total}", text) == days * cop.MIN_CONSUMPTION_KWH_DAY
+    assert _pair(r"(\d+) to (\d+) days old", en("aux_share_year")) == (
+        const.COP_WINDOW_DAYS, cop.YEAR_MAX_DAYS,
+    )
+    for span in ("year", "lifetime"):
+        assert _one(r"at least (\d+) kWh has been used", en(f"aux_share_{span}")) == (
+            cop.MIN_CONSUMPTION_KWH
+        ), span
 
 
 def test_the_intervals_and_counts_in_english_are_the_code_s(const, explanations):
