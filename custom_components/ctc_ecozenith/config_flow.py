@@ -14,9 +14,9 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_HOST
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
@@ -158,7 +158,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Ask how the unit is to be found, before anything goes on the network.
 
         Searching asks every address of Home Assistant's own private networks
@@ -176,7 +176,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_scan(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Sweep the network, then let the user pick or type an address.
 
         An address that already has an entry is left out of the list: picking
@@ -268,7 +268,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self,
         user_input: dict[str, Any] | None = None,
         errors: dict[str, str] | None = None,
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Ask for the address by hand: chosen, picked from the list, or after an empty sweep."""
         if user_input is not None:
             return await self._async_address_given(user_input, STEP_MANUAL)
@@ -276,7 +276,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_modbus_failed(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """The display answered and Modbus did not: what to do at the panel, and the form again.
 
         The most common first-time failure. It used to land on the address form,
@@ -288,7 +288,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self._async_address_given(user_input, STEP_MODBUS_FAILED)
         return self._address_form(STEP_MODBUS_FAILED, None)
 
-    def _address_form(self, step_id: str, errors: dict[str, str] | None) -> FlowResult:
+    def _address_form(self, step_id: str, errors: dict[str, str] | None) -> ConfigFlowResult:
         """The address and its ports, filled in with what is known so far."""
         schema = vol.Schema(
             {
@@ -307,7 +307,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _async_address_given(
         self, user_input: dict[str, Any], step_id: str
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Check a typed address: the display first, then Modbus in async_step_connect.
 
         A display that does not answer at all no longer stops the set-up. Web
@@ -344,7 +344,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_connect(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Check that Modbus answers before going any further."""
         assert self._host is not None
         # An entry that has moved here keeps the unique_id of the address it
@@ -375,7 +375,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self._create_without_display()
         return await self.async_step_slow()
 
-    async def _async_modbus_failed(self) -> FlowResult:
+    async def _async_modbus_failed(self) -> ConfigFlowResult:
         """Name what kept Modbus away, and show the step that fits (roadmap L12).
 
         pymodbus says the same thing whether the port refused, another client
@@ -423,7 +423,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_modbus_busy(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Another client holds the controller's one Modbus place: say so, and try again.
 
         The address is right, since something accepted the connection there,
@@ -435,7 +435,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_connect()
         return self._busy_form(None)
 
-    def _busy_form(self, errors: dict[str, str] | None) -> FlowResult:
+    def _busy_form(self, errors: dict[str, str] | None) -> ConfigFlowResult:
         return self.async_show_form(
             step_id=STEP_MODBUS_BUSY,
             errors=dict(errors or {}),
@@ -469,7 +469,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data[CONF_SETTINGS_STEM] = settings_stem(self._settings_name)
         return data
 
-    def _create_without_display(self) -> FlowResult:
+    def _create_without_display(self) -> ConfigFlowResult:
         """The entry for a heat pump on Modbus alone (roadmap R11).
 
         No pages and no menu, and the model "EcoZenith", since the display that
@@ -496,7 +496,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_slow(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Offer the display's own pages as tick boxes."""
         assert self._host is not None
 
@@ -577,7 +577,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     # -------------------------------------------------------------- discovery
 
-    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult:
+    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> ConfigFlowResult:
         """Offer setup when a device with CTC's MAC prefix appears.
 
         A unit that is already set up is recognised by the MAC its display
@@ -696,7 +696,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Ask before adopting a unit that turned up by itself.
 
         Setting the entry up walks the panel through its menus, so a discovered
@@ -800,7 +800,7 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         if user_input is not None:
             options = self._entry.options
             menu = pages_from_storage(options.get(CONF_MENU))
@@ -906,7 +906,7 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
 
     async def _async_save(
         self, changes: dict[str, Any], data: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Write the options, which reloads the entry.
 
         Switching the statistics off erases what has already been sent, rather
@@ -971,7 +971,7 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_rescan(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Walk the display's menu again and re-offer the tick boxes.
 
         A reading that gave nothing leaves the stored menu as it is: the tick

@@ -7,6 +7,8 @@ Tested against a CTC EcoZenith i255 driving an EcoAir 720M, and a CTC EcoZenith
 i550 Pro. It should also fit an i250, i350, i360, i555 Pro and EcoLogic, since
 they share CTC's BMS register map.
 
+It needs Home Assistant 2026.5 or later.
+
 ## What it reads
 
 The integration uses two transports at once, because neither alone gives the
