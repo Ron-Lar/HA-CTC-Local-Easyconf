@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timedelta
 
 import pytest
 
@@ -110,7 +111,79 @@ def test_release_and_clear_forget_the_moments_too(keepalive):
     assert keepalive.valid_until(1007) is None
 
 
+def test_a_release_is_counted_whether_or_not_the_address_was_held(keepalive):
+    """F1.2: the write that would put it in force may be on its way."""
+    assert keepalive.releases(1010) == 0
+    assert keepalive.release(1010) is False
+    assert keepalive.releases(1010) == 1
+    keepalive.written(1010, 215, now=0.0)
+    assert keepalive.release(1010) is True
+    assert keepalive.releases(1010) == 2
+    assert keepalive.releases(1007) == 0, "each address has its own"
+
+
+def test_letting_go_of_everything_moves_the_epoch_even_with_nothing_held(keepalive):
+    assert keepalive.epoch == 0
+    keepalive.clear()
+    assert keepalive.epoch == 1
+    keepalive.written(1010, 215, now=0.0)
+    keepalive.clear()
+    assert keepalive.epoch == 2
+    assert keepalive.releases(1010) == 0, "the epoch says it, not the count per address"
+
+
+def test_giving_up_a_forgotten_address_is_no_release(keepalive):
+    """Nobody let go of it, so a newer value on its way is still wanted."""
+    keepalive.written(1010, 215, now=0.0)
+    assert keepalive.failed(1010, now=EXPIRY) is True
+    keepalive.written(1007, 2, now=0.0)
+    assert keepalive.expire(1007, now=EXPIRY) is True
+    assert keepalive.releases(1010) == 0 and keepalive.releases(1007) == 0
+    assert keepalive.epoch == 0
+
+
+def test_the_check_at_the_expiry_gives_up_only_what_the_unit_has_forgotten(keepalive):
+    """F2.2: the same rule as a miss, at the moment itself, and not counted as one."""
+    keepalive.written(1010, 215, now=40.0)
+    assert keepalive.expire(1010, now=40.0 + EXPIRY - 1) is False
+    assert keepalive.active == {1010: 215}
+    assert keepalive.failures(1010) == 0, "a check is no miss"
+    assert keepalive.expire(1010, now=40.0 + EXPIRY) is True
+    assert keepalive.active == {}
+    assert keepalive.written_at(1010) is None
+    assert keepalive.expire(1010, now=1000.0) is False, "nothing left to give up"
+
+
 # ------------------------------------------------- the manager around it
+
+#: Every (action, moment) the manager asked to have run once, the check at an
+#: override's expiry (F2.2), as ha_stub.tracked holds the keepalive's interval.
+expiries: list[tuple] = []
+
+
+def record_expiries(monkeypatch) -> None:
+    """Have the check at an override's expiry recorded in ``expiries`` instead of started.
+
+    The manager imports ``async_track_point_in_time`` from the event helper
+    when it arms the check, so patching the module attribute serves the
+    stand-in, which has none, and a real core, whose timer would want
+    ``hass.loop``. Call after ha_stub.record_timers, which installs the
+    stand-in. The record starts empty.
+    """
+    import homeassistant.helpers.event as event
+
+    def track(hass, action, moment):
+        entry = (action, moment)
+        expiries.append(entry)
+
+        def _unsub() -> None:
+            if entry in expiries:
+                expiries.remove(entry)
+
+        return _unsub
+
+    monkeypatch.setattr(event, "async_track_point_in_time", track, raising=False)
+    expiries.clear()
 
 
 class FakeClient:
@@ -138,6 +211,7 @@ class Clock:
 @pytest.fixture()
 def manager(modbus_api, monkeypatch):
     ha_stub.record_timers(monkeypatch)
+    record_expiries(monkeypatch)
     coordinator = load("coordinator")
     client = FakeClient(modbus_api.CtcModbusError)
     clock = Clock()
@@ -244,6 +318,119 @@ def test_releasing_the_last_register_stops_the_timer(manager):
     run(manager.async_set(1002, 450))
     run(manager.async_set(1002, None))
     assert ha_stub.tracked == []
+
+
+# ------------------------------------------- the check at the expiry (F2.2)
+
+
+def _expire(manager):
+    """The check at the expiry, as Home Assistant would call it at its moment: once."""
+    assert len(expiries) == 1, "one check should be armed"
+    action, moment = expiries.pop()
+    action(moment)
+
+
+def test_a_write_between_two_ticks_is_given_up_at_its_expiry_not_at_the_next_tick(manager, caplog):
+    """The keepalive's minute is set by the first set; a later set is out of step with it.
+
+    The value is set again 40 s after the timer began, the line goes 5 s
+    later, and the ticks miss on the minute. At the fifth the last write that
+    reached the unit is 260 s old, so the tick keeps it; the check armed at
+    the first miss gives it up at ok_at plus 300 s, 20 s before the sixth.
+    """
+    heard: list[int] = []
+    manager.async_add_listener(lambda: heard.append(1))
+    start = manager.clock.now
+    run(manager.async_set(1010, 215))
+    manager.clock.now = start + 40
+    run(manager.async_set(1010, 205))
+    ok_at = manager.written_at(1010)
+    manager.client.failing = True
+    with caplog.at_level(logging.DEBUG):
+        for minute in range(1, 6):
+            manager.clock.now = start + 60 * minute
+            _refresh(manager)
+            assert manager.active == {1010: 205}, minute
+        # Armed once, at the first miss, for the moment the unit lets go: a
+        # microsecond past it, so the rounding to microseconds never fires it
+        # before the manager's clock has reached it.
+        (_action, moment) = expiries[0]
+        assert moment - manager.valid_until(1010) == timedelta(microseconds=1)
+        assert moment - ok_at == timedelta(seconds=EXPIRY, microseconds=1)
+        caplog.clear()
+        manager.clock.now = moment.timestamp()
+        _expire(manager)
+    assert manager.active == {}
+    assert manager.written_at(1010) is None
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1 and "released" in warnings[0].message
+    assert ha_stub.tracked == [], "nothing left to keep alive, so the timer stops"
+    assert expiries == []
+    assert len(heard) == 3, "told at the two sets and at the release, not per miss"
+
+
+def test_the_check_leaves_an_override_that_a_write_reached_since(manager):
+    run(manager.async_set(1010, 215))
+    manager.client.failing = True
+    manager.clock.now += 60
+    _refresh(manager)
+    (action, moment) = expiries[0]
+    manager.client.failing = False
+    manager.clock.now += 60
+    _refresh(manager)
+    assert expiries == [], "a write that reached the unit disarms it"
+    # Even if it fired all the same, it finds the newer write and leaves it.
+    manager.clock.now = moment.timestamp()
+    action(moment)
+    assert manager.active == {1010: 215}
+
+
+def test_a_release_release_all_and_the_entry_going_disarm_the_check(manager):
+    def armed():
+        run(manager.async_set(1010, 215))
+        manager.client.failing = True
+        manager.clock.now += 60
+        _refresh(manager)
+        manager.client.failing = False
+        assert len(expiries) == 1
+
+    armed()
+    run(manager.async_set(1010, None))
+    assert expiries == []
+    armed()
+    manager.async_release_all()
+    assert expiries == []
+    armed()
+    run(manager.async_stop())
+    assert expiries == []
+
+
+def test_a_first_miss_in_a_set_arms_the_check_too(manager, modbus_api):
+    run(manager.async_set(1010, 215))
+    manager.client.failing = True
+    manager.clock.now += 30
+    with pytest.raises(modbus_api.CtcModbusError):
+        run(manager.async_set(1010, 205))
+    (_action, moment) = expiries[0]
+    assert moment - manager.valid_until(1010) == timedelta(microseconds=1)
+    manager.clock.now = moment.timestamp()
+    _expire(manager)
+    assert manager.active == {}
+
+
+def test_a_check_that_comes_a_moment_early_by_the_managers_clock_gives_up_nothing(manager):
+    """The next miss gives the address up then, as before the check."""
+    run(manager.async_set(1010, 215))
+    manager.client.failing = True
+    manager.clock.now += 60
+    _refresh(manager)
+    (_action, moment) = expiries[0]
+    manager.clock.now = moment.timestamp() - 1
+    _expire(manager)
+    assert manager.active == {1010: 215}
+    manager.clock.now = moment.timestamp() + 59
+    _refresh(manager)
+    assert manager.active == {}
 
 
 # ------------------------------------------------- what the entities show

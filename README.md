@@ -557,7 +557,8 @@ released override is not taken up again by itself when the unit answers again:
 the entity then shows the unit's own setting with *control_active: false*, and
 whoever set the override, a person or an energy manager, sets it anew. An
 energy manager that reads the entity should treat that combination as a lost
-command rather than as somebody's manual change.
+command rather than as somebody's manual change. The release comes at
+*valid_until* itself, not at the keepalive's next minute.
 
 Every control says whether it is held, in *control_active*, and a control
 with a stored setting beside it also carries the pump's own value, in

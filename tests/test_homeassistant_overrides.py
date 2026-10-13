@@ -17,15 +17,20 @@ pytest-homeassistant-custom-component installed:
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
+from homeassistant.util import dt as dt_util  # noqa: E402
+from pytest_homeassistant_custom_component.common import async_fire_time_changed  # noqa: E402
 from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
     READINGS,
     FakeModbus,
     _advance,
     _entity_id,
+    _let_the_background_run,
     _needs_auto_asyncio_mode,
     _set_up,
     stubs,
@@ -100,6 +105,45 @@ async def test_an_override_the_pump_has_forgotten_leaves_the_count(hass):
     state = hass.states.get(sensor)
     assert state.state == "0", "räknaren står inte kvar på ett glömt värde"
     assert state.attributes["overrides"] == []
+
+
+async def test_an_override_set_between_two_ticks_is_given_up_at_its_expiry(hass, freezer):
+    """F2.2: the release comes at ok_at plus five minutes, not at the next keepalive minute.
+
+    The first set starts the keepalive's minute; the EMS sets a new value
+    40 s into it, and the line goes 5 s later. The tick at five minutes finds
+    the last write 260 s old and keeps it; the next tick is 20 s after the
+    pump has let go. The check armed at the first miss releases it on time,
+    and the count and control_active follow at once.
+    """
+    entry = await _set_up(hass)
+    (client,) = FakeModbus.instances
+    entry.runtime_data.control._clock = lambda: dt_util.utcnow().timestamp()
+    sensor = _entity_id(hass, "sensor", "active_overrides")
+    room = _entity_id(hass, "number", "ctl_room_setpoint_1")
+
+    async def tick(seconds: float) -> None:
+        freezer.tick(timedelta(seconds=seconds))
+        async_fire_time_changed(hass)
+        await _let_the_background_run(hass)
+
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5}, blocking=True)
+    await tick(40)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 20.5}, blocking=True)
+    ok_at = dt_util.utcnow()
+    await tick(5)
+    client.answers = False
+    await tick(15)  # the keepalive's first miss, a minute after the first set
+    for _minute in range(4):
+        await tick(60)
+    assert dt_util.utcnow() - ok_at == timedelta(seconds=260)
+    assert hass.states.get(sensor).state == "1", "the tick at five minutes keeps it"
+    await tick(39)
+    assert hass.states.get(sensor).state == "1"
+    assert entry.runtime_data.control.active == {1010: 205}
+    await tick(1.001)  # ok_at plus 300 s, and the next tick is 20 s away
+    assert hass.states.get(sensor).state == "0", "släppt när pumpen har glömt, inte vid nästa minut"
+    assert entry.runtime_data.control.active == {}
 
 
 async def test_the_hot_water_mode_shows_the_pumps_program_and_holds_it_when_chosen(hass):

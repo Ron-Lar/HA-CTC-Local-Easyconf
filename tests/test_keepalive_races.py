@@ -6,6 +6,10 @@ released, a newer value from the EMS, or the entry being unloaded. The refresh
 used to record its write out of a copy taken before the wait, which put a
 released address back in force without a timer, wrote an older value over a
 newer one, and after an unload wrote on behalf of an entry that was gone.
+A set had the same gap at the first write of an address and while it waited
+for its turn behind a refresh, which a release could not reach (F1.2 of the
+phase 4 review), and the check at an override's expiry must leave a write on
+its way alone (F2.2 of the same review).
 These drive the real CtcControlManager over a client whose writes can be held
 open, and over the real CtcModbusClient against the pymodbus stand-in for the
 unload itself.
@@ -22,6 +26,7 @@ import pytest
 import ha_stub
 from conftest import load
 from fake_pymodbus import FakeClient, FakeLibrary
+from test_keepalive import expiries, record_expiries
 
 EXPIRY = 300.0
 _HOSTS = itertools.count(1)
@@ -70,6 +75,7 @@ def coordinator():
 @pytest.fixture()
 def manager(coordinator, modbus_api, monkeypatch):
     ha_stub.record_timers(monkeypatch)
+    record_expiries(monkeypatch)
     client = HeldClient(modbus_api.CtcModbusError)
     clock = Clock()
     manager = coordinator.CtcControlManager(hass=object(), client=client, clock=clock)
@@ -104,7 +110,8 @@ def test_the_generation_moves_on_at_every_write_and_release():
     keepalive.release(1010)
     assert keepalive.generation(1010) == 3
     keepalive.release(1010)
-    assert keepalive.generation(1010) == 3, "releasing what is not in force changes nothing"
+    assert keepalive.generation(1010) == 3, "the state did not change, so neither did the generation"
+    assert keepalive.releases(1010) == 2, "but the release is counted, held or not (F1.2)"
     keepalive.written(1010, 215, now=120.0)
     keepalive.written(1005, 1, now=120.0)
     keepalive.clear()
@@ -190,6 +197,151 @@ def test_a_release_of_another_address_during_a_set_does_not_lose_the_set(manager
     run(scenario())
     assert manager.active == {1010: 215}
     assert len(ha_stub.tracked) == 1
+
+
+# ------------------------------------- a release under a first write (F1.2)
+
+
+def test_a_release_during_the_first_write_of_an_address_wins(manager):
+    """The action release while a set of an address not held yet is on its way.
+
+    The generation moved only for an address in force, so the write recorded
+    its value after the release had been told it was done, the timer started
+    and Home Assistant wrote the register every minute until somebody let go
+    of it again. The release is counted whether or not the address was held.
+    """
+    heard: list[int] = []
+    manager.async_add_listener(lambda: heard.append(1))
+
+    async def scenario():
+        gate = manager.client.hold(1010)
+        setting = asyncio.ensure_future(manager.async_set(1010, 215))
+        await _settled()
+        await manager.async_set(1010, None)
+        assert manager.active == {}
+        gate.set()
+        await setting
+
+    run(scenario())
+    assert manager.active == {}, "the release stands"
+    assert ha_stub.tracked == [], "and no timer was started for it"
+    assert manager.client.writes == [(1010, 215)], "the write itself did go out"
+    assert len(heard) == 1, "told at the release, not again by the late write"
+
+
+def test_release_all_during_the_first_write_of_an_address_wins(manager):
+    async def scenario():
+        gate = manager.client.hold(1010)
+        setting = asyncio.ensure_future(manager.async_set(1010, 215))
+        await _settled()
+        manager.async_release_all()
+        gate.set()
+        await setting
+
+    run(scenario())
+    assert manager.active == {}
+    assert ha_stub.tracked == []
+
+
+def test_a_release_while_a_set_waits_behind_a_refresh_wins(manager):
+    """The release button on a number's row while the EMS's set queues behind the keepalive.
+
+    The set used to read the generation only once it had the lock, after the
+    release, so it recorded 1010 again as if nobody had let go of it.
+    """
+
+    async def scenario():
+        await manager.async_set(1010, 215)
+        await manager.async_set(1007, 2)
+        gate = manager.client.hold(1010)
+        refresh = asyncio.ensure_future(_refresh(manager))
+        await _settled()
+        setting = asyncio.ensure_future(manager.async_set(1010, 225))
+        await _settled()
+        await manager.async_set(1010, None)
+        gate.set()
+        await refresh
+        await setting
+
+    run(scenario())
+    assert manager.active == {1007: 2}, "1010 stays released"
+    assert (1010, 225) in manager.client.writes, "the set's write did go out, after the refresh's"
+    assert len(ha_stub.tracked) == 1, "the timer keeps running for 1007"
+
+
+def test_a_set_after_a_release_is_recorded(manager):
+    """Only a release that comes after the set began wins over it."""
+
+    async def scenario():
+        await manager.async_set(1010, None)
+        manager.async_release_all()
+        await manager.async_set(1010, 215)
+
+    run(scenario())
+    assert manager.active == {1010: 215}
+
+
+def test_two_sets_in_a_row_behind_a_refresh_both_count(manager):
+    """The refresh's write moves the generation, which is why a set does not read it early."""
+
+    async def scenario():
+        await manager.async_set(1010, 225)
+        gate = manager.client.hold(1010)
+        refresh = asyncio.ensure_future(_refresh(manager))
+        await _settled()
+        first = asyncio.ensure_future(manager.async_set(1010, 215))
+        second = asyncio.ensure_future(manager.async_set(1010, 205))
+        await _settled()
+        gate.set()
+        await refresh
+        await first
+        await second
+
+    run(scenario())
+    assert manager.client.writes == [(1010, 225), (1010, 225), (1010, 215), (1010, 205)]
+    assert manager.active == {1010: 205}
+
+
+# ------------------------------------------- the check at the expiry (F2.2)
+
+
+def test_the_check_at_the_expiry_lets_a_write_on_its_way_decide(manager, modbus_api):
+    """A set of a newer value that is on its way when the old one expires.
+
+    The check leaves the address to the write: one that reaches the unit is
+    the newer value in force, not a write overtaken by a release, and one that
+    fails gives the old value up, since its time has passed.
+    """
+
+    async def scenario(succeeds: bool):
+        await manager.async_set(1010, 215)
+        manager.client.failing = True
+        manager.clock.now += 60
+        await _refresh(manager)
+        # Fired, as Home Assistant fires it: once, and then it is gone.
+        (action, moment) = expiries.pop()
+        manager.client.failing = not succeeds
+        gate = manager.client.hold(1010)
+        setting = asyncio.ensure_future(manager.async_set(1010, 205))
+        await _settled()
+        manager.clock.now = moment.timestamp()
+        action(moment)
+        assert manager.active == {1010: 215}, "left to the write on its way"
+        gate.set()
+        if succeeds:
+            await setting
+        else:
+            with pytest.raises(modbus_api.CtcModbusError):
+                await setting
+        manager.client.gates.clear()
+
+    run(scenario(succeeds=True))
+    assert manager.active == {1010: 205}
+    assert len(ha_stub.tracked) == 1
+    manager.async_release_all()
+    run(scenario(succeeds=False))
+    assert manager.active == {}
+    assert ha_stub.tracked == []
 
 
 # ------------------------------------------------- a newer value under a refresh
@@ -366,6 +518,7 @@ def test_an_unload_in_the_middle_of_a_refresh_with_two_addresses_leaves_one_clos
     library = FakeLibrary(client_class=GatedLibraryClient).install(monkeypatch)
     host = f"unload-{next(_HOSTS)}.test"
     ha_stub.record_timers(monkeypatch)
+    record_expiries(monkeypatch)
     client = modbus_api.CtcModbusClient(host)
     manager = coordinator.CtcControlManager(hass=object(), client=client, clock=Clock())
 
@@ -401,6 +554,9 @@ def test_a_shutdown_alone_still_stops_a_refresh_from_building_a_second_client(
     library = FakeLibrary(client_class=GatedLibraryClient).install(monkeypatch)
     host = f"unload-{next(_HOSTS)}.test"
     ha_stub.record_timers(monkeypatch)
+    # The shut-down client fails the second address, the first miss of a run,
+    # which arms the check at its expiry (F2.2).
+    record_expiries(monkeypatch)
     client = modbus_api.CtcModbusClient(host)
     manager = coordinator.CtcControlManager(hass=object(), client=client, clock=Clock())
 

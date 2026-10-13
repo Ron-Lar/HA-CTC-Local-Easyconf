@@ -11,7 +11,13 @@ not a count of misses, because the controller counts time.
 A write takes time, and the state can change while it is on its way: a release
 or a newer value. Each address therefore carries a generation that every
 change moves on, so whoever waited on a write can tell whether what it is
-about to record is still the state it set out from.
+about to record is still the state it set out from. A release is also counted
+on its own, per address and whether or not the address was held, and letting
+go of everything moves an epoch: a set reads both before it even waits for its
+turn to write, so a release that comes while it waits, or while its write is
+the one that would have put the address in force, is not overruled by it.
+Giving up an address the unit has forgotten is no release in that sense, since
+nobody let go of it, and a newer value on its way is still wanted.
 
 Free of Home Assistant, like patience.py, so the rule can be tested on its own.
 The clock is handed in as seconds and never read here.
@@ -29,6 +35,8 @@ class Keepalive:
         self._ok_at: dict[int, float] = {}
         self._failures: dict[int, int] = {}
         self._generation: dict[int, int] = {}
+        self._releases: dict[int, int] = {}
+        self._epoch = 0
 
     @property
     def active(self) -> dict[int, int]:
@@ -55,7 +63,7 @@ class Keepalive:
         return self._failures.get(address, 0)
 
     def generation(self, address: int) -> int:
-        """A number that moves on whenever this address is written or released.
+        """A number that moves on whenever this address is written or stops being in force.
 
         Read it before a write goes out and again when the write is done: if
         it changed in between, somebody released or re-set the address while
@@ -63,6 +71,19 @@ class Keepalive:
         overrule, not the other way round.
         """
         return self._generation.get(address, 0)
+
+    def releases(self, address: int) -> int:
+        """How many times this address has been let go of, whether it was held or not.
+
+        Unlike the generation, a release of an address that is not in force
+        counts too: the write that would put it in force may be on its way.
+        """
+        return self._releases.get(address, 0)
+
+    @property
+    def epoch(self) -> int:
+        """A number that moves on whenever everything is let go of at once."""
+        return self._epoch
 
     def _moved(self, address: int) -> None:
         self._generation[address] = self._generation.get(address, 0) + 1
@@ -89,14 +110,31 @@ class Keepalive:
         if address not in self._values:
             return False
         self._failures[address] = self._failures.get(address, 0) + 1
+        return self.expire(address, now)
+
+    def expire(self, address: int, now: float) -> bool:
+        """Give the address up if the unit has forgotten it by now. True when it was.
+
+        What failed() does after counting a miss, for a check made at the
+        moment the controller forgets, without a write having to fail first.
+        Not counted as a release: nobody let go of the address.
+        """
         ok_at = self._ok_at.get(address)
-        if ok_at is not None and now - ok_at < self._expiry:
+        if address not in self._values or ok_at is None or now - ok_at < self._expiry:
             return False
-        self.release(address)
+        self._forget(address)
         return True
 
     def release(self, address: int) -> bool:
-        """Forget one address. True when it was in force."""
+        """Let go of one address. True when it was in force.
+
+        Counted in releases() either way, so a write of the address that is
+        on its way, held or not, can tell that it was let go of meanwhile.
+        """
+        self._releases[address] = self._releases.get(address, 0) + 1
+        return self._forget(address)
+
+    def _forget(self, address: int) -> bool:
         was = address in self._values
         self._values.pop(address, None)
         self._ok_at.pop(address, None)
@@ -106,6 +144,8 @@ class Keepalive:
         return was
 
     def clear(self) -> None:
+        """Let go of everything, and move the epoch for the writes on their way."""
+        self._epoch += 1
         for address in list(self._values):
             self._moved(address)
         self._values.clear()
