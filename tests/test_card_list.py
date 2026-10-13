@@ -12,6 +12,11 @@ that refuses sessionStorage still has a list that works.
 
 Worked in node on the stub DOM (tests/card_page.js over tests/card_dom.js).
 The search itself is pinned on the card's own _matches.
+
+An unknown row that says why it has no figure, the coefficient of performance
+in its first year, has something to show and stays (F3.3). A row without an
+explanation has no "i", and its click opens Home Assistant's dialog instead;
+only a row whose click does something looks clickable (F3.5).
 """
 
 from __future__ import annotations
@@ -183,6 +188,72 @@ def test_a_list_without_the_box_shows_every_row_as_before():
     ]
     assert found["count"] == "6 / 6"
     assert found["box"] is False
+
+
+def test_an_unknown_row_that_says_why_it_has_no_figure_is_not_empty():
+    # F3.3: the coefficient of performance stays available without a figure
+    # so that its reason can be read under it. Such a row says something and
+    # stays out from behind the box, counted among the rows with something
+    # to show, the middle number. Without a reason to show, or unavailable,
+    # it is empty as before.
+    found = _node("""
+      const cop = (entity, name) => ({entity, name, explanation: "Värmefaktorn.",
+        source: "Räknad", sub: ["underlag", "basis"], reason: ["skäl", "reason"]});
+      const config = {...CONFIG, rows: [...CONFIG.rows, cop("sensor.cop_year", "Värmefaktor år"),
+        cop("sensor.cop_day", "Värmefaktor dygn"), cop("sensor.cop_life", "Värmefaktor livslängd")]};
+      const states = {...STATES,
+        "sensor.cop_year": {state: "unknown", attributes: {"skäl": "Inget års underlag ännu"}},
+        "sensor.cop_day": {state: "unknown", attributes: {}},
+        "sensor.cop_life": {state: "unavailable", attributes: {"skäl": "Räknaren saknas"}},
+      };
+      const card = mount(config, states);
+      const year = rows(card).find((r) => r.children[0].textContent === "Värmefaktor år");
+      const sub = year.children.find((c) => c.className === "sub");
+      console.log(JSON.stringify({shown: shown(card), count: count(card), sub: sub.textContent}));
+    """)
+    assert found["shown"] == ["Utetemperatur", "Senaste larm", "Varmvattenbörvärde", "Värmefaktor år"]
+    assert found["count"] == "4 / 4 / 9"
+    assert found["sub"] == "Inget års underlag ännu"
+
+
+def test_a_row_without_an_explanation_opens_home_assistants_dialog():
+    # F3.5: a list written by hand, or started from the card picker, has rows
+    # without an explanation and so without an "i". Their click was passed
+    # on to an "i" that was not there and did nothing, under a pointer that
+    # said it would. It opens Home Assistant's dialog for the entity now, a
+    # row with an "i" still opens its note, and only a row whose click does
+    # something looks clickable.
+    found = _node("""
+      const config = {rows: [
+        {entity: "sensor.outdoor", name: "Utetemperatur"},
+        {entity: "sensor.flow", name: "Framledning", explanation: "Fram."},
+        {name: "Bara text"},
+      ]};
+      const card = mount(config, {
+        "sensor.outdoor": {state: "7.5", attributes: {}},
+        "sensor.flow": {state: "35.0", attributes: {}},
+      });
+      const events = [];
+      card.dispatchEvent = (event) => events.push([event.type, event.detail.entityId,
+                                                    event.bubbles, event.composed]);
+      const [plain, explained, text] = rows(card);
+      plain.fire("click");
+      explained.fire("click");
+      text.fire("click");
+      const notes = page.all(card, (e) => e.className === "note").map((n) => !n.hidden);
+      const style = page.styleOf(card);
+      const rule = style.match(/\\.row \\{([^}]*)\\}/)[1];
+      console.log(JSON.stringify({events, notes, tap: [plain, explained, text].map((r) => r.dataset.tap || null),
+        plainRule: rule.includes("cursor"), tapRule: style.includes('.row[data-tap="1"] { cursor: pointer; }'),
+        hover: style.includes('.row[data-tap="1"]:hover'), bareHover: /\\.row:hover/.test(style)}));
+    """)
+    assert found["events"] == [["hass-more-info", "sensor.outdoor", True, True]]
+    assert found["notes"] == [False, True, False]
+    assert found["tap"] == ["1", "1", None]
+    assert found["plainRule"] is False
+    assert found["tapRule"] is True
+    assert found["hover"] is True
+    assert found["bareHover"] is False
 
 
 # ---------------------------------------------------------- _matches
