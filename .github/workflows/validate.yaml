@@ -57,9 +57,15 @@ jobs:
         # in the matrix so that lowering the floor below 2026.3 is not also
         # the first run on 3.13 (R60).
         python: ["3.13", "3.14"]
-        # The adapter is run against the floor the manifest allows, the version
-        # Home Assistant's own modbus integration ships, and whatever PyPI has
-        # today. The last leg is deliberately unpinned, past the manifest's own
+        # Home Assistant installs an integration's requirements under its own
+        # package_constraints.txt, so a user runs the pymodbus pinned there,
+        # whatever range the manifest allows. The pinned legs follow that pin
+        # in two releases: the floor in hacs.json (3.11.2 in 2026.5.0, the
+        # pair under include) and the houses' release (3.13.1 in 2026.9.4).
+        # When the floor or the houses' release is raised, look up the new
+        # release's pin and follow it here. 3.6.9 is the manifest's own floor,
+        # run so that the range it states is not only a promise.
+        # The last leg is deliberately unpinned, past the manifest's own
         # cap, so the weekly run meets a new major before a user does. It may
         # not block a push or a pull request over something the manifest
         # already keeps out, but it must be allowed to fail the scheduled run
@@ -69,13 +75,16 @@ jobs:
         # Actions tab. A red Monday run is the warning, and it goes to whoever
         # last touched this file.
         pymodbus: ["3.6.9", "3.13.1", "latest"]
-        # Five of the six pairs. The manifest's floor is what an older Home
-        # Assistant on 3.13 may still hold, and no Home Assistant on 3.14
-        # comes with it: that pair could only go red over an installation
-        # nobody has, so it is left out rather than run.
+        # Five of the six pairs, and the floor's pin as a sixth. No Home
+        # Assistant on 3.14 comes with the manifest's floor, so that pair
+        # could only go red over an installation nobody has and is left out.
+        # The floor's pin runs on 3.14 alone, since 2026.5.0 needs 3.14.2.
         exclude:
           - python: "3.14"
             pymodbus: "3.6.9"
+        include:
+          - python: "3.14"
+            pymodbus: "3.11.2"
     continue-on-error: ${{ matrix.pymodbus == 'latest' && (github.event_name == 'push' || github.event_name == 'pull_request') }}
     steps:
       - uses: actions/checkout@v4

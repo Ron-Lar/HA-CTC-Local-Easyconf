@@ -11,6 +11,7 @@ installation.
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 from types import SimpleNamespace
@@ -19,6 +20,9 @@ import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github" / "workflows" / "validate.yaml"
+
+#: The pymodbus each floor in hacs.json pins in its package_constraints.txt.
+FLOOR_PYMODBUS = {"2026.5.0": "3.11.2"}
 
 
 def _text() -> str:
@@ -63,7 +67,7 @@ def test_the_latest_leg_fails_the_scheduled_run_so_somebody_is_told(event):
 @pytest.mark.parametrize("event", ["push", "pull_request", "schedule", "workflow_dispatch"])
 def test_the_pinned_legs_are_never_allowed_to_fail(event):
     allowance = _latest_leg_allowance()
-    for leg in ("3.6.9", "3.13.1"):
+    for leg in ("3.6.9", "3.11.2", "3.13.1"):
         assert not _allowed_to_fail(allowance, leg=leg, event=event), (leg, event)
 
 
@@ -82,6 +86,27 @@ def _job(name: str) -> str:
         (i for i in range(start + 1, len(lines)) if re.match(r"^  \S", lines[i])), len(lines)
     )
     return "\n".join(lines[start:end])
+
+
+def test_the_floor_s_pymodbus_is_a_pinned_leg_on_3_14():
+    """Home Assistant installs pymodbus under its own constraints (F1.3, R60).
+
+    So a user on the floor in hacs.json runs the pymodbus that release pins,
+    whatever the manifest allows. Raising the floor means looking up the new
+    release's pin in its package_constraints.txt and giving it this leg.
+    """
+    floor = json.loads((ROOT / "hacs.json").read_text(encoding="utf-8"))["homeassistant"]
+    assert floor in FLOOR_PYMODBUS, f"look up pymodbus in {floor}'s package_constraints.txt"
+    pin = FLOOR_PYMODBUS[floor]
+    included = re.split(r"^        include:$", _job("tests"), flags=re.MULTILINE)
+    assert len(included) == 2, "the test matrix has no include"
+    assert re.search(
+        rf'^          - python: "3\.14"\n            pymodbus: "{re.escape(pin)}"$',
+        included[1],
+        re.MULTILINE,
+    )
+    for event in ("push", "pull_request", "schedule", "workflow_dispatch"):
+        assert not _allowed_to_fail(_latest_leg_allowance(), leg=pin, event=event), event
 
 
 def test_the_hacs_job_blocks_every_run():
