@@ -61,12 +61,18 @@ def _lovelace_dashboards(hass: HomeAssistant) -> dict | None:
 
 
 @callback
-def _collect(hass: HomeAssistant) -> list[dict[str, Any]]:
-    """One plain dict per running heat pump, as dashboard_views expects."""
+def _collect(hass: HomeAssistant, entry_id: str | None = None) -> list[dict[str, Any]]:
+    """One plain dict per running heat pump, as dashboard_views expects.
+
+    With ``entry_id``, only that entry's pump, described exactly as the page
+    describes it: the section card's command (websocket.py) asks this way.
+    """
     ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     pumps: list[dict[str, Any]] = []
     for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry_id is not None and entry.entry_id != entry_id:
+            continue
         runtime = getattr(entry, "runtime_data", None)
         if entry.state is not ConfigEntryState.LOADED or runtime is None:
             continue

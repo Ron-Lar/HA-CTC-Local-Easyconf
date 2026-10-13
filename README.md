@@ -489,6 +489,48 @@ the page is registered the way Lovelace registers a dashboard from
 those parts, the integration logs it and runs on without the page. An address
 that is already taken, `/ctc-ecozenith`, is left alone.
 
+### The section card
+
+A section of the page can go on a dashboard of your own, explanations and all,
+without writing a single value or text by hand. The card picker lists it as
+**CTC: section of the page** (*CTC: sektion av sidan* when Home Assistant is in
+Swedish), and its editor asks for two things, the heat pump and the section. In
+YAML:
+
+```yaml
+type: custom:ctc-ecozenith-section
+device_id: 0123456789abcdef0123456789abcdef   # the heat pump's device id
+section: energy
+```
+
+The editor fills the device id in for you; by hand, it is the last part of the
+address of the heat pump's page under *Settings, Devices and services*. The
+sections are those of the page, by tab:
+
+| Tab | `section` |
+|---|---|
+| Overview | `status`, `quick_controls`, `key_readings` |
+| Controls | `heating_controls`, `hot_water_controls`, `power_controls` |
+| Performance | `temperatures`, `hot_water`, `energy`, `compressor`, `cycles`, `settings`, `unit`, `other` |
+| All values | `values` |
+
+The card asks the integration for its section when it is shown, and again
+whenever an open page would fetch its layout again, so it shows what the page
+shows there: the same cards with the same explanations, the readings your
+installation has only ever reported as zero left out the same way, and nothing
+the page does not show. The texts are never copied into your dashboard, so they
+follow the integration when it is updated. A section the page leaves out for
+your pump, such as the controls while control is switched off, leaves the card
+empty, and in the editor it says so. Anyone signed in can see the card, as
+anyone signed in can open the page. The graphs are Home Assistant's own cards
+and are not offered; put a history or statistics graph beside the section card.
+
+The page's other four cards are in the picker as well, as **CTC: chips**,
+**CTC: key figures**, **CTC: controls** and **CTC: list of values**. They take
+their entities as a list, under `items` or, for the list, `rows`, and the picker
+starts them with a few of the integration's own. The page's explanations come
+only with the section card.
+
 ## Control
 
 Control writes only to CTC's volatile 1000 block: maximum compressor speed,
