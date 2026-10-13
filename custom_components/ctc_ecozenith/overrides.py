@@ -16,8 +16,11 @@ register the controller reads its own setting from, which a number shows
 while idle and a select shows as its mode while idle, and both carry as
 "pumpens värde" whether or not Home Assistant holds the register. Only a
 register with a mirror has one: 61542 (Inställt värmeläge) does not mirror
-1015, whose modes are another set, and 62001 is the hot water stop
-temperature, not the setpoint 1033 writes.
+1015, whose modes are another set, 62001 is the hot water stop
+temperature, not the setpoint 1033 writes, and 61503 (Extra varmvatten kvar)
+does not mirror 1006: it stood at 0 for seven minutes on an i255 while 1006
+was held at one hour and every write reached the unit (roadmap R50), so the
+extra hot water shows only what Home Assistant holds.
 
 Free of Home Assistant, like keepalive.py, so the rules can be tested on
 their own.

@@ -467,7 +467,12 @@ CONTROL_NUMBERS: Final[tuple[ControlRegister, ...]] = (
     ControlRegister("ctl_immersion_upper", 1004, "Styr max elpatron övre", 0.1, "kW", 0, 9, 0.1, mirror=61591, icon="mdi:heating-coil"),
     ControlRegister("ctl_room_setpoint_1", 1010, "Styr rumsbörvärde", 0.1, "°C", 10, 30, 0.1, mirror=61509, icon="mdi:home-thermometer"),
     ControlRegister("ctl_dhw_setpoint", 1033, "Styr varmvattenbörvärde", 0.1, "°C", 30, 65, 1, icon="mdi:water-thermometer"),
-    ControlRegister("ctl_extra_dhw", 1006, "Styr extra varmvatten", 0.5, "h", 0, 12, 0.5, mirror=61503, icon="mdi:water-plus"),
+    # No mirror (roadmap R50). 61503, Extra varmvatten kvar, stood at 0.0 for
+    # seven minutes on an i255 while 1006 was held at one hour and every write
+    # reached the unit, so it is not the pump's own value of this control and
+    # the number shows only what Home Assistant holds. Whether the controller
+    # starts its timer again at each keepalive rewrite is not known.
+    ControlRegister("ctl_extra_dhw", 1006, "Styr extra varmvatten", 0.5, "h", 0, 12, 0.5, icon="mdi:water-plus"),
 )
 
 CONTROL_SELECTS: Final[tuple[ControlRegister, ...]] = (

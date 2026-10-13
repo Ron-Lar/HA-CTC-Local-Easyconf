@@ -134,7 +134,9 @@ class CtcControlNumber(CoordinatorEntity, NumberEntity):
         if self._register.mirror is not None:
             # The pump's own setting beside what Home Assistant holds (R49),
             # also while it holds something else: the card shows both. Only
-            # where there is a mirror; the hot water setpoint has none.
+            # where there is a mirror; the hot water setpoint has none, and
+            # extra hot water has none since 61503 was found not to follow it
+            # (R50).
             attributes["pumpens värde"] = pump_number(self._runtime.modbus, self._register)
         # "Aktiv" is claimed only from a write that reached the controller, and
         # these two say when that was and how long the unit holds it.
