@@ -293,6 +293,21 @@
       "active_overrides": {
         "name": "Active overrides"
       },
+      "aux_share_day": {
+        "name": "Auxiliary heat share, day"
+      },
+      "aux_share_lifetime": {
+        "name": "Auxiliary heat share, whole lifetime"
+      },
+      "aux_share_month": {
+        "name": "Auxiliary heat share, month"
+      },
+      "aux_share_week": {
+        "name": "Auxiliary heat share, week"
+      },
+      "aux_share_year": {
+        "name": "Auxiliary heat share, rolling year"
+      },
       "bootloader": {
         "name": "Bootloader version"
       },

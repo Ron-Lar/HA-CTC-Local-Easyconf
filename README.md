@@ -107,8 +107,8 @@ quotient that cannot be right. The sensor stays available and empty rather than
 going unavailable, because an unavailable entity shows no attributes and the
 reason is the point.
 
-**The share of auxiliary heat, *Spetsvärmeandel*, over the same spans but the
-first year.** How much of the electricity went to the immersion heater: its
+**The share of auxiliary heat, *Auxiliary heat share* (*Spetsvärmeandel*), over
+the same spans but the first year.** How much of the electricity went to the immersion heater: its
 counter, Modbus register 62191, against the sum of it and the compressor's
 counter, the same consumed energy the coefficient of performance divides by,
 in per cent. The integration keeps the immersion heater's counter in its own
@@ -736,8 +736,9 @@ with a stored setting beside it also carries the pump's own value, in
 *pump_value*, while Home Assistant holds a value of its own as much as while
 it does not: the room setpoint, the compressor's top speed, the two immersion
 heater limits and the hot water mode. Extra hot water carries none and stands
-empty while nothing is held. The controller's *Extra varmvatten kvar* (61503)
-did not follow it the one time it was tried, on an i255: it stayed at zero
+empty while nothing is held. The controller's *Extra hot water left* (*Extra
+varmvatten kvar*, 61503) did not follow it the one time it was tried, on an
+i255: it stayed at zero
 through seven minutes of the control held at one hour, with every write
 reaching the unit, so the control does not pass 61503 off as the time left.
 Whether the controller starts its timer again at each of the keepalive's

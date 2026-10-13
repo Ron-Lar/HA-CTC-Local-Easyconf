@@ -204,6 +204,7 @@ def _keys_in_code(const, transitions) -> dict[str, set[str]]:
             {d.key for d in const.MODBUS_SENSORS + const.MODBUS_SETTINGS}
             | {row.elts[0].value for row in identity.elts}
             | {f"cop_{span}" for span in ast.literal_eval(spans)}
+            | {f"aux_share_{span}" for span in load("cop").SHARE_SPANS}
             | {item.key for item in transitions.TRANSITION_SENSORS}
             | {transitions.MEAN_RUN_KEY}
             | own_keys
@@ -300,13 +301,17 @@ def test_the_swedish_names_the_tables_keep_are_sv_json_s(const):
     for row in _assigned(sensor, "IDENTITY_ROWS").elts:
         key, name = row.elts[0].value, row.elts[1].value
         assert swedish["sensor"][key] == name, key
-    names = next(
-        node.value for node in ast.walk(sensor)
-        if isinstance(node, ast.Assign)
-        and any(isinstance(t, ast.Name) and t.id == "NAMES" for t in node.targets)
-    )
-    for span, name in ast.literal_eval(names).items():
-        assert swedish["sensor"][f"cop_{span}"] == name, span
+    for cls, prefix in (("CtcCopSensor", "cop_"), ("CtcShareSensor", "aux_share_")):
+        body = next(
+            node for node in sensor.body if isinstance(node, ast.ClassDef) and node.name == cls
+        )
+        names = next(
+            node.value for node in ast.walk(body)
+            if isinstance(node, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "NAMES" for t in node.targets)
+        )
+        for span, name in ast.literal_eval(names).items():
+            assert swedish["sensor"][f"{prefix}{span}"] == name, (cls, span)
 
 
 def test_every_control_name_starts_with_a_prefix_the_page_drops(dashboard_views):
@@ -382,6 +387,7 @@ NAMED = (
     ("ctl_dhw_mode", "sensor", "set_dhw_mode"),
     ("ctl_dhw_setpoint", "sensor", "dhw_stop_temp"),
     ("ctl_extra_dhw", "sensor", "set_extra_dhw"),
+    ("set_extra_dhw", "number", "ctl_extra_dhw"),
 )
 
 
