@@ -221,13 +221,17 @@ def test_a_reading_without_a_moment_is_now_and_always_new(cop):
 
 
 def test_the_set_up_samples_off_the_counters_read_moment_and_never_the_clock():
-    setup = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
-    setup = setup.split("async def async_setup_entry")[1].split("\nasync def ")[0]
-    record = setup.split("async def _record_cop")[1].split("await _record_cop(")[0]
-    assert "read_at = counters_read_at(runtime)" in record
+    source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
+    setup = source.split("async def async_setup_entry")[1].split("\nasync def ")[0]
+    # The sample is the runtime's since the cop_sample action (R76) takes one
+    # too: the timer and the action share the one rule.
+    record = source.split("async def async_record_cop")[1].split("\ntype ")[0]
+    assert "read_at = counters_read_at(self)" in record
     assert "if read_at is not None:" in record
     assert "now=read_at" in record
     assert "datetime.now" not in record and "utcnow" not in record
+    timer = setup.split("async def _record_cop")[1].split("entry.async_on_unload(")[0]
+    assert "await runtime.async_record_cop()" in timer
     # The stored pair still comes in with its own moment at start-up.
     assert "_record_cop(read_at=runtime.web.last_read(runtime.energy_out.key))" in setup
 

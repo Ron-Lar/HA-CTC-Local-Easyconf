@@ -238,7 +238,9 @@ CONTROL: dict[str, str] = {
         "Släpper all styrning från Home Assistant på en gång. Inget skrivs: Home Assistant slutar "
         "skriva, och pumpen går tillbaka till sina egna inställningar inom cirka fem minuter, "
         "eftersom den glömmer en styrning som inte skrivs om. Ett enskilt läge släpps med valet "
-        "Släpp styrningen i sin lista; ett tal har ingen sådan plats, därför finns knappen."
+        "Släpp styrningen i sin lista. Ett tal har ingen sådan plats; det släpps här tillsammans "
+        "med allt annat, eller ensamt med åtgärden ctc_ecozenith.release, som inte heller skriver "
+        "något."
     ),
 }
 

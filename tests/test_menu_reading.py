@@ -116,9 +116,14 @@ def test_the_background_rereading_treats_an_incomplete_sweep_as_still_owed():
     # tries go on. The run under a real core is in test_homeassistant_menu.py.
     source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
     body = source.split("async def _async_reread_menu")[1].split("\ndef ")[0]
-    guard, folding = body.split("merge_menu(", 1)
+    # The folding is its own function since the reread_menu action (R76)
+    # folds a reading by the same rule; the guard stays in front of it.
+    guard, _folded = body.split("return _menu_changes(", 1)
+    assert "merge_menu(" not in guard
     assert "not reading.complete" in guard, "en ofullständig läsning ska behandlas som skyldig"
     assert "return {}" in guard
+    folding = source.split("\ndef _menu_changes(")[1].split("\nasync def ")[0]
+    assert "merge_menu(" in folding
     assert "CONF_MENU_VERSION: version" in folding, "bara en hel läsning stämplar versionen"
 
 
