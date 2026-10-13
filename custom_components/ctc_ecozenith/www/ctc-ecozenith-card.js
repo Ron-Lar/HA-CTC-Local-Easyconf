@@ -1156,10 +1156,13 @@
     .row {
       display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline;
       padding: 9px 4px; border-bottom: 1px solid var(--divider-color, #eee);
-      border-radius: 4px; cursor: pointer;
+      border-radius: 4px;
     }
-    /* The row is no tab stop of its own (R41): its "i" is, with its own ring. */
-    .row:hover { background: var(--secondary-background-color, #f5f5f5); }
+    /* The row is no tab stop of its own (R41): its "i" is, with its own ring.
+       It looks clickable only where a click does something: it opens the
+       note, or Home Assistant's dialog where there is no "i". */
+    .row[data-tap="1"] { cursor: pointer; }
+    .row[data-tap="1"]:hover { background: var(--secondary-background-color, #f5f5f5); }
     .row .label { color: var(--primary-text-color); overflow-wrap: anywhere; }
     .value { color: var(--primary-text-color); font-weight: 500; white-space: nowrap; text-align: right; }
     /* R35: what a figure rests on, or why there is none, under its row. */
@@ -1310,9 +1313,15 @@
       // All values. A click anywhere else on the row is passed on to the "i",
       // so a finger or a mouse still opens the note from the whole row. The
       // "i" and the note's link stop their own clicks from reaching the row.
+      // A row without an explanation has no "i", as in a list written by
+      // hand or started from the card picker: its click opens Home
+      // Assistant's own dialog for the entity, as Home Assistant's entity
+      // rows do. Only a row whose click does something looks clickable.
+      if (item.explanation || item.entity) element.dataset.tap = "1";
       element.addEventListener("click", () => {
         const why = (TOGGLES.get(note) || [])[0];
         if (why) why.click();
+        else if (item.entity) moreInfo(this, item.entity);
       });
       return { item, element, note, value, sub, held, seen: undefined, gone: false, blank: false };
     }
@@ -1338,10 +1347,17 @@
     /** R39: whether a row has nothing to show: no state at all, or unavailable
      *  or unknown without a word of the page's own for it, as hide_unavailable
      *  has it elsewhere. A word of the page's own says something: "ej satt"
-     *  on a control and "inget larm ännu" on the last alarm stay. */
+     *  on a control and "inget larm ännu" on the last alarm stay, and so does
+     *  an unknown row whose reason is under it (F3.3). Such rows are counted
+     *  among those with a value, the middle number, as rows with something
+     *  to show. */
     _blank(item, stateObj) {
       if (!stateObj) return true;
       if (!HIDDEN_STATES.has(stateObj.state)) return false;
+      // A row that says why it has no figure says something: the coefficient
+      // of performance stays available without a number for just that, and
+      // its reason stands under the row.
+      if (stateObj.state === "unknown" && item.reason && this._below(item, stateObj)) return false;
       const own = ownWord(item.entity, stateObj, this._config.states, item.zero_means,
                           item.unknown_means);
       return own === undefined;
