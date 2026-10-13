@@ -451,16 +451,20 @@ def test_no_form_text_is_written_in_swedish_in_the_code(name):
 
 def test_every_form_step_error_and_abort_the_flow_names_has_a_text():
     flow = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
+    # The set-up's words are under config, Configure's under options.
+    setup, configure = flow.split("\nclass CtcOptionsFlow", 1)
     for name in FILES:
         texts = json.loads((COMPONENT / name).read_text(encoding="utf-8"))
         config, options = texts["config"], texts["options"]
         for step in ("user", "scan", "manual", "modbus_failed", "modbus_busy", "slow", "confirm"):
             assert step in config["step"], (name, step)
-        errors = set(re.findall(r'"base": "([a-z_]+)"', flow))
+        errors = set(re.findall(r'"base": "([a-z_]+)"', setup))
         for error in errors | {"only_configured", "nothing_found"}:
             assert error in config["error"], (name, error)
-        for reason in set(re.findall(r'reason="([a-z_]+)"', flow)) - {"panel_busy"}:
+        for reason in set(re.findall(r'reason="([a-z_]+)"', setup)):
             assert reason in config["abort"], (name, reason)
+        for reason in set(re.findall(r'reason="([a-z_]+)"', configure)):
+            assert reason in options["abort"], (name, reason)
         assert "panel_busy" in options["abort"], name
         for step in ("init", "rescan"):
             assert step in options["step"], (name, step)
