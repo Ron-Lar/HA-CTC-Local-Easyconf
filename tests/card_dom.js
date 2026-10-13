@@ -9,8 +9,9 @@
  * ("unavailable" included), a range input writes a number back in its shortest
  * form ("40.0" reads "40") and holds the middle of its range for anything else,
  * and the root the controls live in has an activeElement, which is what
- * holding() asks about. Nothing is laid out or drawn, and events are plain
- * calls to the listeners.
+ * holding() asks about. A list (select) hands over its options and holds only
+ * a value it has an option for, so the controls card can draw a mode list too.
+ * Nothing is laid out or drawn, and events are plain calls to the listeners.
  */
 
 "use strict";
@@ -39,7 +40,11 @@ class Element {
 
   set value(text) {
     const asText = String(text);
-    if (this.type === "number") {
+    if (this.tagName === "select") {
+      // A list holds one of its options, or nothing ("") for a value it
+      // has no option for, the way a browser's select does.
+      this._value = this.options.some((option) => option.value === asText) ? asText : "";
+    } else if (this.type === "number") {
       this._value = asText !== "" && !NUMBER.test(asText) ? "" : asText;
     } else if (this.type === "range") {
       // A range input holds a number and writes it back in its shortest form,
@@ -51,6 +56,13 @@ class Element {
     } else {
       this._value = asText;
     }
+  }
+
+  /** A list's options, as a browser hands them over; nothing on anything else. */
+  get options() {
+    return this.tagName === "select"
+      ? this.children.filter((child) => child.tagName === "option")
+      : undefined;
   }
 
   /** A range input's default value: the middle of its range, as the browser

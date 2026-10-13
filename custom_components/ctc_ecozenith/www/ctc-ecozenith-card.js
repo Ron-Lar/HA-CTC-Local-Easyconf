@@ -34,6 +34,13 @@
   //: aim at, so it gets a field to type in instead: a room setpoint in tenths
   //: of a degree from 10 to 30 is 200 steps on 130 pixels.
   const SLIDER_STEPS = 130;
+  //: R47: how long a list or a slider waits for the next change before it
+  //: writes. A closed list fires change at every arrow key, and so does a
+  //: slider, so stepping through them wrote every mode on the way, Manuell
+  //: and Av included, each a Modbus write with six seconds of busy mark. A
+  //: change now waits this long and a newer one takes its place, so only
+  //: where the user stops goes to the pump.
+  const DEBOUNCE_MS = 400;
 
   /* ---------------------------------------------------------- pure helpers */
 
@@ -574,6 +581,12 @@
     _widget(container, item, note) {
       const entityId = item.entity;
       const domain = String(entityId).split(".")[0];
+      // R47: the debounce timer of a list or a slider while a change waits,
+      // and how many writes this control has sent. Only the latest write may
+      // end the busy mark, and none may while a newer change is still
+      // waiting to go out: the row is busy from the change on.
+      let waiting = null;
+      let sent = 0;
       /** Send a value and answer whether it was taken. A refused write is a
        *  rejected promise, and the reason is already on the screen as Home
        *  Assistant's toast. The row only has to stop looking busy, now rather
@@ -584,8 +597,11 @@
        *  resolved true or false rather than a rejection, so a control with
        *  nothing to undo, a slider or a list, need not catch anything. */
       const send = (value) => {
+        const mine = ++sent;
         container.dataset.pending = "1";
-        const settle = () => { container.dataset.pending = "0"; };
+        const settle = () => {
+          if (mine === sent && waiting === null) container.dataset.pending = "0";
+        };
         const timer = setTimeout(settle, 6000);
         return new Promise((resolve) => resolve(this._call(entityId, value))).then(
           () => true,
@@ -595,6 +611,25 @@
             return false;
           }
         );
+      };
+      /** R47: send what a list or a slider was changed to, once it has stood
+       *  still for DEBOUNCE_MS. A newer change clears the timer and takes the
+       *  older one's place, so only the last value is written. The row looks
+       *  busy from the first change, which also keeps an unset slider's knob
+       *  where the user put it while the write waits. `after` hears whether
+       *  the write was taken, unless a newer change or write has come since:
+       *  then that one's answer is the one that counts. */
+      const sendLast = (value, after) => {
+        container.dataset.pending = "1";
+        clearTimeout(waiting);
+        waiting = setTimeout(() => {
+          waiting = null;
+          const answer = send(value);
+          const mine = sent;
+          answer.then((taken) => {
+            if (after && mine === sent && waiting === null) after(taken);
+          });
+        }, DEBOUNCE_MS);
       };
 
       if (domain === "button") {
@@ -611,7 +646,8 @@
 
       if (domain === "select") {
         const select = document.createElement("select");
-        select.addEventListener("change", () => send(select.value));
+        // Every arrow key in a closed list is a change; only the last is sent.
+        select.addEventListener("change", () => sendLast(select.value));
         container.appendChild(select);
         return () => {
           const stateObj = this._state(entityId);
@@ -626,9 +662,13 @@
               select.appendChild(choice);
             }
           }
-          if (!holding(select) && stateObj) {
-            select.value = stateObj.state;
-            if (select.value === stateObj.state) container.dataset.pending = "0";
+          if (!holding(select) && stateObj) select.value = stateObj.state;
+          // The pump reports what the list shows: the write has landed, and
+          // the row stops looking busy now rather than when the timer runs
+          // out. Asked whoever is holding the list, since the keyboard leaves
+          // it focused, but not while a change still waits to be sent (R47).
+          if (stateObj && waiting === null && select.value === stateObj.state) {
+            container.dataset.pending = "0";
           }
           select.disabled = !stateObj || stateObj.state === "unavailable";
         };
@@ -691,16 +731,20 @@
           // Asked whoever is holding the slider, since a range input keeps the
           // focus after a drag, and asked of the numbers: Home Assistant writes
           // a float as "40.0" and a range input serializes it back as "40".
-          // unknown and unavailable are NaN and never equal.
-          if (Number(slider.value) === Number(stateObj.state)) container.dataset.pending = "0";
+          // unknown and unavailable are NaN and never equal. Not while a
+          // change still waits to be sent, though (R47).
+          if (waiting === null && Number(slider.value) === Number(stateObj.state)) {
+            container.dataset.pending = "0";
+          }
           mark(unset);
           slider.disabled = stateObj.state === "unavailable";
         };
         // A refused write goes straight back to what the pump says, unset
         // included, rather than waiting for the next state to come round, and
-        // whether or not the slider still has the focus from the drag.
+        // whether or not the slider still has the focus from the drag. The
+        // arrow keys fire change at every step, so the value waits (R47).
         slider.addEventListener("change", () => {
-          send(slider.value).then((taken) => { if (!taken) update(true); });
+          sendLast(slider.value, (taken) => { if (!taken) update(true); });
         });
         container.append(slider, reading, why);
         return update;

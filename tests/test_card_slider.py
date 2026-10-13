@@ -83,6 +83,9 @@ def _play(script: str, entity: str, state: str, attributes: dict, **item) -> dic
       const whys = page.all(card, (e) => e.className === "why");
       const note = page.all(card, (e) => e.className === "note")[0];
       const tick = () => new Promise((resolve) => setImmediate(resolve));
+      // The stub DOM unreferences the card's timers; this one keeps node up.
+      const wait = require("timers/promises").setTimeout;
+      const DEBOUNCE = 450;
       const answer = async (verdict) => {{
         if (!open.length) throw new Error("nothing was sent");
         const call = open.shift();
@@ -95,7 +98,9 @@ def _play(script: str, entity: str, state: str, attributes: dict, **item) -> dic
         state: (state, extra) => {{ card.hass = hass(state, extra); }},
         // A mouse drag focuses the range input, and the focus stays after it.
         drag: (value) => {{ control.focus(); control.value = value; control.fire("input"); }},
-        release: () => control.fire("change"),
+        // Letting go fires change, and the card writes once the value has
+        // stood still for its debounce (R47), so the lever waits that out.
+        release: async () => {{ control.fire("change"); await wait(DEBOUNCE); }},
         blur: () => control.blur(),
         accept: () => answer("accept"),
         refuse: () => answer("refuse"),
@@ -164,7 +169,7 @@ def test_setting_an_unset_slider_takes_the_mark_away_at_once_and_writes_what_was
       t.drag("40");
       const moved = t.result();
       if (moved.unset !== "0" || moved.text !== "40 °C") throw new Error(JSON.stringify(moved));
-      t.release();
+      await t.release();
       t.state("unknown");
     """, "number.dhw", "unknown", DHW) == {
         "unset": "0", "pending": "1", "value": "40", "text": "40 °C", "why": False,
@@ -178,7 +183,7 @@ def test_a_refused_write_puts_the_slider_back_to_unset():
     # goes back to empty and "ej satt" at once, and stays so through the
     # next state while the focus is still there.
     assert _play("""
-      t.drag("40"); t.release();
+      t.drag("40"); await t.release();
       if (t.control.getRootNode().activeElement !== t.control) throw new Error("the drag did not focus");
       await t.refuse();
       const back = t.result();
@@ -197,7 +202,7 @@ def test_a_refused_write_on_a_set_slider_goes_back_to_the_pumps_value_while_held
     # refuses the 60, and the row shows the pump's 55 again although the
     # slider is still focused. The focus itself is left with the user.
     assert _play("""
-      t.drag("60"); t.release();
+      t.drag("60"); await t.release();
       await t.refuse();
       if (t.control.getRootNode().activeElement !== t.control) throw new Error("the refusal took the focus");
     """, "number.dhw", "55", DHW) == {
@@ -211,7 +216,7 @@ def test_a_taken_write_shows_the_value_once_the_pump_reports_it():
     # slider still has the focus, so knob and text are left as the user set
     # them, but the row stops looking busy: the pump reports what it shows.
     assert _play("""
-      t.drag("40"); t.release();
+      t.drag("40"); await t.release();
       await t.accept();
       t.state("40.0", {"styrning aktiv": "ja"});
     """, "number.dhw", "unknown", DHW) == {
@@ -220,7 +225,7 @@ def test_a_taken_write_shows_the_value_once_the_pump_reports_it():
     }
     # Once the focus has gone, the next state writes the pump's own value in.
     assert _play("""
-      t.drag("40"); t.release();
+      t.drag("40"); await t.release();
       await t.accept();
       t.blur();
       t.state("40.0", {"styrning aktiv": "ja"});
@@ -236,7 +241,7 @@ def test_the_pumps_own_value_is_what_ends_the_busy_mark_not_the_timer():
     # value keeps it busy; the written value, as "40.0", ends it, with the
     # focus still on the slider as it is after a drag.
     assert _play("""
-      t.drag("40"); t.release();
+      t.drag("40"); await t.release();
       await t.accept();
       t.state("55.0");
       const old = t.result();
