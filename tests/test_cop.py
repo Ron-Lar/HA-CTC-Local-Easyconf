@@ -53,10 +53,15 @@ def test_a_sample_inside_the_window_is_not_used(cop):
 
 
 def test_counters_going_backwards_fall_back_to_lifetime(cop):
-    # A replaced unit or a reset counter must not produce a negative delta.
+    # A replaced unit or a reset counter must not produce a negative delta. The
+    # sample lies inside the year window (YEAR_MAX_DAYS), so it is the guard
+    # against counters going backwards that refuses it, not the window: at 400
+    # days the window alone did, and the guard was never reached.
     tracker = cop.CopTracker(FakeStore())
     today = date(2026, 9, 9)
-    run(tracker.async_record(30000, 12000, today=today - timedelta(days=400)))
+    run(tracker.async_record(30000, 12000, today=today - timedelta(days=366)))
+    year = tracker.result_year(22421, 9088, today=today)
+    assert year.value is None and "bakåt" in (year.reason or "")
     result = tracker.result(22421, 9088, today=today)
     assert result.basis == "lifetime"
 

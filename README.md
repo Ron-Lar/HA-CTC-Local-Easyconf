@@ -3,11 +3,49 @@
 Local integration for CTC heat pumps. It talks straight to the unit on your own
 network and never touches myUplink or any other cloud.
 
-Tested against a CTC EcoZenith i255 driving an EcoAir 720M, and a CTC EcoZenith
-i550 Pro. It should also fit an i250, i350, i360, i555 Pro and EcoLogic, since
-they share CTC's BMS register map.
+What you get: around fifty readings over Modbus TCP, the values only the
+display has, delivered heat among them, and from those the heat pump's
+coefficient of performance over a day, a week, a month, a year and its
+lifetime; control of setpoints and modes through CTC's volatile registers,
+never its stored settings; a **CTC** page in the sidebar that is built from
+your installation and explains every value; and three actions for automations
+and energy managers.
 
-It needs Home Assistant 2026.5 or later.
+It runs on a CTC EcoZenith i255 driving an EcoAir 720M and on an EcoZenith i550
+Pro, the two units it was built against, and on EcoZenith i360 units in
+installations that send the anonymous statistics. Other CTC controllers with
+the same BMS register map may well work, but none has been seen yet; one the
+integration does not know is named after the family in its display's settings
+file, as described under [Setup](#setup).
+
+## Install
+
+It needs Home Assistant 2026.5 or later, and Modbus TCP switched on at the
+panel, with the display's web interface beside it for the values only the
+display has; [Setup](#setup) says where on the panel.
+
+**With HACS.** Until the integration is in HACS's default list, add it as a
+custom repository: in HACS, the three dots at the top right, *Custom
+repositories*, the address `https://github.com/beolink/HA-CTC-Local-Easyconf`
+and the type *Integration*. Then search HACS for *CTC Local Easyconf*,
+download it and restart Home Assistant. HACS offers every later release as an
+update.
+
+**By hand.** Download the latest release from
+<https://github.com/beolink/HA-CTC-Local-Easyconf/releases>, copy its folder
+`custom_components/ctc_ecozenith` into the `custom_components` folder of your
+Home Assistant configuration, so that it ends up as
+`config/custom_components/ctc_ecozenith`, and restart Home Assistant. Home
+Assistant never offers an update for a copy put in place by hand; the
+integration says in the repairs view when a newer release is out.
+
+**Afterwards** it is found under *Settings, Devices and services, Add
+integration*, by searching for *CTC Local Easyconf*, and the set-up first asks
+how to find the heat pump; see [Setup](#setup). Once it is set up, the heat
+pump is a device under *Settings, Devices and services, CTC Local Easyconf*,
+its options are under *Configure* on the same page (see [Options](#options)),
+and the **CTC** page is in the sidebar. Home Assistant installs the one library
+the integration needs, pymodbus, by itself.
 
 ## What it reads
 
@@ -323,6 +361,27 @@ everything while the entry's system option **Enable newly added entities** is
 off: Home Assistant then registers every new entity switched off on your
 behalf, and the integration leaves that choice alone.
 
+## Options
+
+Under *Settings, Devices and services, CTC Local Easyconf, Configure*. Saving
+the form reloads the entry.
+
+| Option | From the start | What it does |
+|---|---|---|
+| Pages to read | every page of the menu | Which display pages are harvested. The figure after each page is how many values it holds. Shown once the menu has been read. |
+| Modbus interval | 30 s, from 10 to 600 | How often the Modbus registers are read. |
+| Display interval | 1800 s, from 300 to 21600 | How often the ticked pages are harvested; every harvest walks the physical panel, which is why it is slow. |
+| Put the panel back afterwards | on | Returns the panel to the page it was found on after a harvest. |
+| Allow controlling the heat pump | on | Creates the controls, which write only to the volatile 1000 block; see [Control](#control). |
+| Let the integration open System information on the panel | on | The one walk to the page with the serial number and the display's software version; see [Setup](#setup). |
+| Tell me when a new version is released | on | Asks GitHub once a day and says so in the repairs view. |
+| Send anonymous usage statistics | on | One report a day; see [Anonymous statistics](#anonymous-statistics). Switching it off erases what was sent. |
+| Read the display's menu again | off | Walks the menu now and offers the pages again on the next form; see [The catch with the display](#the-catch-with-the-display-and-what-the-integration-does-about-it). |
+
+The address, the ports and the Modbus address are not options: see the end of
+[Setup](#setup) for how a new address is followed and how the ports are
+changed.
+
 ## Network and exposure
 
 The integration needs two doors into the heat pump, and neither of them has a
@@ -486,8 +545,9 @@ Lovelace resource on its own. A browser that already has Home Assistant open
 loads resources once per page load, so **reload the page once after installing
 or updating** the integration. Where resources are managed in
 `configuration.yaml` the script is injected into the frontend instead; should
-the page show errors for `ctc-ecozenith-tile` there, add
-`/ctc_ecozenith/ctc-ecozenith-card.js` as a `module` resource yourself.
+the page say there that a custom element does not exist, `ctc-ecozenith-rows`
+or another of the page's cards, add `/ctc_ecozenith/ctc-ecozenith-card.js` as
+a `module` resource yourself.
 
 Home Assistant has no public call for adding a dashboard from an integration, so
 the page is registered the way Lovelace registers a dashboard from
@@ -539,6 +599,26 @@ their entities as a list, under `items` or, for the list, `rows`, and the picker
 starts them with a few of the integration's own. The page's explanations come
 only with the section card.
 
+## In the Energy dashboard
+
+Two of the Modbus readings belong in Home Assistant's Energy dashboard, as
+individual devices: **Kompressorenergi**, register 62341, the electricity
+supplied to the heat pump, and **Elpatron energi**, register 62191, the
+immersion heater's. Both are the controller's lifetime counters in kWh, with
+the state class `total_increasing`, so the dashboard takes them as they are.
+Where the display's history page has *Tillförd energi totalt* and *Energi el
+total*, those are the same two counters (9166 kWh against 9166.0 on an i255);
+add one pair, never both, and by default the Modbus pair is read every half
+minute rather than every half hour. Not every controller keeps them: an i550 Pro has
+been seen with 62341 standing at zero.
+
+The display's *Avgiven värme totalt* is a counter in kWh too, and Home
+Assistant offers it in the same list, but it is the heat the pump has given
+off, not electricity it has used, several times as much on any day the pump
+works well. Added as a device it books the pump's whole output as consumption.
+It is what the coefficient of performance divides by the consumption, which
+the integration does for you.
+
 ## Control
 
 Control writes only to CTC's volatile 1000 block: maximum compressor speed,
@@ -580,8 +660,9 @@ with a stored setting beside it also carries the pump's own value, in
 *pump_value*, while Home Assistant holds a value of its own as much as while
 it does not: the room setpoint, the compressor's top speed, the two immersion
 heater limits and the hot water mode, and for extra hot water the time left
-as the pump reports it in 61503, whose relation to the control has not been
-tried on a running unit yet. While nothing is held the hot water mode shows
+as the pump reports it in 61503, which did not follow the control the one time
+it was tried, on an i255: it stayed at zero through seven minutes of the
+control held at one hour. While nothing is held the hot water mode shows
 the pump's own program from 61500 rather than *Släpp styrningen*, which stays
 in the list for letting go. When 61500 could not be read, in a Modbus round
 that failed or one where the block did not answer, the hot water mode shows
@@ -753,10 +834,13 @@ now.
   integration no longer provides them. A fresh installation never gets them.
 - **The web interface is undocumented.** A firmware update can change it. Modbus
   is documented and will keep working.
-- **The coefficient of performance is untested on an i360.** Going by CTC's
-  manual, its stored operation data page counts delivered energy but not the
-  energy consumed, so the consumption comes from Modbus register 62341 there.
-  That has not been confirmed on a running unit yet.
+- **The coefficient of performance has not been seen on an i360 yet.** Its
+  stored operation data page counts delivered energy but not the energy
+  consumed, as CTC's manual has it, so the consumption comes from Modbus
+  register 62341 there. On i360 units that send the anonymous statistics the
+  page and both counters have been recognised, the delivered heat on the
+  display and the consumption in 62341, but no figure from one has been seen
+  so far.
 
 ## Anonymous statistics
 
@@ -890,6 +974,32 @@ and week groups wherever it is spelt, the display's host name included. The
 code is `diagnostics_data.py`; read the file through before you attach it all
 the same.
 
+## Removing the integration
+
+*Settings, Devices and services, CTC Local Easyconf*, the three dots next to
+the heat pump, *Delete*. Home Assistant removes the device and its entities,
+and the integration deletes what it kept for that heat pump: the values it has
+seen, the last harvest of the display, the energy samples behind the
+coefficient of performance and the alarm log, and its notices in the repairs
+view. The CTC page leaves the sidebar with the last heat pump. Nothing is
+written to the pump on the way: whatever Home Assistant held, the controller
+lets go of by itself about five minutes after the last write.
+
+Two things stay behind. The card script's entry among the dashboards'
+resources, `/ctc_ecozenith/ctc-ecozenith-card.js`, is deleted under *Settings,
+Dashboards*, the three dots at the top right, *Resources*, which shows with
+advanced mode switched on in your user profile; the integration's cards on a
+dashboard of your own are deleted from that dashboard. And what the anonymous
+statistics have already sent: removing the integration only stops the reports,
+so switch *Send anonymous usage statistics* off under *Configure* first if you
+want that erased.
+
+Then remove the files, through HACS (the integration's three dots, *Remove*)
+or by deleting `config/custom_components/ctc_ecozenith`, and restart Home
+Assistant. If nothing else uses them, switch Modbus TCP and the web interface
+off again at the panel; neither has a login (see
+[Network and exposure](#network-and-exposure)).
+
 ## Releases
 
 Every release is made from a tag that names the version in `manifest.json`:
@@ -904,28 +1014,30 @@ The suite in `tests/` runs without Home Assistant installed and is what CI
 runs: `pip install -r requirements-test.txt` and `python -m pytest -q`. It
 covers the protocol decoding, the menu reading, the dashboard layout and the
 report, all against captured fixtures from the two units. Nothing in it talks
-to a real heat pump or to anything outside the process: the one socket it opens
-is in `tests/test_pymodbus_surface.py`, where a scripted controller listens on
-loopback inside the test process so that the whole chain, from pymodbus's real
-surface down to the register words, can be driven end to end.
+to a real heat pump or to anything outside the process: the sockets it opens
+are on loopback inside the test process, in `tests/test_pymodbus_surface.py`,
+where a scripted controller lets the whole chain from pymodbus's real surface
+down to the register words be driven end to end, and in
+`tests/test_modbus_probe.py`, where the probe meets ports that answer, reset or
+say nothing as told.
 
-`tests/test_homeassistant.py` is the one that needs more than the test
-requirements. It drives the integration
-through a real Home Assistant core, from set-up to reload to the `number`
-service call that writes a control register, with both the Modbus client and
-the display replaced by stand-ins, and it checks the four things a unit test
-cannot: that a failed set-up closes its one Modbus socket, that a reload never
-has two clients open at once, that a setpoint reaches the right register as the
-right raw value and keeps being written until it is released, and that the menu
-is tried three times in total across reloads, not three times per reload. It
-needs `pytest-homeassistant-custom-component`, which pins one Home Assistant
-release and everything that release depends on, so it belongs in a virtual
-environment of its own rather than beside the ordinary suite's requirements.
-It skips itself, with a note, where the plugin is missing:
+The `tests/test_homeassistant*.py` files need more than the test requirements.
+They drive the integration through a real Home Assistant core, from set-up to
+reload to the `number` service call that writes a control register, with both
+the Modbus client and the display replaced by stand-ins, and check what a unit
+test cannot: that a failed set-up closes its one Modbus socket, that a reload
+never has two clients open at once, that a setpoint reaches the right register
+as the right raw value and keeps being written until it is released, and that
+the menu is tried three times in total across reloads, not three times per
+reload, among others. They need `pytest-homeassistant-custom-component`, which
+pins one Home Assistant release and everything that release depends on, so
+they belong in a virtual environment of their own rather than beside the
+ordinary suite's requirements. They skip themselves, with a note, where the
+plugin is missing:
 
 ```sh
 pip install pytest-homeassistant-custom-component
-python -m pytest -q tests/test_homeassistant.py
+python -m pytest -q tests/test_homeassistant*.py
 ```
 
 The whole suite runs in that environment too, with the same `python -m pytest
@@ -935,9 +1047,12 @@ set-up; `tests/conftest.py` switches the mode on wherever pytest-asyncio is
 loaded, so there is nothing to pass by hand. And `tests/ha_stub.py`, which
 stands in for Home Assistant when it is not installed, steps aside when it is:
 the modules then load against the real classes, the keepalive tests record the
-real timer helper instead of the stand-in's, and only the four tests that
-build a coordinator directly skip themselves, since a real core's coordinator
-wants a running instance behind it.
+real timer helper instead of the stand-in's, and the tests that build a
+coordinator directly skip themselves, since a real core's coordinator wants a
+running instance behind it. Leave pymodbus out of that environment: the plugin
+blocks sockets, and `tests/test_pymodbus_surface.py`, which skips itself
+without pymodbus, does not ask for its loopback socket back the way
+`tests/test_modbus_probe.py` does.
 
 The suite runs against stand-ins, so what only a real Home Assistant would
 refuse, a moved import or a selector the real selector does not accept, is
@@ -958,13 +1073,42 @@ uses something on its way out. CI further runs the suite on Python 3.13 and
 `pytest-homeassistant-custom-component`, ruff with the rules in `ruff.toml`,
 hassfest and the HACS checks.
 
-## Roadmap
+### A display page from a new model
 
-- **`test_counters_going_backwards_fall_back_to_lifetime`** puts its sample 400
-  days back, which the year window (`YEAR_MAX_DAYS = 380`) now refuses on its
-  own, so the test passes without reaching the backwards guard it is named
-  after. At 366 days it tests the guard again.
+A model the integration has not met is most often a display page whose
+readings get the wrong captions. The pairing is tested against real pages:
+four of them, from an i255 and an i550 Pro, lie in `tests/fixtures` as
+`widgets_<model>_<screen>.json`, each the screen's widgets with every caption
+resolved through the display's text catalogue, and `REAL_PAGES` in
+`tests/test_modbus_and_catalogue.py` says which reading each caption names, as
+read off the panel itself. A page of a new model comes in the same way. With
+nobody at the panel, `CtcWebClient.async_widgets(screen)` in `web_api.py`
+reads the screen's definition (`/wp/<screen>`), its values (`/vars/<screen>`
+and `/vars/glob`) and its captions (`/txt/<language>/<id>`), one request at a
+time, and presses nothing; the screen numbers of each page are in the stored
+menu of the diagnostics file. Write the widgets out as
+`{"screen": ..., "widgets": [...]}` with the fields the four fixtures have, add
+the page and the captions the panel prints to `REAL_PAGES` and the file to the
+list in `tests/test_fixture_hygiene.py`, and run the pairing over every
+fixture, the old ones too: a rule that puts one layout right can push another
+out of line, which is what the first attempt at 0.15.1's fix did. A fixture
+carries no address from your network and no real serial number, which
+`tests/test_fixture_hygiene.py` checks.
+
+### The quality scale and the Home Assistant floor
+
+`custom_components/ctc_ecozenith/quality_scale.yaml` is Home Assistant's
+integration quality scale as a checklist, every rule with done, todo or exempt
+and why. hassfest reads that file only for Home Assistant's own integrations,
+so `tests/test_quality_scale.py` runs hassfest's checks for the rules marked
+done and keeps the manifest from claiming a tier before every rule of it is
+met. `tests/test_ha_floor.py` holds the Home Assistant version in `hacs.json`
+to what the code uses, and to the one stated under [Install](#install).
 
 ## Licence
 
-Apache 2.0.
+[Apache License 2.0](LICENSE).
+
+CTC, EcoZenith and EcoAir are CTC's names. The icon in `brand/` and the
+sidebar icon of the CTC page are CTC's own logo, used to show which make of
+heat pump this is about; the integration is neither made nor endorsed by CTC.

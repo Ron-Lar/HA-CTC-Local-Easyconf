@@ -42,11 +42,11 @@ rules:
     status: done
     comment: README, the opening paragraphs and What it reads.
   docs-installation-instructions:
-    status: todo
-    comment: README has Setup but no Install section that says how the integration gets into Home Assistant (R74).
+    status: done
+    comment: README, Install, through HACS as a custom repository or by hand, with the Home Assistant it needs and where it is found afterwards; Setup goes on from there.
   docs-removal-instructions:
-    status: todo
-    comment: README does not say how to remove the integration or what stays behind (R74).
+    status: done
+    comment: README, Removing the integration, with what the integration deletes and the two things that stay behind.
   docs-triggers:
     status: exempt
     comment: The integration provides no triggers; the event entity Händelser is described under What it reads.
@@ -80,8 +80,8 @@ rules:
     status: done
     comment: async_unload_entry unloads the platforms, stops the keepalive and shuts the Modbus client for good.
   docs-configuration-parameters:
-    status: todo
-    comment: The options are described where they matter but not listed in one place (R74).
+    status: done
+    comment: README, Options, every option under Configure with its default and range.
   docs-installation-parameters:
     status: done
     comment: README, Setup, names the address, the two ports and the Modbus address the forms ask for.
@@ -128,7 +128,7 @@ rules:
     comment: README, Known limits.
   docs-supported-devices:
     status: done
-    comment: README names the models the integration has been seen on.
+    comment: README names the models the integration has been seen on, the EcoZenith i255, i550 Pro and i360, and promises no others.
   docs-supported-functions:
     status: done
     comment: README, What it reads, Control and Actions.
@@ -137,7 +137,7 @@ rules:
     comment: README, When Modbus does not answer and Reporting a problem.
   docs-use-cases:
     status: done
-    comment: README says what an energy manager does with the controls and the release action, and what the coefficient of performance rests on.
+    comment: README says what an energy manager does with the controls and the release action, which two counters go in the Energy dashboard and why delivered heat does not, and what the coefficient of performance rests on.
   dynamic-devices:
     status: exempt
     comment: One heat pump per entry; no device appears behind it later.
