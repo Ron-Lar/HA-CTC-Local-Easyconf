@@ -168,6 +168,12 @@
     "menu_not_read": {
       "message": "The display's whole menu of {entries} could not be read, so the stored menu stands and nothing has been changed"
     },
+    "menu_busy_and_not_read": {
+      "message": "The panel of {busy} is in use right now, and the display's whole menu of {missed} could not be read, so the stored menu stands. Try again in a moment. Nothing has been changed."
+    },
+    "menu_partly_read": {
+      "message": "The display's menu was read again on only some of the heat pumps. Read whole and saved, the heat pump reloads: {read}. Panel in use right now, try again in a moment: {busy}. Menu not read whole, the stored menu stands: {missed}."
+    },
     "no_counters": {
       "message": "{entry} has no energy counters among the display pages it reads, so there is no coefficient of performance to sample"
     },

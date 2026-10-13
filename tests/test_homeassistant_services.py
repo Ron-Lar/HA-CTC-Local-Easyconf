@@ -17,6 +17,7 @@ pytest-homeassistant-custom-component installed:
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
@@ -66,6 +67,7 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_MENU_VERSION,
     CONF_MODBUS_PORT,
     CONF_SLAVE,
+    CONF_SLOW_INTERVAL,
     CONF_SLOW_PAGES,
     CONF_WEB_PORT,
     CONTROL_KEEPALIVE_SECONDS,
@@ -281,6 +283,240 @@ async def test_reread_menu_refuses_an_entry_that_is_not_loaded(hass):
     with pytest.raises(ServiceValidationError) as refused:
         await _call(hass, "reread_menu", {"config_entry_id": entry.entry_id})
     assert refused.value.translation_key == "entry_not_loaded"
+
+
+# ------------------------------------- reread_menu across a reload and a save
+
+
+def _held_walk(gate: asyncio.Event, reading: MenuReading):
+    """A walk through the menu that lasts until the test lets it end."""
+
+    async def walk(client, require_root=False):
+        await gate.wait()
+        return reading
+
+    return walk
+
+
+def _start(hass, entry) -> asyncio.Future:
+    """The action for one entry, running beside the test.
+
+    Not a task of Home Assistant's, so waiting for the core's tasks does not
+    wait for the action, which is held on the panel lock in these tests.
+    """
+    return asyncio.ensure_future(_call(hass, "reread_menu", {"config_entry_id": entry.entry_id}))
+
+
+@pytest.fixture
+def live_panel(stubs, monkeypatch):
+    """A display that answers, as the harvest tests have it."""
+    LivePanel.instances.clear()
+    monkeypatch.setattr(integration, "CtcWebClient", LivePanel)
+    yield
+
+
+async def test_a_reload_while_the_action_walks_brings_no_second_walker_and_no_write(
+    hass, live_panel
+):
+    stored = pages_to_storage(VSH)
+    entry = await _set_up(hass, **{CONF_MENU: stored, CONF_SLOW_PAGES: stored})
+    (first,) = LivePanel.instances
+    before = dict(entry.options)
+    gate = asyncio.Event()
+    with patch(DISCOVER, _held_walk(gate, _whole(VSH))):
+        action = _start(hass, entry)
+        await _let_the_background_run(hass)
+        assert first.panel.locked()
+
+        # The entry reloads while the action walks: a save, a new address,
+        # entities switched on. The new runtime's client has the entry's one
+        # lock, the one the walk on the old client holds.
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert entry.state is ConfigEntryState.LOADED
+        second = LivePanel.instances[-1]
+        assert second is not first
+        assert second.panel is first.panel
+
+        # The new runtime's first harvest falls due while the action still
+        # walks: it waits rather than walking the same panel beside it.
+        await _fire(hass, MIN_FIRST_DELAY + 1)
+        assert second.visits == []
+
+        gate.set()
+        with pytest.raises(HomeAssistantError) as failed:
+            await action
+    # Nothing written to an entry that was reloaded beneath the walk.
+    assert failed.value.translation_key == "menu_not_read"
+    assert failed.value.translation_placeholders == {"entries": entry.title}
+    await _fire(hass, 1)
+    assert dict(entry.options) == before
+    # The harvest walks once the action has let go, and the old client never.
+    assert second.walked == [page.page for page in VSH]
+    assert first.visits == []
+
+
+async def test_a_save_in_configure_while_the_write_waits_stands_and_the_action_writes_nothing(hass):
+    stored = pages_to_storage(VSH[:3])
+    entry = await _set_up(hass, **{CONF_MENU: stored, CONF_SLOW_PAGES: stored})
+    panel = entry.runtime_data.web_client.panel
+    gate = asyncio.Event()
+    harvested = asyncio.Event()
+
+    async def harvest() -> None:
+        async with panel:
+            await harvested.wait()
+
+    with patch(DISCOVER, _held_walk(gate, _whole(VSH))):
+        action = _start(hass, entry)
+        await _let_the_background_run(hass)
+        # A harvest queues on the panel while the menu is read, and gets it
+        # when the walk is done: the action's write waits behind it.
+        queued = asyncio.ensure_future(harvest())
+        await _let_the_background_run(hass)
+        gate.set()
+        await _let_the_background_run(hass)
+        assert panel.locked() and not action.done()
+
+        # The owner saves a new interval in Configure meanwhile.
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, CONF_SLOW_INTERVAL: 900}
+        )
+        await hass.async_block_till_done()
+        assert entry.state is ConfigEntryState.LOADED
+
+        harvested.set()
+        with pytest.raises(HomeAssistantError) as failed:
+            await action
+        await queued
+    await hass.async_block_till_done()
+    assert failed.value.translation_key == "menu_not_read"
+    # The save stands, and the menu the action read was not written over it.
+    assert entry.options[CONF_SLOW_INTERVAL] == 900
+    assert [page.page for page in pages_from_storage(entry.options[CONF_MENU])] == [
+        page.page for page in VSH[:3]
+    ]
+    assert CONF_MENU_ROOT not in entry.options
+
+
+async def test_an_identity_written_while_the_write_waits_stands_beside_the_menu(hass):
+    """The options are worked out at the write, not before the wait for the panel."""
+    stored = pages_to_storage(VSH[:3])
+    entry = await _set_up(hass, **{CONF_MENU: stored, CONF_SLOW_PAGES: stored})
+    panel = entry.runtime_data.web_client.panel
+    runtime = entry.runtime_data
+    gate = asyncio.Event()
+    harvested = asyncio.Event()
+
+    async def harvest() -> None:
+        async with panel:
+            await harvested.wait()
+
+    with patch(DISCOVER, _held_walk(gate, _whole(VSH))):
+        action = _start(hass, entry)
+        await _let_the_background_run(hass)
+        queued = asyncio.ensure_future(harvest())
+        await _let_the_background_run(hass)
+        gate.set()
+        await _let_the_background_run(hass)
+        assert not action.done()
+
+        # The display's firmware, read in the background while the write
+        # waits: written in place, without a reload.
+        updated = {**IDENTITY, "display_firmware": "2026-09-01"}
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, CONF_IDENTITY: updated}
+        )
+        await hass.async_block_till_done()
+        assert entry.runtime_data is runtime
+
+        harvested.set()
+        await action
+        await queued
+    await hass.async_block_till_done()
+    assert [page.page for page in pages_from_storage(entry.options[CONF_MENU])] == [
+        page.page for page in VSH
+    ]
+    assert entry.options[CONF_IDENTITY] == updated
+    assert entry.state is ConfigEntryState.LOADED
+
+
+# --------------------------------------------------- reread_menu over two pumps
+
+#: A second unit, at another documentation address and with a MAC of its own.
+OTHER_HOST = "192.0.2.56"
+
+
+async def _set_up_another(hass) -> MockConfigEntry:
+    version = str((await async_get_integration(hass, DOMAIN)).version)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=f"{DOMAIN}_{OTHER_HOST}",
+        title=f"{MODEL} ({OTHER_HOST})",
+        data={
+            CONF_HOST: OTHER_HOST,
+            CONF_MODBUS_PORT: 502,
+            CONF_WEB_PORT: 80,
+            CONF_SLAVE: 1,
+            "model": MODEL,
+        },
+        options={
+            CONF_MENU_VERSION: version,
+            CONF_IDENTITY: {**IDENTITY, "mac": "02:00:00:00:00:02"},
+        },
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
+
+
+async def test_reread_menu_over_two_pumps_names_the_one_read_and_the_one_taken(hass):
+    version = str((await async_get_integration(hass, DOMAIN)).version)
+    first = await _set_up(hass)
+    second = await _set_up_another(hass)
+    taken = second.runtime_data.web_client.panel
+    assert taken is not first.runtime_data.web_client.panel, "ett lås per post"
+    discover = AsyncMock(return_value=_whole(VSH))
+    await taken.acquire()  # a harvest walking the second panel
+    try:
+        with patch(DISCOVER, discover), pytest.raises(HomeAssistantError) as failed:
+            await _call(hass, "reread_menu", {})
+    finally:
+        taken.release()
+    await hass.async_block_till_done()
+    # The first was read whole and written, so the answer says so instead of
+    # that nothing has changed, and names the taken one beside it.
+    assert failed.value.translation_key == "menu_partly_read"
+    assert failed.value.translation_placeholders == {
+        "read": first.title,
+        "busy": second.title,
+        "missed": "0",
+    }
+    discover.assert_awaited_once()
+    assert first.options[CONF_MENU_VERSION] == version
+    assert first.options[CONF_MENU_ROOT] == 20
+    assert CONF_MENU_ROOT not in second.options
+    assert first.state is ConfigEntryState.LOADED
+
+
+async def test_reread_menu_over_two_pumps_with_none_read_names_the_missed_and_the_taken(hass):
+    first = await _set_up(hass)
+    second = await _set_up_another(hass)
+    before = dict(first.options)
+    taken = second.runtime_data.web_client.panel
+    await taken.acquire()
+    try:
+        with patch(DISCOVER, AsyncMock(return_value=MenuReading(home_found=False))), pytest.raises(
+            HomeAssistantError
+        ) as failed:
+            await _call(hass, "reread_menu", {})
+    finally:
+        taken.release()
+    # Both are named: a taken panel is no reason to keep quiet about a miss.
+    assert failed.value.translation_key == "menu_busy_and_not_read"
+    assert failed.value.translation_placeholders == {"busy": second.title, "missed": first.title}
+    assert dict(first.options) == before
 
 
 # ------------------------------------------------------------------ cop_sample

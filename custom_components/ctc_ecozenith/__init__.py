@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -214,6 +214,27 @@ _MENU_TRIES: dict[str, int] = {}
 
 #: When each entry's menu was last attempted, on the event loop's clock.
 _MENU_LAST: dict[str, float] = {}
+
+#: Each entry's one panel lock, kept across reloads like the tries and lent to
+#: every web client the entry's set-ups build (CtcWebClient.panel). A lock per
+#: client was a new lock at every reload, while a walk the old runtime had
+#: begun went on: the reread_menu action walks on the client it started with,
+#: and the new runtime's harvest then took a lock nobody held and walked the
+#: same panel at once (roadmap R76). Two walkers on one panel record routes
+#: that are wrong. With the lock kept here the new runtime's harvest and
+#: catch-up queue behind the walk the old one is still making. The options
+#: form borrows a loaded entry's client, and with it this lock; a client of
+#: its own while the entry is not loaded keeps a lock of its own.
+_PANEL_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def panel_lock(entry_id: str) -> asyncio.Lock:
+    """The entry's one panel lock, the same one across every reload of the run."""
+    lock = _PANEL_LOCKS.get(entry_id)
+    if lock is None:
+        lock = _PANEL_LOCKS[entry_id] = asyncio.Lock()
+    return lock
+
 
 #: How many times a run reads the menu again, and how long it waits in between.
 MENU_READ_TRIES = 3
@@ -537,7 +558,14 @@ async def _async_catch_up(
                     _LOGGER.debug(
                         "Reading the display's menu again in %s s", int(wait)
                     )
+                    asked = _MENU_LAST.get(entry.entry_id)
                     await asyncio.sleep(wait)
+                    if _MENU_LAST.get(entry.entry_id) != asked:
+                        # The options form or the reread_menu action read the
+                        # menu while this slept, and that reading counts as the
+                        # last attempt (menu_read_from_the_options): the pause
+                        # starts over from it rather than ending now.
+                        continue
                 _MENU_TRIES[entry.entry_id] = _MENU_TRIES.get(entry.entry_id, 0) + 1
                 _MENU_LAST[entry.entry_id] = hass.loop.time()
                 changed.update(await _async_reread_menu(client, entry, version))
@@ -651,12 +679,30 @@ async def _async_reread_menu(
     earlier one is kept. A display that stopped answering partway is raised
     once that is done, as it was before the walk gave it back in the reading,
     so the rest of the round waits for the next one.
+
+    A reading the options form or the reread_menu action made while this one
+    waited for the panel is not made again (roadmap R76). Both book theirs as
+    the last attempt (menu_read_from_the_options) the moment their walk is
+    done, before anything that queued on the lock gets it, so a last attempt
+    that moved while this waited is somebody else's walk of the same menu:
+    this gives back nothing and walks nothing. Where the action read the whole
+    menu, its write queues on the lock behind this and reloads the entry once
+    it gets it. The try already counted is not given back, since that reading
+    started the count over. The options are read once the walk is done, not
+    before the wait.
     """
-    options = entry.options
+    attempted = _MENU_LAST.get(entry.entry_id)
     async with client.panel:
+        if _MENU_LAST.get(entry.entry_id) != attempted:
+            _LOGGER.debug(
+                "The display's menu was read while this reading waited for the panel, "
+                "so it is not walked again"
+            )
+            return {}
         # Without the operation data root there is no menu to read, only the
         # page the panel happens to show, and that must not replace the menu.
         reading = await async_discover_pages(client, require_root=True)
+    options = entry.options
     _keep_menu_outcome(entry.entry_id, reading)
     if not reading.pages or not reading.complete:
         spent = _MENU_TRIES.get(entry.entry_id, 0)
@@ -737,17 +783,26 @@ def _menu_changes(
     return changed
 
 
+def _still_loaded_with(entry: "CtcConfigEntry", runtime: "CtcRuntime") -> bool:
+    """Whether the entry is loaded, and with the runtime a walk was started on."""
+    return (
+        entry.state is ConfigEntryState.LOADED
+        and getattr(entry, "runtime_data", None) is runtime
+    )
+
+
 async def async_reread_menu_now(
     hass: HomeAssistant, entry: "CtcConfigEntry", version: str
-) -> MenuReading:
+) -> bool:
     """Read the display's whole menu now, for the reread_menu action (roadmap R76).
 
     The same reading as "read the menu again" in the options (R13): under the
-    runtime's one panel lock, which a harvest, the reading owed after an
-    update and the walk to the system information page take as well, and
-    never waited for. A panel already taken raises PanelBusy at once and
-    nothing is walked or written. The tries the background counts start over
-    (menu_read_from_the_options), so a menu it had given up on is owed again.
+    entry's one panel lock (panel_lock), which a harvest, the reading owed
+    after an update and the walk to the system information page take as
+    well, and never waited for. A panel already taken raises PanelBusy at
+    once and nothing is walked or written. The tries the background counts
+    start over (menu_read_from_the_options), so a menu it had given up on is
+    owed again.
 
     A whole reading is folded in by the background's own rule (_menu_changes):
     a page switched off stays off, a new page comes on, the version is
@@ -758,7 +813,18 @@ async def async_reread_menu_now(
     queued while the menu was read walks to its end first, and its store is
     written out before the reload, so the set-up that follows owes the next
     harvest an interval later rather than walking the panel again at once.
-    Returns the reading, for the action to say what came of it.
+    The lock is let go between the walk and the write, so a reading the
+    catch-up queued meanwhile finds the menu read (_async_reread_menu) and
+    gives the lock back at once rather than walking under a write that is
+    about to reload the entry and cut it short.
+
+    The options are worked out under the lock, from the entry's options at
+    that moment, so a save in Configure made while the write waited is not
+    written over. Nothing is written to an entry that has been unloaded or
+    reloaded since the walk began: the walk went on with the old runtime's
+    client, and something changed beneath it: a save in Configure, a new
+    address or entities switched on. The action says so as a menu that could
+    not be read. Returns whether the menu was written.
     """
     runtime = entry.runtime_data
     client = runtime.web_client
@@ -774,14 +840,29 @@ async def async_reread_menu_now(
             "the stored menu stands",
             reading.how_far() if not reading.pages else "only part of it was read",
         )
-        return reading
-    options = {**entry.options, **_menu_changes(entry.options, reading, version)}
+        return False
+    reloaded = (
+        "%s was reloaded or unloaded while the reread_menu action read its menu, so "
+        "nothing is written and the stored menu stands; ask again"
+    )
+    if not _still_loaded_with(entry, runtime):
+        _LOGGER.info(reloaded, entry.title)
+        return False
     async with client.panel:
+        if not _still_loaded_with(entry, runtime):
+            _LOGGER.info(reloaded, entry.title)
+            return False
         memory = getattr(runtime, "harvest_memory", None)
         if memory is not None:
             await memory.async_flush()
+        # Looked at again after the flush, the one wait here, and nothing
+        # awaited from the look to the write.
+        if not _still_loaded_with(entry, runtime):
+            _LOGGER.info(reloaded, entry.title)
+            return False
+        options = {**entry.options, **_menu_changes(entry.options, reading, version)}
         hass.config_entries.async_update_entry(entry, options=options)
-    return reading
+    return True
 
 
 async def _async_name_the_failure(
@@ -1144,6 +1225,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         web_port,
         int(options.get(CONF_LANGUAGE, LANG_SWEDISH)),
     )
+    # The entry's own panel lock in place of the client's, the same across
+    # reloads, so a walk an earlier runtime still makes holds this runtime's
+    # harvest and catch-up back (panel_lock).
+    web_client.panel = panel_lock(entry.entry_id)
 
     # What the unit is, rather than what it is doing. Kept with the entry, so
     # the device has it from the first moment: the panel writes it into its own
@@ -1476,6 +1561,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> None
     # unit is added again, until the next restart.
     for key in _ENTRY_ISSUES:
         ir.async_delete_issue(hass, DOMAIN, f"{entry.entry_id}_{key}")
+    # No set-up of this entry will borrow its panel lock again.
+    _PANEL_LOCKS.pop(entry.entry_id, None)
     # What the unit was seen to have, what its display last gave, the energy
     # counters behind the coefficient of performance and what it alarmed
     # about belong to this entry alone, and go with it.

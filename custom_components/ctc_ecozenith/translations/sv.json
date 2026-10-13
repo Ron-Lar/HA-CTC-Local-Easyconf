@@ -168,6 +168,12 @@
     "menu_not_read": {
       "message": "Hela displayens meny på {entries} kunde inte läsas, så den sparade menyn står kvar och inget har ändrats"
     },
+    "menu_busy_and_not_read": {
+      "message": "Panelen på {busy} används just nu, och hela displayens meny på {missed} kunde inte läsas, så den sparade menyn står kvar. Försök om en stund. Inget har ändrats."
+    },
+    "menu_partly_read": {
+      "message": "Displayens meny lästes om på bara en del av värmepumparna. Läst hel och sparad, värmepumpen laddas om: {read}. Panelen används just nu, försök om en stund: {busy}. Menyn kunde inte läsas hel, den sparade menyn står kvar: {missed}."
+    },
     "no_counters": {
       "message": "{entry} har inga energiräknare bland de displaysidor som hämtas, så det finns ingen värmefaktor att ta prov av"
     },

@@ -364,7 +364,12 @@ class CtcWebClient:
         self._semaphore = asyncio.Semaphore(WEB_MAX_CONCURRENCY)
         #: Held while the panel is being walked. The harvester and the walk to
         #: the system information page both move the physical display, and two
-        #: of them at once would leave it somewhere neither expects.
+        #: of them at once would leave it somewhere neither expects. A lock of
+        #: the client's own until somebody lends it another: a loaded entry
+        #: puts its own in its place at every set-up, one lock for every
+        #: client its reloads build, so a walk on the client of a runtime that
+        #: has since been reloaded still holds the new one's walks back. A
+        #: client the config flow builds for itself keeps its own.
         self.panel = asyncio.Lock()
         self._screen_cache: dict[int, ScreenDef] = {}
         self._text_cache: dict[int, str] = {}
