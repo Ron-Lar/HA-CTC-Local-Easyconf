@@ -9,8 +9,9 @@ exactly this.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -29,8 +30,8 @@ from .const import (
     HP_RUNNING_CODES,
     SG_NORMAL_CODE,
 )
-from .keys import unique_id
 from .entity import async_switch_on_new_defaults
+from .keys import unique_id
 
 
 @dataclass(frozen=True)

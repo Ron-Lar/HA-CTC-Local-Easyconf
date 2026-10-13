@@ -34,4 +34,6 @@ def test_every_issue_id_of_an_entry_is_in_the_list_removal_goes_through():
 def test_removal_deletes_each_of_them():
     remove = INIT.split("async def async_remove_entry")[1]
     loop = remove.split("for key in _ENTRY_ISSUES:")[1]
-    assert loop.lstrip().startswith('ir.async_delete_issue(hass, DOMAIN, f"{entry.entry_id}_{key}")')
+    assert loop.lstrip().startswith(
+        'ir.async_delete_issue(hass, DOMAIN, f"{entry.entry_id}_{key}")'
+    )

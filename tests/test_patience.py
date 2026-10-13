@@ -68,7 +68,7 @@ class FakeSession:
         self.calls.append((kind, url, timeout.total))
         what = self.script.pop(0) if self.script else "ok"
         if what == "timeout":
-            raise asyncio.TimeoutError
+            raise TimeoutError
         return FakeResponse()
 
     async def get(self, url, timeout=None):

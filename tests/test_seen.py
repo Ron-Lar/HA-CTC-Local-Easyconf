@@ -2,7 +2,7 @@
 
 import asyncio
 
-from test_dashboard import NEW_HA, _headings, _items, _section, _values_card, _view
+from test_dashboard import NEW_HA, _headings, _items, _values_card, _view
 
 
 class FakeStore:
@@ -37,7 +37,9 @@ def test_values_other_than_zero_are_remembered_and_announced_once(seen):
     # Nothing new: no save, no announcement. A value going back to zero is still known.
     tracker.note({"hp1_fan": 0.0, "hp1_rps": 0.0})
     assert announced == [True] and len(store.saves) == 1
-    assert tracker.unused({"hp1_fan": "0.0", "hp1_rps": "0.0", "outdoor_temp": "17.0"}) == {"hp1_fan"}
+    assert tracker.unused({"hp1_fan": "0.0", "hp1_rps": "0.0", "outdoor_temp": "17.0"}) == (
+        {"hp1_fan"}
+    )
 
 
 def test_what_was_seen_survives_a_restart(seen):

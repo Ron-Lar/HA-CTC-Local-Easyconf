@@ -1,4 +1,5 @@
-"""An entry with polling switched off names no next attempt, under a real Home Assistant core (R34, R6).
+"""An entry with polling switched off names no next attempt, under a real Home
+Assistant core (R34, R6).
 
 Home Assistant runs no schedule for an entry whose polling is switched off,
 whatever the coordinator's interval says, and since R6 nothing is harvested
@@ -22,7 +23,12 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.loader import async_get_integration
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     MODEL,
@@ -30,21 +36,16 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     _needs_auto_asyncio_mode,
     stubs,
 )
-from test_homeassistant_harvest import (  # noqa: E402,F401  (live_panel is autouse)
+from test_homeassistant_harvest import (  # noqa: F401  (live_panel is autouse)
     INTERVAL,
     LivePanel,
     _fire,
     live_panel,
 )
-from test_homeassistant_menu import VSH, VSH_PAGES  # noqa: E402
+from test_homeassistant_menu import VSH, VSH_PAGES
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
-
-from custom_components.ctc_ecozenith.catalogue import pages_to_storage  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.catalogue import pages_to_storage
+from custom_components.ctc_ecozenith.const import (
     CONF_IDENTITY,
     CONF_MENU,
     CONF_MENU_VERSION,
@@ -55,7 +56,7 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_WEB_PORT,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
 
 NEXT = "nästa försök"
 
@@ -68,7 +69,8 @@ async def _set_up(hass, **entry_fields) -> tuple[MockConfigEntry, LivePanel]:
         domain=DOMAIN,
         unique_id=f"{DOMAIN}_{HOST}",
         title=f"{MODEL} ({HOST})",
-        data={CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1, "model": MODEL},
+        data={CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1,
+              "model": MODEL},
         options={
             CONF_MENU_VERSION: version,
             CONF_IDENTITY: IDENTITY,
@@ -90,7 +92,9 @@ def _harvest_sensor(hass):
     return hass.states.get(_entity_id(hass, "sensor", "display_harvest"))
 
 
-async def test_with_polling_off_no_next_attempt_is_named_and_nothing_is_walked(hass, hass_storage, stubs):
+async def test_with_polling_off_no_next_attempt_is_named_and_nothing_is_walked(
+    hass, hass_storage, stubs
+):
     entry, panel = await _set_up(hass, pref_disable_polling=True)
     state = _harvest_sensor(hass)
     assert state.state == "unknown", "ingen skörd än"
@@ -113,7 +117,7 @@ async def test_with_polling_off_no_next_attempt_is_named_and_nothing_is_walked(h
 
 
 async def test_with_polling_on_the_next_attempt_is_named(hass, hass_storage, stubs):
-    entry, panel = await _set_up(hass)
+    _entry, panel = await _set_up(hass)
     assert _harvest_sensor(hass).attributes.get(NEXT) is not None
     await _fire(hass, MIN_FIRST_DELAY + 1)
     assert panel.walked == VSH_PAGES

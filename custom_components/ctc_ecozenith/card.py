@@ -51,7 +51,7 @@ async def async_register_card(hass: HomeAssistant, version: str) -> None:
     except (RuntimeError, ValueError) as err:
         # Already served, from an earlier load in this process.
         _LOGGER.debug("Static path for the card not registered: %s", err)
-    except Exception as err:  # noqa: BLE001 - the page still loads, and says what is missing
+    except Exception as err:  # the page still loads, and says what is missing
         _LOGGER.warning("Could not serve the CTC card: %s", err)
     if not await _async_register_resource(hass, versioned):
         frontend.add_extra_js_url(hass, versioned)
@@ -87,6 +87,6 @@ async def _async_register_resource(hass: HomeAssistant, versioned: str) -> bool:
         for item in stale:
             await resources.async_delete_item(item["id"])
         return True
-    except Exception as err:  # noqa: BLE001 - a missing card must not stop the integration
+    except Exception as err:  # a missing card must not stop the integration
         _LOGGER.warning("Could not add the CTC card as a Lovelace resource: %s", err)
         return False

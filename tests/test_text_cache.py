@@ -60,7 +60,7 @@ class FakeSession:
         self.calls.append(path)
         if self.stall.get(path, 0) > 0:
             self.stall[path] -= 1
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
         if path == f"/wp/{SCREEN}":
             return FakeResponse((FIXTURES / "wp_118.js").read_bytes())
         if path == f"/vars/{SCREEN}":

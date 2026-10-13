@@ -3,8 +3,6 @@
 import json
 import re
 
-import pytest
-
 from conftest import COMPONENT, load
 
 NEW_HA = (2026, 9)
@@ -134,7 +132,10 @@ def test_boolean_chips_are_there_only_while_on_and_in_the_colour_of_what_they_me
     """R36: a raised alarm reads from the door, and a row of "Av" is not there to read."""
     pump = pumps["vsh"]
     status = _tab(dashboard_views, pump, "overview")[0]
-    by_key = {key: item for key, (_k, item, _e) in zip(_keys(pump, status), _items(status))}
+    by_key = {
+        key: item
+        for key, (_k, item, _e) in zip(_keys(pump, status), _items(status), strict=True)
+    }
     # The theme's colours, by name: the card turns "error" into --error-color.
     assert {key: item.get("color") for key, item in by_key.items() if "on_state" in item} == {
         "alarm": "error",
@@ -184,7 +185,9 @@ def test_the_key_readings_are_large_numbers_that_hide_while_they_have_nothing(
     ]
     (card,) = _cards(readings)
     assert card["type"] == READINGS
-    items = dict(zip(_keys(pump, readings), (i for _k, i, _e in _items(readings))))
+    items = dict(
+        zip(_keys(pump, readings), (i for _k, i, _e in _items(readings)), strict=True)
+    )
     # The coefficient of performance is the one figure that stays while merely
     # unknown, with its reason under it (R35); everything else hides.
     assert all(item["hide_unavailable"] for key, item in items.items() if key != "cop_day")
@@ -204,7 +207,9 @@ def test_the_coefficient_of_performance_says_what_it_rests_on_and_why_it_is_empt
         ("performance", "Energi och värmefaktor", "compressor_kwh"),
     ):
         section = _section(_tab(dashboard_views, pump, tab), heading)
-        items = dict(zip(_keys(pump, section), (i for _k, i, _e in _items(section))))
+        items = dict(
+            zip(_keys(pump, section), (i for _k, i, _e in _items(section)), strict=True)
+        )
         for key, item in items.items():
             if key.startswith("cop_"):
                 # Today's attribute names and the English ones they may get, so
@@ -313,7 +318,9 @@ def test_a_control_says_what_it_is_and_is_never_hidden(dashboard_views, pumps):
     sections = _tab(dashboard_views, pump, "controls")
     by_key = {}
     for section in sections:
-        by_key.update(dict(zip(_keys(pump, section), (i for _k, i, _e in _items(section)))))
+        by_key.update(
+            zip(_keys(pump, section), (i for _k, i, _e in _items(section)), strict=True)
+        )
     # The heading already says control, so the name drops the "Styr".
     assert by_key["ctl_room_setpoint_1"]["name"] == "Rumsbörvärde"
     assert by_key["ctl_immersion_lower"]["name"] == "Max elpatron nedre"
@@ -421,7 +428,8 @@ def test_performance_opens_with_the_flow_against_its_setpoint_not_the_overviews_
 def test_the_weeks_and_months_coefficient_take_their_place_when_the_pump_has_them(
     dashboard_views, pumps
 ):
-    """V4 and R25: the page has the place before the sensors exist, and shows nothing until they do."""
+    """V4 and R25: the page has the place before the sensors exist, and shows nothing
+    until they do."""
     pump = pumps["vsh"]
     assert not {"cop_week", "cop_month"} & pump["entities"].keys()
     overview = _tab(dashboard_views, pump, "overview")
@@ -443,7 +451,7 @@ def test_the_weeks_and_months_coefficient_take_their_place_when_the_pump_has_the
     cop = _section(performance, "Värmefaktor per dygn")["cards"][1]
     assert cop["entities"] == [pump["entities"]["cop_day"], pump["entities"]["cop_month"]]
     # Both are explained, say what they rest on, and are listed with the rest.
-    items = {key: item for key, (_k, item, _e) in zip(keys, _items(readings))}
+    items = {key: item for key, (_k, item, _e) in zip(keys, _items(readings), strict=True)}
     for key in ("cop_week", "cop_month"):
         assert items[key]["explanation"].startswith("Värmefaktor")
         assert items[key]["sub"] == ["underlag", "basis"] and items[key]["show_reason"] is True
@@ -593,7 +601,8 @@ def test_a_button_is_on_the_controls_tab_and_not_in_the_list_of_values(dashboard
 def test_the_supplied_power_register_is_named_without_its_number_and_keeps_its_identity(
     const, explanations
 ):
-    """V6: the register number is the source row's to show, and the unique_id never held the name."""
+    """V6: the register number is the source row's to show, and the unique_id never
+    held the name."""
     (power,) = [d for d in const.MODBUS_SENSORS if d.key == "hp1_power"]
     assert power.name == "Tillförd effekt värmepump"
     assert power.address == 62331
@@ -786,7 +795,9 @@ def test_display_rows_are_explained_by_their_label(explanations):
     )
     assert explanations.display_explanation("Inverter", "x").startswith("Temperaturen i invertern")
     assert explanations.display_explanation("Avgiven värme totalt", "x").startswith("All värme")
-    assert explanations.display_explanation("Avgiven värme/30 dagar", "x").startswith("Värme levererad")
+    assert explanations.display_explanation("Avgiven värme/30 dagar", "x").startswith(
+        "Värme levererad"
+    )
     assert explanations.display_explanation("Avgiven värme", "x").startswith("Värmeeffekten")
     assert explanations.display_explanation("Energy output total", "x").startswith("All värme")
     # The i550 Pro's overview picture has numbers without a heading of their own.
@@ -843,7 +854,10 @@ def test_the_button_is_a_control_of_its_own_with_a_word_on_it(dashboard_views, p
     # number has not.
     assert item["explanation"].startswith("Släpper all styrning")
     assert "fem minuter" in item["explanation"] and "Släpp styrningen" in item["explanation"]
-    assert "release" not in dashboard_views.TEXT["sv"] and "control_note" not in dashboard_views.TEXT["sv"]
+    assert (
+        "release" not in dashboard_views.TEXT["sv"]
+        and "control_note" not in dashboard_views.TEXT["sv"]
+    )
 
 
 def test_the_address_of_the_web_interface(const):

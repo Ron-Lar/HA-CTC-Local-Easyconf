@@ -14,8 +14,6 @@ from __future__ import annotations
 import asyncio
 import pathlib
 
-import pytest
-
 from test_panel_walk import SYSTEM_ROWS, TREE, FakePanel
 
 COMPONENT = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "ctc_ecozenith"
@@ -67,8 +65,10 @@ class Display:
             return out
         if screen == self.heatpump:
             return [
-                widget(index=0, kind=2, x=10, y=40, width=100, height=20, visible=True, label="Modell"),
-                widget(index=1, kind=2, x=200, y=40, width=100, height=20, visible=True, label="EA720M"),
+                widget(index=0, kind=2, x=10, y=40, width=100, height=20, visible=True,
+                       label="Modell"),
+                widget(index=1, kind=2, x=200, y=40, width=100, height=20, visible=True,
+                       label="EA720M"),
                 widget(index=2, kind=2, x=10, y=70, width=160, height=20, visible=True,
                        label="Programversion VP-styrkort"),
                 widget(index=3, kind=3, x=200, y=70, width=100, height=20, visible=True,

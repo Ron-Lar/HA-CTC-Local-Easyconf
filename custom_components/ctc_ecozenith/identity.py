@@ -40,10 +40,10 @@ an i255 and an i550 Pro even though the text ids behind them are not.
 
 from __future__ import annotations
 
-import logging
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Awaitable, Callable
+import logging
+from typing import Any
 
 from .const import (
     CONF_IDENTITY,
@@ -92,7 +92,7 @@ class Identity:
         return {k: v for k, v in asdict(self).items() if v is not None}
 
     @classmethod
-    def from_dict(cls, stored: dict[str, Any] | None) -> "Identity":
+    def from_dict(cls, stored: dict[str, Any] | None) -> Identity:
         stored = stored or {}
         return cls(
             **{
@@ -127,7 +127,7 @@ class Identity:
         """Whether the heat pump's own screen still has something to give."""
         return not all((self.heatpump_model, self.heatpump_firmware))
 
-    def merged_with(self, newer: "Identity") -> "Identity":
+    def merged_with(self, newer: Identity) -> Identity:
         """Take what the newer read found, and keep the rest.
 
         A value that was actually read wins, because firmware gets updated and
@@ -177,7 +177,7 @@ class IdentityScreens:
         return {k: v for k, v in asdict(self).items() if v is not None}
 
     @classmethod
-    def from_dict(cls, stored: Any) -> "IdentityScreens":
+    def from_dict(cls, stored: Any) -> IdentityScreens:
         screens = cls()
         if not isinstance(stored, dict):
             return screens
@@ -497,7 +497,7 @@ async def _async_put_back(client: CtcWebClient, origin: int) -> None:
 async def async_read_identity_via_panel(
     client: CtcWebClient,
     depth: int = 4,
-    restore: "Callable[[int], Awaitable[Any]] | None" = None,
+    restore: Callable[[int], Awaitable[Any]] | None = None,
     quick_menu: bool = False,
     screens: IdentityScreens | None = None,
 ) -> Identity:
@@ -551,7 +551,7 @@ async def async_read_identity_via_panel(
         if restore is not None:
             try:
                 await restore(origin)
-            except Exception as err:  # noqa: BLE001 - the panel matters more
+            except Exception as err:  # the panel matters more
                 _LOGGER.debug("Restoring page %s failed: %s", origin, err)
                 await _async_put_back(client, origin)
         else:

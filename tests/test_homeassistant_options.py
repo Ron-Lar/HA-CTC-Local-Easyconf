@@ -24,9 +24,12 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-import voluptuous as vol  # noqa: E402  (comes with Home Assistant)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.loader import async_get_integration
+import voluptuous as vol  # comes with Home Assistant
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     FakeModbus,
     _advance,
     _let_the_background_run,
@@ -34,19 +37,15 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     _set_up,
     stubs,
 )
-from test_homeassistant_menu import VSH, VSH_PAGES, _pages_in  # noqa: E402
+from test_homeassistant_menu import VSH, VSH_PAGES, _pages_in
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-
-import custom_components.ctc_ecozenith as integration  # noqa: E402
-from custom_components.ctc_ecozenith.catalogue import (  # noqa: E402
+import custom_components.ctc_ecozenith as integration
+from custom_components.ctc_ecozenith.catalogue import (
     MenuReading,
     PanelBusy,
     pages_to_storage,
 )
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.const import (
     CONF_CHECK_UPDATES,
     CONF_ENABLE_CONTROL,
     CONF_FAST_INTERVAL,

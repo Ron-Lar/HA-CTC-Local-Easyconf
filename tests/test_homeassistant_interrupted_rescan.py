@@ -26,25 +26,24 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-import voluptuous as vol  # noqa: E402  (comes with Home Assistant)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.loader import async_get_integration
+import voluptuous as vol  # comes with Home Assistant
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _advance,
     _let_the_background_run,
     _needs_auto_asyncio_mode,
     _set_up,
     stubs,
 )
-from test_homeassistant_menu import VSH, VSH_PAGES, _pages_in, menu_page  # noqa: E402
-from test_homeassistant_options import RESCAN, _defaults  # noqa: E402
+from test_homeassistant_menu import VSH, VSH_PAGES, _pages_in, menu_page
+from test_homeassistant_options import RESCAN, _defaults
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-
-import custom_components.ctc_ecozenith as integration  # noqa: E402
-from custom_components.ctc_ecozenith.catalogue import MenuReading, pages_to_storage  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+import custom_components.ctc_ecozenith as integration
+from custom_components.ctc_ecozenith.catalogue import MenuReading, pages_to_storage
+from custom_components.ctc_ecozenith.const import (
     CONF_MENU,
     CONF_MENU_VERSION,
     CONF_SLOW_INTERVAL,
@@ -67,7 +66,8 @@ def _options_of(schema: vol.Schema, field: str) -> list[str]:
 async def test_a_page_only_an_interrupted_reading_found_keeps_its_tick_across_the_form(hass, stubs):
     stored = pages_to_storage(VSH)
     # A version behind: the background's first try misses, so the reading is owed.
-    entry = await _set_up(hass, **{CONF_MENU: stored, CONF_SLOW_PAGES: stored, CONF_MENU_VERSION: "0.9.0"})
+    entry = await _set_up(hass, **{CONF_MENU: stored, CONF_SLOW_PAGES: stored,
+                                   CONF_MENU_VERSION: "0.9.0"})
     await _let_the_background_run(hass)
     assert entry.state is ConfigEntryState.LOADED
     version = str((await async_get_integration(hass, DOMAIN)).version)
@@ -80,19 +80,21 @@ async def test_a_page_only_an_interrupted_reading_found_keeps_its_tick_across_th
             flow["flow_id"], {"rescan": True, CONF_SLOW_PAGES: TICKED}
         )
         assert result["type"] is FlowResultType.FORM and result["step_id"] == "rescan"
-        assert _options_of(result["data_schema"], CONF_SLOW_PAGES) == TICKED + ["27"], (
+        assert _options_of(result["data_schema"], CONF_SLOW_PAGES) == [*TICKED, "27"], (
             "de sju lagrade sidorna står kvar och den nya erbjuds"
         )
         result = await hass.config_entries.options.async_configure(
-            flow["flow_id"], {CONF_SLOW_PAGES: TICKED + ["27"]}
+            flow["flow_id"], {CONF_SLOW_PAGES: [*TICKED, "27"]}
         )
         assert result["type"] is FlowResultType.CREATE_ENTRY
     await _let_the_background_run(hass)
     assert entry.state is ConfigEntryState.LOADED
 
-    assert _pages_in(entry, CONF_SLOW_PAGES) == VSH_PAGES + [27], "sidan är ikryssad"
-    assert _pages_in(entry, CONF_MENU) == VSH_PAGES + [27], "och menyn känner den"
-    assert entry.options[CONF_MENU_VERSION] == "0.9.0", "men ingen version stämplas: läsningen är skyldig"
+    assert _pages_in(entry, CONF_SLOW_PAGES) == [*VSH_PAGES, 27], "sidan är ikryssad"
+    assert _pages_in(entry, CONF_MENU) == [*VSH_PAGES, 27], "och menyn känner den"
+    assert entry.options[CONF_MENU_VERSION] == "0.9.0", (
+        "men ingen version stämplas: läsningen är skyldig"
+    )
     assert 27 in [page.page for page in entry.runtime_data.pages], "och den skördas"
 
     # A week on, the form is opened to change the interval. It offers the page,
@@ -110,23 +112,24 @@ async def test_a_page_only_an_interrupted_reading_found_keeps_its_tick_across_th
     await _let_the_background_run(hass)
     assert entry.state is ConfigEntryState.LOADED
     assert entry.options[CONF_SLOW_INTERVAL] == 900
-    assert _pages_in(entry, CONF_SLOW_PAGES) == VSH_PAGES + [27], "sidan står kvar i urvalet"
+    assert _pages_in(entry, CONF_SLOW_PAGES) == [*VSH_PAGES, 27], "sidan står kvar i urvalet"
 
     # The whole reading the background still owes replaces the menu, tick kept.
-    stubs.discover.return_value = MenuReading(pages=VSH + [NEW_PAGE], complete=True)
+    stubs.discover.return_value = MenuReading(pages=[*VSH, NEW_PAGE], complete=True)
     await _advance(hass, integration.MENU_READ_RETRY.total_seconds() + 60)
     await hass.async_block_till_done()
     await _let_the_background_run(hass)
     assert entry.options[CONF_MENU_VERSION] == version
-    assert _pages_in(entry, CONF_MENU) == VSH_PAGES + [27]
-    assert _pages_in(entry, CONF_SLOW_PAGES) == VSH_PAGES + [27]
+    assert _pages_in(entry, CONF_MENU) == [*VSH_PAGES, 27]
+    assert _pages_in(entry, CONF_SLOW_PAGES) == [*VSH_PAGES, 27]
     assert entry.state is ConfigEntryState.LOADED
 
 
 async def test_a_missed_reading_from_the_options_still_writes_no_menu(hass, stubs):
     """The other branch stands: nothing found, nothing written but the person's own fields."""
     stored = pages_to_storage(VSH)
-    entry = await _set_up(hass, **{CONF_MENU: stored, CONF_SLOW_PAGES: stored, CONF_MENU_VERSION: "0.9.0"})
+    entry = await _set_up(hass, **{CONF_MENU: stored, CONF_SLOW_PAGES: stored,
+                                   CONF_MENU_VERSION: "0.9.0"})
     await _let_the_background_run(hass)
     stored_menu = entry.options[CONF_MENU]
     with patch(RESCAN, AsyncMock(return_value=MenuReading())):

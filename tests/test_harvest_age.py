@@ -12,13 +12,13 @@ page at all is a failure of the display, counted by Patience as before.
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 import pathlib
-from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 COMPONENT = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "ctc_ecozenith"
 
@@ -108,7 +108,8 @@ def _page(const, number, raw_index=0):
 def harvester(coordinator, web_api, const):
     display = FakeDisplay(web_api, {210: [21], 220: [22]})
     pages = [_page(const, 21), _page(const, 22)]
-    web = coordinator.CtcWebCoordinator(hass=object(), client=display, pages=pages, interval=INTERVAL)
+    web = coordinator.CtcWebCoordinator(hass=object(), client=display, pages=pages,
+                                        interval=INTERVAL)
     return web, display
 
 
@@ -129,7 +130,9 @@ def test_a_page_not_reached_keeps_its_old_value_and_its_old_moment(harvester):
     display.values[210] = [31]
     display.values[220] = [32]
     display.unreachable.add(22)
-    assert _round(web) == {"p21_v": 31.0, "p22_v": 22.0}, "sidan som inte nåddes behåller sitt värde"
+    assert _round(web) == {"p21_v": 31.0, "p22_v": 22.0}, (
+        "sidan som inte nåddes behåller sitt värde"
+    )
     assert web.read_at["p21_v"] > first["p21_v"]
     assert web.read_at["p22_v"] == first["p22_v"], "men inte en ny lästid"
     assert web.pages_read == [21] and web.pages_missed == [22]
@@ -230,10 +233,10 @@ def test_the_last_error_is_carried_in_the_failure(harvester):
     assert web.last_failure == str(raised.value)
 
 
-def test_a_harvest_that_worked_clears_the_failure(harvester):
+def test_a_harvest_that_worked_clears_the_failure(harvester, coordinator):
     web, display = harvester
     display.unreachable.update({21, 22})
-    with pytest.raises(Exception):
+    with pytest.raises(coordinator.UpdateFailed):
         run(web._async_update_data())
     display.unreachable.clear()
     _round(web)

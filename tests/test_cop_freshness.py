@@ -21,18 +21,18 @@ needs the class itself.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, date, datetime, timedelta
 import pathlib
-from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 COMPONENT = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "ctc_ecozenith"
 
-NOW = datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 #: Three intervals of half an hour, the coordinator's own patience.
 STALE_AFTER = timedelta(minutes=90)
 
@@ -46,7 +46,7 @@ def run(coro):
 
 
 def _at(hour, minute=0):
-    return datetime(2026, 10, 9, hour, minute, tzinfo=timezone.utc)
+    return datetime(2026, 10, 9, hour, minute, tzinfo=UTC)
 
 
 class FakeWeb:
@@ -102,7 +102,9 @@ def test_a_stale_counter_row_gives_the_notice_named_and_dated(cop):
     # Without a label the key names it; a row of None is skipped.
     web = _web(heat_read=STALE, consumed_read=STALE)
     bare = SimpleNamespace(key=HEAT.key)
-    assert "p25_avgiven_varme_totalt har inte lästs" in cop.display_silence(web, None, bare, CONSUMED)
+    assert "p25_avgiven_varme_totalt har inte lästs" in (
+        cop.display_silence(web, None, bare, CONSUMED)
+    )
 
 
 def test_a_fresh_or_unread_row_gives_no_notice(cop):
@@ -110,7 +112,8 @@ def test_a_fresh_or_unread_row_gives_no_notice(cop):
     # Never read: not stale but unread, and the sensors say so in other words.
     assert cop.display_silence(_web(), HEAT, CONSUMED) is None
     # A double without the rule, as the span tests build, cannot be stale.
-    plain = SimpleNamespace(data={HEAT.key: 1.0}, last_update_success=True, read_at={HEAT.key: STALE})
+    plain = SimpleNamespace(data={HEAT.key: 1.0}, last_update_success=True,
+                            read_at={HEAT.key: STALE})
     assert cop.display_silence(plain, HEAT) is None
     assert cop.display_silence(None, HEAT) is None
     # No rows asked about: the old behaviour, nothing while the display answers.
@@ -155,8 +158,12 @@ def test_the_pair_is_read_at_the_heat_rows_moment_only_while_both_are_fresh(cop)
     both = _runtime_for_sampling(_web(heat_read=FRESH, consumed_read=later))
     assert cop.counters_read_at(both) == FRESH
     # One of the two stale, or never read: no moment, so no sample.
-    assert cop.counters_read_at(_runtime_for_sampling(_web(heat_read=FRESH, consumed_read=STALE))) is None
-    assert cop.counters_read_at(_runtime_for_sampling(_web(heat_read=STALE, consumed_read=FRESH))) is None
+    assert cop.counters_read_at(
+        _runtime_for_sampling(_web(heat_read=FRESH, consumed_read=STALE))
+    ) is None
+    assert cop.counters_read_at(
+        _runtime_for_sampling(_web(heat_read=STALE, consumed_read=FRESH))
+    ) is None
     assert cop.counters_read_at(_runtime_for_sampling(_web(heat_read=FRESH))) is None
     assert cop.counters_read_at(_runtime_for_sampling(_web())) is None
     assert cop.counters_read_at(_runtime_for_sampling(None)) is None
@@ -205,9 +212,9 @@ def test_the_tracker_keeps_a_reading_once(cop):
     assert len(store.data["recent"]) == 2
     # The day's figure reads the newest sample old enough, as ever: the one
     # from noon, 24 hours before.
-    assert revived.result_day(22480.0, 9124.0, now=read + timedelta(hours=30)).value == pytest.approx(
-        40 / 12, abs=0.01
-    )
+    assert revived.result_day(
+        22480.0, 9124.0, now=read + timedelta(hours=30)
+    ).value == pytest.approx(40 / 12, abs=0.01)
 
 
 def test_a_reading_without_a_moment_is_now_and_always_new(cop):
@@ -251,11 +258,12 @@ def _runtime(cop, web, *, starts=False):
     # sample that serves as yesterday is laid 24 hours before the clock;
     # the rows' freshness is judged by the double against NOW, which is
     # a separate matter.
-    run(tracker.async_record(22400.0, 9100.0, now=datetime.now(timezone.utc) - timedelta(hours=24)))
+    run(tracker.async_record(22400.0, 9100.0, now=datetime.now(UTC) - timedelta(hours=24)))
     return SimpleNamespace(
         cop=tracker,
         web=web,
-        modbus=SimpleNamespace(answered={62341}, descriptions=[], data={"compressor_hours_24h": 240}),
+        modbus=SimpleNamespace(answered={62341}, descriptions=[],
+                               data={"compressor_hours_24h": 240}),
         device={"identifiers": {("ctc_ecozenith", "pump")}},
         energy_out=HEAT,
         energy_in=CONSUMED,
@@ -275,7 +283,8 @@ def _runtime(cop, web, *, starts=False):
 
 def _cop_sensors(sensor, runtime):
     added = []
-    entry = SimpleNamespace(runtime_data=runtime, entry_id="test", options={}, async_on_unload=lambda f: None)
+    entry = SimpleNamespace(runtime_data=runtime, entry_id="test", options={},
+                            async_on_unload=lambda f: None)
     run(sensor.async_setup_entry(None, entry, added.extend))
     return {s._span: s for s in added if isinstance(s, sensor.CtcCopSensor)}
 
@@ -373,8 +382,8 @@ def test_the_notice_reads_the_attribute_the_coordinator_actually_has(coordinator
     assert getattr(web, cop.LAST_HARVEST_ATTRIBUTE) is None
     # Moments the clock has long passed, so the coordinator's own rule, which
     # judges against the clock, calls the row stale whenever this runs.
-    read = datetime(2026, 1, 1, 8, 0, tzinfo=timezone.utc)
-    harvested = datetime(2026, 1, 1, 9, 0, tzinfo=timezone.utc)
+    read = datetime(2026, 1, 1, 8, 0, tzinfo=UTC)
+    harvested = datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
     web.last_update_success = False
     web.read_at = {"a": read}
     web.last_harvest = harvested
@@ -386,4 +395,6 @@ def test_the_notice_reads_the_attribute_the_coordinator_actually_has(coordinator
     assert cop.row_read_at(web, "a") == read
     assert cop.row_is_fresh(web, "a") is False
     assert cop.stale_rows(web, [row]) == [(row, read)]
-    assert cop.display_silence(web, row) == "displayens rad A har inte lästs sedan 2026-01-01T08:00:00+00:00"
+    assert cop.display_silence(web, row) == (
+        "displayens rad A har inte lästs sedan 2026-01-01T08:00:00+00:00"
+    )

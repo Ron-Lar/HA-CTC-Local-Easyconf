@@ -17,8 +17,8 @@ from types import SimpleNamespace
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 
 @pytest.fixture(scope="module")

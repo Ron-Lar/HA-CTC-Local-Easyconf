@@ -4,12 +4,10 @@ that count hours, starts and minutes, on the display and over Modbus (R14)."""
 from __future__ import annotations
 
 import asyncio
-import json
-import pathlib
 
 import pytest
 
-from conftest import COMPONENT, FIXTURES
+from conftest import COMPONENT
 
 
 def run(coro):
@@ -115,7 +113,8 @@ def test_starts_per_day_are_a_measurement_although_they_have_no_unit(catalogue):
     assert catalogue._is_period_count("Antal starter /24")
     # Only that row: the other unitless rows with a "/" in the name are the
     # refrigerant pairs, and a "/" alone does not make a count.
-    for label in ("Överhettning S/H 1", "Förångning °C/bar 2", "Kondensering °C/bar 1", "Antal starter"):
+    for label in ("Överhettning S/H 1", "Förångning °C/bar 2", "Kondensering °C/bar 1",
+                  "Antal starter"):
         assert not catalogue._is_period_count(label), label
         assert catalogue.display_state_class(None, label) != "measurement", label
 
@@ -160,7 +159,8 @@ def test_a_clock_row_with_a_missing_half_has_no_value(catalogue, const):
 
 
 def test_a_plain_reading_still_scales_as_before(catalogue, const):
-    value = const.SlowValue(key="k", label="l", page=1, screen=2, fmt="%.1f", var_indices=[1], scale=0.1)
+    value = const.SlowValue(key="k", label="l", page=1, screen=2, fmt="%.1f", var_indices=[1],
+                            scale=0.1)
     assert catalogue.numeric_value(value, [0, 215]) == pytest.approx(21.5)
     assert catalogue.numeric_value(value, [0, 9999]) is None
 
@@ -315,7 +315,9 @@ def test_every_time_register_is_a_duration(const):
     timed = [d for d in const.MODBUS_SENSORS + const.MODBUS_SETTINGS if d.unit in ("h", "min")]
     assert {d.address for d in timed} >= {62214, 62234, 61503}
     for description in timed:
-        assert const.device_class_for(description.unit, description.device_class) == "duration", description.key
+        assert const.device_class_for(description.unit, description.device_class) == "duration", (
+            description.key
+        )
     # The lifetime counter is a sum, the day's minutes and the hours left are not.
     by_key = {d.key: d for d in timed}
     assert by_key["compressor_hours"].state_class == "total_increasing"

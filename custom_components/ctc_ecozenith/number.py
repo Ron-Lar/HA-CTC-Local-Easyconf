@@ -28,8 +28,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import CtcConfigEntry
 from .attribute_names import with_english
 from .const import CONTROL_NUMBERS, ControlRegister
-from .keys import unique_id
 from .entity import async_switch_on_new_defaults
+from .keys import unique_id
 from .modbus_api import CtcModbusError
 from .overrides import pump_number
 
@@ -124,7 +124,9 @@ class CtcControlNumber(CoordinatorEntity, NumberEntity):
             # The English twin is a boolean rather than a Swedish word.
             "control_active": overriding,
             "register": str(self._register.address),
-            "not": "flyktigt register, nollställs av pumpen cirka fem minuter efter sista skrivningen",
+            "not": (
+                "flyktigt register, nollställs av pumpen cirka fem minuter efter sista skrivningen"
+            ),
         }
         if self._register.mirror is not None:
             # The pump's own setting beside what Home Assistant holds (R49),
@@ -137,7 +139,7 @@ class CtcControlNumber(CoordinatorEntity, NumberEntity):
         return with_english(attributes)
 
     async def async_set_native_value(self, value: float) -> None:
-        raw = int(round(value / self._register.scale))
+        raw = round(value / self._register.scale)
         try:
             await self._runtime.control.async_set(self._register.address, raw)
         except CtcModbusError as err:

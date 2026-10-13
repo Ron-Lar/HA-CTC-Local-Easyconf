@@ -13,8 +13,8 @@ import logging
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 
 def _description(const, key: str):
@@ -58,7 +58,8 @@ def test_pump_speeds_carry_one_decimal(modbus_api, const):
 
 
 @pytest.mark.parametrize(
-    "word, expected", [(32768, 32768), (32769, 32769), (40000, 40000), (65535, 65535), (32767, None)]
+    "word, expected",
+    [(32768, 32768), (32769, 32769), (40000, 40000), (65535, 65535), (32767, None)]
 )
 def test_a_one_word_counter_is_read_without_a_sign(modbus_api, const, word, expected):
     """62191 counts kWh in one word. Read with a sign, 32 769 came out as -32 767,

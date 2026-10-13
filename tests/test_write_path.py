@@ -12,8 +12,8 @@ import asyncio
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 
 def run(coro):
@@ -24,7 +24,7 @@ class FakeResult:
     def __init__(self, error: bool = False) -> None:
         self._error = error
 
-    def isError(self) -> bool:  # noqa: N802 - pymodbus' spelling
+    def isError(self) -> bool:  # pymodbus' spelling
         return self._error
 
 
@@ -68,9 +68,9 @@ def test_every_writable_address_is_in_the_thousand_block(const):
     assert const.CONTROL_ADDRESSES, "nothing would be writable at all"
     for address in const.CONTROL_ADDRESSES:
         assert 1000 <= address < 1100, address
-    assert const.CONTROL_ADDRESSES == {
+    assert {
         register.address for register in const.CONTROL_NUMBERS + const.CONTROL_SELECTS
-    }
+    } == const.CONTROL_ADDRESSES
     # The virtual inputs register has no entity, no service and no proof against
     # a unit, so nothing may write it until it comes with all three.
     assert const.CONTROL_VDI_REGISTER not in const.CONTROL_ADDRESSES
@@ -162,9 +162,9 @@ def test_releasing_a_control_writes_nothing(manager_and_fake):
     assert manager.active == {}
 
 
-def test_the_manager_cannot_be_talked_into_the_stored_settings(manager_and_fake):
+def test_the_manager_cannot_be_talked_into_the_stored_settings(manager_and_fake, modbus_api):
     manager, fake = manager_and_fake
-    with pytest.raises(Exception):
+    with pytest.raises(modbus_api.CtcModbusError):
         run(manager.async_set(61503, 2))
     assert fake.writes == []
     # And it does not claim to be in control of what it never wrote.

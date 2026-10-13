@@ -90,7 +90,7 @@ def test_the_catalogues_controls_get_the_widgets_the_page_was_drawn_for(const):
     # the card (number.py), so this is what the Controls tab draws for each.
     registers = list(const.CONTROL_NUMBERS)
     kinds = _widgets(*((r.minimum, r.maximum, r.step) for r in registers))
-    assert dict(zip((r.key for r in registers), kinds)) == {
+    assert dict(zip((r.key for r in registers), kinds, strict=True)) == {
         "ctl_max_rps": "slider",
         "ctl_immersion_lower": "slider",
         "ctl_immersion_upper": "slider",

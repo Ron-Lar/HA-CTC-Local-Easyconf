@@ -10,7 +10,8 @@ line-length = 100
 # The tests import their helpers (conftest, ha_stub, fake_pymodbus and the
 # fixtures of test_homeassistant) as top-level modules, as pytest puts tests/
 # on the path; listed here, the import sorter files them with the repository's
-# own code rather than among the third-party packages.
+# own code rather than among the third-party packages, in a section of their
+# own (see [lint.isort]).
 src = [".", "tests"]
 
 [lint]
@@ -18,11 +19,32 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 ignore = [
     # Home Assistant entity classes set attributes rather than properties.
     "RUF012",
+    # The texts are Swedish and written with their own letters and signs: å, ä,
+    # ö, ⓘ, the typographic quotes and the dashes the tests look for so as to
+    # keep them out of the texts. None of them is a look-alike to correct.
+    "RUF001",
+    "RUF002",
+    "RUF003",
 ]
 
 [lint.isort]
 force-sort-within-sections = true
 combine-as-imports = true
+# The test helpers come after the third-party packages and before the
+# integration's own package: test_homeassistant puts the repository root on the
+# path that custom_components is imported from, so a test file run on its own
+# finds the integration only when the helper has been imported first.
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "test-helpers",
+    "first-party",
+    "local-folder",
+]
+
+[lint.isort.sections]
+"test-helpers" = ["conftest", "fake_panel", "fake_pymodbus", "ha_stub", "test_*"]
 
 [lint.per-file-ignores]
 # stats.py is a shared file, copied verbatim between these integrations so the
@@ -36,3 +58,8 @@ combine-as-imports = true
 # for.
 "custom_components/*/explanations.py" = ["E501"]
 "custom_components/*/const.py" = ["E501"]
+# The tests under a real Home Assistant share the fixtures of
+# test_homeassistant.py by importing them, and pytest hands each one to a test
+# as the parameter of the same name. To pyflakes that parameter redefines the
+# import; to pytest it is how the fixture is reached.
+"tests/test_homeassistant_*.py" = ["F811"]

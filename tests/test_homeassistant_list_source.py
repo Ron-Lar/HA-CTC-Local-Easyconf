@@ -1,4 +1,5 @@
-"""The page's source line names a display row's screen and place, under a real Home Assistant core (R39).
+"""The page's source line names a display row's screen and place, under a real
+Home Assistant core (R39).
 
 dashboard.py collects each running pump for the page and now hands every
 display value's screen and its place in the page's list to the source line,
@@ -21,22 +22,24 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _entity_id,
     _needs_auto_asyncio_mode,
     stubs,
 )
-from test_homeassistant_harvest import (  # noqa: E402,F401  (live_panel is autouse)
+from test_homeassistant_harvest import (  # noqa: F401  (live_panel is autouse)
     _fire,
     _set_up,
     _vsh_entry,
     live_panel,
 )
 
-from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
 
 
-async def test_the_collection_gives_every_display_value_its_screen_and_place(hass, hass_storage, stubs):
+async def test_the_collection_gives_every_display_value_its_screen_and_place(
+    hass, hass_storage, stubs
+):
     from custom_components.ctc_ecozenith import dashboard
 
     entry = await _vsh_entry(hass)

@@ -19,8 +19,8 @@ import asyncio
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 from test_harvest_route import BACK, HOME, OUTSIDE, QUICK_MENU, ROOT, ROUTES, TILE, Panel
 
 INTERVAL = 1800

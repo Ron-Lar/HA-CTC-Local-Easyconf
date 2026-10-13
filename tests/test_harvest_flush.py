@@ -15,8 +15,8 @@ these hold the rule itself and the order in the source.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 import pathlib
-from datetime import datetime, timezone
 
 import pytest
 
@@ -24,7 +24,7 @@ from conftest import load
 
 COMPONENT = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "ctc_ecozenith"
 
-NOW = datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 
 
 def run(coro):

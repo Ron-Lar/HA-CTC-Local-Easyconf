@@ -17,13 +17,13 @@ test_homeassistant_skips.py.
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import timedelta
+import logging
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 HOME = 20
 HISTORY = 30
@@ -206,7 +206,7 @@ def test_the_harvest_resumes_as_soon_as_the_panel_is_back(harvest):
 
 
 def test_the_first_skip_and_the_resumption_are_one_info_line_each(harvest, caplog):
-    panel, coordinator, round = harvest
+    panel, _coordinator, round = harvest
     caplog.set_level(logging.INFO, logger="ctc_ecozenith.coordinator")
 
     async def scenario():
@@ -227,7 +227,7 @@ def test_the_first_skip_and_the_resumption_are_one_info_line_each(harvest, caplo
 
 
 def test_going_ahead_after_the_limit_is_said_once_too(harvest, const, caplog):
-    panel, coordinator, round = harvest
+    panel, _coordinator, round = harvest
     caplog.set_level(logging.INFO, logger="ctc_ecozenith.coordinator")
 
     async def scenario():
@@ -316,6 +316,8 @@ def test_the_round_leaves_when_it_ran_and_when_the_next_is_due(harvest):
         await round()
         assert coordinator.patience.failures == 1
         retry = coordinator.next_attempt - coordinator.last_attempt
-        assert timedelta(seconds=coordinator.patience.seconds) <= retry < timedelta(seconds=INTERVAL)
+        assert (
+            timedelta(seconds=coordinator.patience.seconds) <= retry < timedelta(seconds=INTERVAL)
+        )
 
     run(scenario())

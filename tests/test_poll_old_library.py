@@ -1,4 +1,5 @@
-"""The poll round on the library versions the manifest allows, and against a pump that says nothing (F1.2, F1.4, R2).
+"""The poll round on the library versions the manifest allows, and against a pump
+that says nothing (F1.2, F1.4, R2).
 
 pymodbus 3.6.9, the manifest's floor, closes the connection after every silent
 request. A block the model lacks was then never learnt as missing, because the
@@ -119,7 +120,9 @@ def test_the_probe_block_leads_the_round(poll):
     assert poll.lead_with([], 62000) == []
 
 
-def test_a_silent_probe_block_gives_the_line_up_after_one_request(quick, library, modbus_api, poll, host):
+def test_a_silent_probe_block_gives_the_line_up_after_one_request(
+    quick, library, modbus_api, poll, host
+):
     """TCP up, Modbus silent: a hung Modbus task in the pump, or the pump cut without a reset."""
     library.controller.silent.update(start for start, _ in I360_PLAN)
     client = modbus_api.CtcModbusClient(host)
@@ -143,7 +146,9 @@ def test_a_silent_probe_block_gives_the_line_up_wherever_it_sits_while_nothing_a
     assert [a for _, a, _, _ in library.requests] == [61500, 61542, 61572, 61590, 62000]
 
 
-def test_a_silent_probe_block_after_an_answer_is_only_its_block(quick, library, modbus_api, poll, host):
+def test_a_silent_probe_block_after_an_answer_is_only_its_block(
+    quick, library, modbus_api, poll, host
+):
     library.controller.silent.add(62000)
     client = modbus_api.CtcModbusClient(host)
     result = run(poll.read_round(client, I360_PLAN, probe=62000))
@@ -152,7 +157,9 @@ def test_a_silent_probe_block_after_an_answer_is_only_its_block(quick, library, 
     assert len(library.clients) == 1 and library.clients[0].connected
 
 
-def test_without_a_probe_the_round_still_gives_every_block_its_chance(quick, library, modbus_api, poll, host):
+def test_without_a_probe_the_round_still_gives_every_block_its_chance(
+    quick, library, modbus_api, poll, host
+):
     library.controller.silent.update(start for start, _ in I360_PLAN)
     client = modbus_api.CtcModbusClient(host)
     with pytest.raises(modbus_api.CtcModbusTransportError):
@@ -186,7 +193,9 @@ def test_a_model_without_the_stored_block_still_learns_it_with_the_probe_first(
     assert len(library.clients) == 1, "silence with the line up never cost the connection"
 
 
-def test_the_same_model_on_the_old_library_learns_it_too(quick, old_library, modbus_api, poll, host):
+def test_the_same_model_on_the_old_library_learns_it_too(
+    quick, old_library, modbus_api, poll, host
+):
     old_library.controller.silent.update(STORED)
     client = modbus_api.CtcModbusClient(host)
     missing = poll.MissingBlocks()
@@ -216,5 +225,7 @@ def test_the_coordinator_leads_with_the_probe_block_and_hands_it_to_the_round(po
 
     modbus = coordinator.CtcModbusCoordinator(hass=object(), client=NoClient(), interval=30)
     assert modbus._blocks[0][0] <= modbus_api.PROBE_REGISTER < sum(modbus._blocks[0])
-    assert sorted(modbus._blocks) == modbus_api.plan_blocks(const.MODBUS_SENSORS + const.MODBUS_SETTINGS)
+    assert sorted(modbus._blocks) == (
+        modbus_api.plan_blocks(const.MODBUS_SENSORS + const.MODBUS_SETTINGS)
+    )
     assert modbus_api.PROBE_REGISTER == 62000

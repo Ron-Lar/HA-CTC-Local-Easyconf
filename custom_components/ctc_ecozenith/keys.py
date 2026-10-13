@@ -36,10 +36,11 @@ own, and the platforms, the page and the registry tidy-up all ask here.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, replace
 import ipaddress
 import re
-from dataclasses import dataclass, replace
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from .const import CONF_DEVICE_KEY, DOMAIN, SlowPage, SlowValue
 

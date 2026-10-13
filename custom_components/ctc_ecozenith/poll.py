@@ -15,10 +15,11 @@ rather than once per round.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 from .modbus_api import CtcModbusError, CtcModbusSilence, CtcModbusTransportError
 

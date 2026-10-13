@@ -15,7 +15,7 @@ its own answer here, all in cop.py.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -199,7 +199,7 @@ def _web(success, read_at=None, **extra):
 
 
 def _at(hour, minute=0, second=0):
-    return datetime(2026, 10, 9, hour, minute, second, tzinfo=timezone.utc)
+    return datetime(2026, 10, 9, hour, minute, second, tzinfo=UTC)
 
 
 def test_a_display_that_answers_gives_no_notice(cop):
@@ -254,7 +254,8 @@ def test_a_quiet_display_comes_first_except_for_the_first_year(cop):
 
 
 def test_the_nearest_cause_is_given_first(cop):
-    progress = cop.CopResult(None, "year", 29, reason="29 av 365 dygn samlade, äldsta provet 2026-09-10")
+    progress = cop.CopResult(None, "year", 29,
+                             reason="29 av 365 dygn samlade, äldsta provet 2026-09-10")
     # A register that never answered beats the tracker's progress text.
     assert "62341" in cop.reason_for(progress, 12000.0, None, modbus_answered=False)
     # With the counters read, the tracker's own account.
@@ -272,7 +273,7 @@ def test_the_nearest_cause_is_given_first(cop):
 
 def test_a_day_without_a_sample_waits_for_one(cop):
     tracker = cop.CopTracker(FakeStore())
-    now = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 9, 10, 12, 0, tzinfo=UTC)
     day = tracker.result_day(22440.0, 9112.0, now=now)
     assert day.reason == "väntar på ett prov som är 20 till 30 timmar gammalt"
     assert cop.reason_for(day, 22440.0, 9112.0) == day.reason
@@ -304,7 +305,9 @@ def test_eleven_against_one_kilowatt_hour_is_no_fault(cop):
     fault = cop.counter_fault(11.0, 1.0, 20000)
     assert (11.0 if fault else None) is None
     # And the sensor says too little, not wrong.
-    assert "för lite energi ännu, 1.0 av 10 kWh" in cop.cop_reason(None, "lifetime", 11.0, 1.0, 20000)
+    assert "för lite energi ännu, 1.0 av 10 kWh" in (
+        cop.cop_reason(None, "lifetime", 11.0, 1.0, 20000)
+    )
 
 
 def test_the_day_judges_its_pair_above_its_own_floor(cop):

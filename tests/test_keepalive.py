@@ -11,13 +11,13 @@ and the log gets a line when that changes rather than every minute.
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import timedelta
+import logging
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 EXPIRY = 300.0
 

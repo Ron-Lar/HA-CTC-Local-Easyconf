@@ -55,7 +55,8 @@ def test_the_menu_offers_search_and_address(name):
 #: information, the statistics and the release check, and where it is changed.
 DEFAULTS = {
     "en": ("control", "System information", "statistics", "releases", "Configure", "{privacy_url}"),
-    "sv": ("styrning", "Systeminformation", "statistiken", "versioner", "Konfigurera", "{privacy_url}"),
+    "sv": ("styrning", "Systeminformation", "statistiken", "versioner", "Konfigurera",
+           "{privacy_url}"),
 }
 
 
@@ -87,7 +88,8 @@ def test_the_privacy_page_travels_as_a_placeholder_to_every_step_that_names_it()
 #: ports, no login, only Home Assistant, never the internet, and the link.
 EXPOSURE = {
     "en": ("port 80", "port 502", "no login", "only Home Assistant", "internet", "{exposure_url}"),
-    "sv": ("port 80", "port 502", "saknar inloggning", "bara Home Assistant", "internet", "{exposure_url}"),
+    "sv": ("port 80", "port 502", "saknar inloggning", "bara Home Assistant", "internet",
+           "{exposure_url}"),
 }
 
 
@@ -159,7 +161,9 @@ def test_no_label_in_the_flow_is_written_in_one_language():
     # behind every page in the tick boxes.
     assert "Ange" not in FLOW and "värden" not in FLOW
     assert "translation_key=CONF_PICKED" in FLOW
-    assert FLOW.count("label=page_label(page)") == 2, "båda kryssrutelistorna använder samma etikett"
+    assert FLOW.count("label=page_label(page)") == 2, (
+        "båda kryssrutelistorna använder samma etikett"
+    )
     assert 'return f"{page.title} ({len(page.values)})"' in FLOW
 
 

@@ -25,7 +25,9 @@ DAY = 86400.0
 
 def test_github_is_asked_once_a_day_on_the_loops_clock(updates):
     assert updates.check_is_due(None, 1000.0, DAY), "inget minne: fråga"
-    assert not updates.check_is_due(1000.0, 1000.0 + 3600, DAY), "en omladdning en timme senare frågar inte"
+    assert not updates.check_is_due(1000.0, 1000.0 + 3600, DAY), (
+        "en omladdning en timme senare frågar inte"
+    )
     assert updates.check_is_due(1000.0, 1000.0 + DAY, DAY)
     assert updates.check_is_due(1000.0, 1000.0 + 2 * DAY, DAY)
 
@@ -57,12 +59,22 @@ def test_no_answer_leaves_the_notice_and_the_memory_alone():
 
 def test_only_the_identity_differing_is_told_apart_from_a_real_change(identity):
     before = {"fast_interval": 30, "identity": {"serial": "1"}}
-    assert identity.only_identity_differs(before, {"fast_interval": 30, "identity": {"serial": "1", "mac": "x"}})
-    assert identity.only_identity_differs({"fast_interval": 30}, {"fast_interval": 30, "identity": {"serial": "1"}})
+    assert identity.only_identity_differs(
+        before, {"fast_interval": 30, "identity": {"serial": "1", "mac": "x"}}
+    )
+    assert identity.only_identity_differs(
+        {"fast_interval": 30}, {"fast_interval": 30, "identity": {"serial": "1"}}
+    )
     assert identity.only_identity_differs(before, before)
-    assert not identity.only_identity_differs(before, {"fast_interval": 45, "identity": {"serial": "1"}})
-    assert not identity.only_identity_differs(before, {"fast_interval": 30, "slow_pages": [], "identity": {"serial": "1"}})
-    assert not identity.only_identity_differs(before, {"identity": {"serial": "1"}}), "ett borttaget fält är en ändring"
+    assert not identity.only_identity_differs(
+        before, {"fast_interval": 45, "identity": {"serial": "1"}}
+    )
+    assert not identity.only_identity_differs(
+        before, {"fast_interval": 30, "slow_pages": [], "identity": {"serial": "1"}}
+    )
+    assert not identity.only_identity_differs(before, {"identity": {"serial": "1"}}), (
+        "ett borttaget fält är en ändring"
+    )
 
 
 def test_the_background_adopts_the_identity_instead_of_writing_it_for_a_reload():

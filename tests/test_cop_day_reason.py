@@ -16,7 +16,7 @@ that stood still.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 
 class FakeStore:
@@ -34,7 +34,7 @@ def test_a_day_without_compressor_running_is_too_little_energy_not_stuck(cop):
     # Two samples 24 hours apart with the counters unchanged, on a unit that
     # has been switched on for years, exactly as the sensor composes it.
     tracker = cop.CopTracker(FakeStore())
-    then = datetime(2026, 7, 14, 6, 0, tzinfo=timezone.utc)
+    then = datetime(2026, 7, 14, 6, 0, tzinfo=UTC)
     asyncio.run(tracker.async_record(12000.0, 4000.0, now=then))
     result = tracker.result_day(12000.0, 4000.0, now=then + timedelta(hours=24))
     assert result == cop.CopResult(None, "day", 1, 0.0, 0.0)

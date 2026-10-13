@@ -16,15 +16,15 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.helpers import issue_registry as ir
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _needs_auto_asyncio_mode,
     _set_up,
     stubs,
 )
 
-from homeassistant.helpers import issue_registry as ir  # noqa: E402
-
-from custom_components.ctc_ecozenith.const import DOMAIN  # noqa: E402
+from custom_components.ctc_ecozenith.const import DOMAIN
 
 #: What the integration raises besides the notice about the menu, by its key.
 OTHERS = ("history_page_missing", "identity_incomplete", "update_available", "modbus_busy")

@@ -141,12 +141,14 @@ def test_the_i_beside_not_set_opens_the_note_and_the_note_says_why():
       const open = !t.note.hidden;
       const says = t.note.children.map((e) => e.textContent);
       if (!open) throw new Error("the note did not open");
-      if (!says.includes(STATES_NOTE)) throw new Error("the note does not say why: " + JSON.stringify(says));
+      if (!says.includes(STATES_NOTE))
+        throw new Error("the note does not say why: " + JSON.stringify(says));
       // A value arrives and the note is opened again: the sentence is gone.
       t.why.fire("click");
       t.state("45");
       page.all(t.card, (e) => e.className === "why")[0].fire("click");
-      if (t.note.children.map((e) => e.textContent).includes(STATES_NOTE)) throw new Error("still says why");
+      if (t.note.children.map((e) => e.textContent).includes(STATES_NOTE))
+        throw new Error("still says why");
     """.replace("STATES_NOTE", json.dumps(STATES["unset_note"])), "number.dhw", "unknown", DHW) == {
         "unset": "0", "pending": "0", "value": "45", "text": "45 °C", "why": False,
         "placeholder": "", "calls": [],
@@ -185,7 +187,8 @@ def test_a_refused_write_puts_the_slider_back_to_unset():
     # next state while the focus is still there.
     assert _play("""
       t.drag("40"); await t.release();
-      if (t.control.getRootNode().activeElement !== t.control) throw new Error("the drag did not focus");
+      if (t.control.getRootNode().activeElement !== t.control)
+        throw new Error("the drag did not focus");
       await t.refuse();
       const back = t.result();
       if (back.unset !== "1" || back.text !== "ej satt" || back.value !== "30") {
@@ -205,7 +208,8 @@ def test_a_refused_write_on_a_set_slider_goes_back_to_the_pumps_value_while_held
     assert _play("""
       t.drag("60"); await t.release();
       await t.refuse();
-      if (t.control.getRootNode().activeElement !== t.control) throw new Error("the refusal took the focus");
+      if (t.control.getRootNode().activeElement !== t.control)
+        throw new Error("the refusal took the focus");
     """, "number.dhw", "55", DHW) == {
         "unset": "0", "pending": "0", "value": "55", "text": "55 °C", "why": False,
         "placeholder": "", "calls": [60],
@@ -246,7 +250,8 @@ def test_the_pumps_own_value_is_what_ends_the_busy_mark_not_the_timer():
       await t.accept();
       t.state("55.0");
       const old = t.result();
-      if (old.pending !== "1") throw new Error("the old value ended the busy mark: " + JSON.stringify(old));
+      if (old.pending !== "1")
+        throw new Error("the old value ended the busy mark: " + JSON.stringify(old));
       t.state("40.0", {"styrning aktiv": "ja"});
     """, "number.dhw", "55", DHW)["pending"] == "0"
 
@@ -260,7 +265,8 @@ def test_the_stub_writes_a_range_value_back_the_way_a_browser_does():
       const shortest = t.control.value;
       t.control.value = "unavailable";
       const middle = t.control.value;
-      if (shortest !== "40" || middle !== "47.5") throw new Error(JSON.stringify({shortest, middle}));
+      if (shortest !== "40" || middle !== "47.5")
+        throw new Error(JSON.stringify({shortest, middle}));
       t.state("55");
     """, "number.dhw", "unknown", DHW)["value"] == "55"
 
@@ -274,8 +280,10 @@ def test_a_mirrored_slider_whose_own_value_did_not_answer_says_not_read_and_why(
     assert _play("""
       t.why.fire("click");
       const says = t.note.children.map((e) => e.textContent);
-      if (!says.includes(UNREAD_NOTE)) throw new Error("the note does not say why: " + JSON.stringify(says));
-      if (says.includes(UNSET_NOTE)) throw new Error("the note says not set: " + JSON.stringify(says));
+      if (!says.includes(UNREAD_NOTE))
+        throw new Error("the note does not say why: " + JSON.stringify(says));
+      if (says.includes(UNSET_NOTE))
+        throw new Error("the note says not set: " + JSON.stringify(says));
       t.why.fire("click");
     """.replace("UNREAD_NOTE", json.dumps(STATES["unread_note"]))
        .replace("UNSET_NOTE", json.dumps(STATES["unset_note"])),

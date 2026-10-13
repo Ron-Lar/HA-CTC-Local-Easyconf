@@ -32,8 +32,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CtcConfigEntry
-from .keys import unique_id
 from .entity import async_switch_on_new_defaults
+from .keys import unique_id
 from .transitions import EVENT_TYPES
 
 

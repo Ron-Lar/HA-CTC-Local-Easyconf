@@ -97,7 +97,9 @@ def test_the_yearly_floor_is_named_and_is_the_trackers(cop, explanations):
 
 
 def test_the_intervals_are_the_defaults(const, explanations):
-    assert _one(r"var (\d+):e sekund", explanations.explain("starts_today")) == const.DEFAULT_FAST_INTERVAL
+    assert _one(r"var (\d+):e sekund", explanations.explain("starts_today")) == (
+        const.DEFAULT_FAST_INTERVAL
+    )
     harvest = explanations.explain("display_harvest")
     assert _one(r"var (\d+):e minut", harvest) * 60 == const.DEFAULT_SLOW_INTERVAL
     assert _one(r"försöker om efter (\w+) minuter", harvest) * 60 == const.RETRY_INTERVAL
@@ -146,7 +148,9 @@ def test_the_days_counts_say_a_reload_clears_them_while_nothing_keeps_them(expla
 
 
 def _addresses(const) -> dict[str, int]:
-    rows = const.MODBUS_SENSORS + const.MODBUS_SETTINGS + const.CONTROL_NUMBERS + const.CONTROL_SELECTS
+    rows = (
+        const.MODBUS_SENSORS + const.MODBUS_SETTINGS + const.CONTROL_NUMBERS + const.CONTROL_SELECTS
+    )
     return {row.key: row.address for row in rows}
 
 

@@ -25,11 +25,12 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from homeassistant.const import EVENT_STATE_CHANGED  # noqa: E402
-from homeassistant.core import callback  # noqa: E402
-from homeassistant.util import dt as dt_util  # noqa: E402
-from pytest_homeassistant_custom_component.common import async_fire_time_changed  # noqa: E402
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.const import EVENT_STATE_CHANGED
+from homeassistant.core import callback
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     READINGS,
     FakeModbus,
     _advance,
@@ -40,12 +41,12 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.const import (
     CONTROL_EXPIRY_SECONDS,
     CONTROL_KEEPALIVE_SECONDS,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.select import RELEASE  # noqa: E402
+from custom_components.ctc_ecozenith.select import RELEASE
 
 
 @pytest.fixture(autouse=True)
@@ -63,16 +64,20 @@ async def test_the_sensor_follows_every_write_and_release(hass):
     assert state.state == "0"
     assert state.attributes["styrningar"] == [] and state.attributes["overrides"] == []
 
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5},
+                                   blocking=True)
     state = hass.states.get(sensor)
     assert state.state == "1"
     (held,) = state.attributes["overrides"]
-    assert held["name"] == "Styr rumsbörvärde" and held["register"] == "1010" and held["value"] == 21.5
+    assert (
+        held["name"] == "Styr rumsbörvärde" and held["register"] == "1010" and held["value"] == 21.5
+    )
     # Set by this write, which is also the last that reached the pump (F6.2).
     assert held["set_at"] == hass.states.get(room).attributes["last_written"]
     assert state.attributes["styrningar"][0]["satt"] == held["set_at"]
 
-    await hass.services.async_call("select", "select_option", {"entity_id": mode, "option": "Komfort"}, blocking=True)
+    await hass.services.async_call("select", "select_option",
+                                   {"entity_id": mode, "option": "Komfort"}, blocking=True)
     state = hass.states.get(sensor)
     assert state.state == "2"
     assert [item["namn"] for item in state.attributes["styrningar"]] == [
@@ -83,7 +88,8 @@ async def test_the_sensor_follows_every_write_and_release(hass):
     await hass.services.async_call(DOMAIN, "release", {"entity_id": room}, blocking=True)
     assert hass.states.get(sensor).state == "1"
     await hass.services.async_call(
-        "button", "press", {"entity_id": _entity_id(hass, "button", "release_control")}, blocking=True
+        "button", "press", {"entity_id": _entity_id(hass, "button", "release_control")},
+        blocking=True
     )
     assert hass.states.get(sensor).state == "0"
     assert entry.runtime_data.control.active == {}
@@ -98,7 +104,8 @@ async def test_an_override_the_pump_has_forgotten_leaves_the_count(hass):
     # timers do not move, so it is handed one the test moves itself.
     now = [1_000_000.0]
     entry.runtime_data.control._clock = lambda: now[0]
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5},
+                                   blocking=True)
     assert hass.states.get(sensor).state == "1"
 
     # The line goes: the keepalive writes fail, and once the last write that
@@ -127,7 +134,8 @@ async def test_the_sensor_stands_still_through_ten_minutes_of_keepalive(hass, fr
     entry.runtime_data.control._clock = lambda: dt_util.utcnow().timestamp()
     sensor = _entity_id(hass, "sensor", "active_overrides")
     room = _entity_id(hass, "number", "ctl_room_setpoint_1")
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5},
+                                   blocking=True)
     (held,) = hass.states.get(sensor).attributes["overrides"]
     set_at = held["set_at"]
 
@@ -154,7 +162,8 @@ async def test_the_sensor_stands_still_through_ten_minutes_of_keepalive(hass, fr
     assert held["set_at"] == set_at
 
     # A change of value is news, once.
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21},
+                                   blocking=True)
     assert changed[sensor] == 1
     (held,) = hass.states.get(sensor).attributes["overrides"]
     assert held["set_at"] > set_at and held["value"] == 21.0
@@ -180,9 +189,11 @@ async def test_an_override_set_between_two_ticks_is_given_up_at_its_expiry(hass,
         async_fire_time_changed(hass)
         await _let_the_background_run(hass)
 
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5},
+                                   blocking=True)
     await tick(40)
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 20.5}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 20.5},
+                                   blocking=True)
     ok_at = dt_util.utcnow()
     await tick(5)
     client.answers = False
@@ -215,17 +226,20 @@ async def test_the_hot_water_mode_shows_the_pumps_program_and_holds_it_when_chos
     assert state.attributes["pump_value"] == state.attributes["pumpens värde"] == "Normal"
 
     # Choosing the mode the list already shows writes it and holds it.
-    await hass.services.async_call("select", "select_option", {"entity_id": mode, "option": "Normal"}, blocking=True)
+    await hass.services.async_call("select", "select_option",
+                                   {"entity_id": mode, "option": "Normal"}, blocking=True)
     assert client.writes == [(1007, 1)]
     assert hass.states.get(mode).attributes["control_active"] is True
 
-    await hass.services.async_call("select", "select_option", {"entity_id": mode, "option": "Komfort"}, blocking=True)
+    await hass.services.async_call("select", "select_option",
+                                   {"entity_id": mode, "option": "Komfort"}, blocking=True)
     state = hass.states.get(mode)
     assert state.state == "Komfort"
     assert state.attributes["pump_value"] == "Normal", "pumpens program står bredvid"
     assert state.attributes["styrning aktiv"] == "ja"
 
-    await hass.services.async_call("select", "select_option", {"entity_id": mode, "option": RELEASE}, blocking=True)
+    await hass.services.async_call("select", "select_option",
+                                   {"entity_id": mode, "option": RELEASE}, blocking=True)
     state = hass.states.get(mode)
     assert state.state == "Normal"
     assert state.attributes["control_active"] is False
@@ -236,7 +250,8 @@ async def test_a_number_carries_the_pumps_value_beside_its_own(hass):
     await _set_up(hass)
     room = _entity_id(hass, "number", "ctl_room_setpoint_1")
     setpoint = _entity_id(hass, "number", "ctl_dhw_setpoint")
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 22}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 22},
+                                   blocking=True)
     state = hass.states.get(room)
     assert state.state == "22.0"
     assert state.attributes["pump_value"] == 20.5
@@ -269,7 +284,8 @@ async def test_a_lost_round_keeps_the_controls_available_and_an_action_is_writte
 
     # The line answers writes again before the next round: set_value is written.
     client.answers = True
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 20}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 20},
+                                   blocking=True)
     assert client.writes == [(1010, 200)]
     state = hass.states.get(room)
     assert state.state == "20.0" and state.attributes["control_active"] is True
@@ -287,7 +303,8 @@ async def test_a_held_number_keeps_its_attributes_through_a_lost_round(hass):
     await _set_up(hass)
     (client,) = FakeModbus.instances
     room = _entity_id(hass, "number", "ctl_room_setpoint_1")
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 22}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 22},
+                                   blocking=True)
     client.answers = False
     await _advance(hass, 31)
     state = hass.states.get(room)

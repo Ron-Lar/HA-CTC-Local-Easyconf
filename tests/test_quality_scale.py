@@ -21,8 +21,9 @@ import ast
 import json
 import re
 
-from conftest import COMPONENT, ROOT
 import pytest
+
+from conftest import COMPONENT, ROOT
 
 #: Every rule of the quality scale and its tier, as hassfest's ALL_RULES has
 #: them in Home Assistant 2026.9 (script/hassfest/quality_scale.py).

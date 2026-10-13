@@ -10,17 +10,17 @@ real core the same runs in test_homeassistant_overrides.py.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
-WRITTEN = datetime(2026, 10, 13, 9, 30, tzinfo=timezone.utc)
+WRITTEN = datetime(2026, 10, 13, 9, 30, tzinfo=UTC)
 #: When the value in force was set, before the keepalive's last write (F6.2).
-SET = datetime(2026, 10, 13, 9, 12, tzinfo=timezone.utc)
+SET = datetime(2026, 10, 13, 9, 12, tzinfo=UTC)
 DEVICE = {"identifiers": {("ctc_ecozenith", "192.0.2.55")}}
 
 
@@ -129,7 +129,9 @@ def test_a_mode_without_a_name_shows_its_code(overrides, const):
 # ---------------------------------------------------------- the pump's value
 
 
-def test_the_pumps_value_comes_from_the_mirror_and_only_from_a_round_that_answered(overrides, const):
+def test_the_pumps_value_comes_from_the_mirror_and_only_from_a_round_that_answered(
+    overrides, const
+):
     room = _register(const, "ctl_room_setpoint_1")
     assert overrides.pump_number(_modbus(const, {"set_room_1": 20.5}), room) == 20.5
     assert overrides.pump_number(_modbus(const, {"set_room_1": 20.5}, success=False), room) is None
@@ -155,7 +157,9 @@ def test_the_pumps_mode_is_judged_on_the_code(overrides, const):
     # The zone mode has no mirror: 61542 has other modes and does not mirror 1015.
     zone = _register(const, "ctl_zone_mode_1")
     assert zone.mirror is None
-    assert overrides.pump_option(_modbus(const, {"set_heating_mode_1": "Auto"}, {"set_heating_mode_1": 0}), zone) is None
+    assert overrides.pump_option(
+        _modbus(const, {"set_heating_mode_1": "Auto"}, {"set_heating_mode_1": 0}), zone
+    ) is None
 
 
 # --------------------------------------------------------------- the numbers
@@ -178,7 +182,9 @@ def test_a_number_carries_the_pumps_value_also_while_it_holds_its_own(const):
 def test_a_number_without_a_mirror_has_no_pumps_value(const):
     number = load("number")
     runtime = _runtime(const, data={"dhw_stop_temp": 55.0})
-    shown = number.CtcControlNumber(runtime, _register(const, "ctl_dhw_setpoint")).extra_state_attributes
+    shown = number.CtcControlNumber(
+        runtime, _register(const, "ctl_dhw_setpoint")
+    ).extra_state_attributes
     assert "pumpens värde" not in shown and "pump_value" not in shown
 
 
@@ -232,7 +238,8 @@ def test_a_mode_the_pump_already_has_is_written_when_chosen(const):
 def test_a_lost_round_keeps_the_select_available_and_idle_on_unknown(const):
     """F2.3, F6.1: an unread 61500 is unknown, not a release nobody made."""
     select = load("select")
-    runtime = _runtime(const, data={"set_dhw_mode": "Normal"}, codes={"set_dhw_mode": 1}, success=False)
+    runtime = _runtime(const, data={"set_dhw_mode": "Normal"}, codes={"set_dhw_mode": 1},
+                       success=False)
     entity = select.CtcControlSelect(runtime, _register(const, "ctl_dhw_mode"))
     assert entity.available is True
     assert entity.current_option is None
@@ -264,7 +271,8 @@ def test_a_lost_round_keeps_the_numbers_available_and_writable(const):
 def test_the_zone_mode_and_the_price_mode_stay_on_the_release_while_idle(const):
     select = load("select")
     for key in ("ctl_zone_mode_1", "ctl_price_mode"):
-        runtime = _runtime(const, data={"set_heating_mode_1": "Auto"}, codes={"set_heating_mode_1": 0})
+        runtime = _runtime(const, data={"set_heating_mode_1": "Auto"},
+                           codes={"set_heating_mode_1": 0})
         entity = select.CtcControlSelect(runtime, _register(const, key))
         assert entity.current_option == select.RELEASE, key
         shown = entity.extra_state_attributes
@@ -285,7 +293,9 @@ def test_the_sensor_counts_and_lists_what_is_held_in_both_languages(const):
     assert entity.native_value == 2
     assert entity.available is True
     shown = entity.extra_state_attributes
-    assert [item["namn"] for item in shown["styrningar"]] == ["Styr rumsbörvärde", "Styr varmvattenläge"]
+    assert [item["namn"] for item in shown["styrningar"]] == (
+        ["Styr rumsbörvärde", "Styr varmvattenläge"]
+    )
     assert shown["overrides"][0] == {
         "name": "Styr rumsbörvärde", "register": "1010", "value": 21.5,
         "set_at": SET.isoformat(timespec="seconds"),
@@ -305,7 +315,8 @@ def test_the_sensor_comes_with_control_and_not_without(const, cop):
         runtime.control = Control()
         runtime.control_enabled = control_enabled
         added = []
-        entry = SimpleNamespace(runtime_data=runtime, entry_id="test", options={}, async_on_unload=lambda f: None)
+        entry = SimpleNamespace(runtime_data=runtime, entry_id="test", options={},
+                                async_on_unload=lambda f: None)
         run(sensor.async_setup_entry(None, entry, added.extend))
         return [entity for entity in added if isinstance(entity, sensor.CtcActiveOverridesSensor)]
 

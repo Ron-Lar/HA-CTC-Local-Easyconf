@@ -23,7 +23,10 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.helpers import issue_registry as ir
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     DeadModbus,
     FakeModbus,
@@ -33,10 +36,7 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.helpers import issue_registry as ir  # noqa: E402
-
-from custom_components.ctc_ecozenith.const import DOMAIN  # noqa: E402
+from custom_components.ctc_ecozenith.const import DOMAIN
 
 
 def _busy_notice(hass, entry):

@@ -1,4 +1,5 @@
-"""A reread with a gap changes nothing in the registry, under a real Home Assistant core (F9.3, F5.1).
+"""A reread with a gap changes nothing in the registry, under a real Home
+Assistant core (F9.3, F5.1).
 
 The sweep now leaves a page it could not read whole out of its reading and
 calls the reading incomplete (test_menu_gaps.py holds that, on the real i255
@@ -21,7 +22,13 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.helpers import entity_registry as er
+from homeassistant.loader import async_get_integration
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     MODEL,
@@ -30,17 +37,11 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     _needs_auto_asyncio_mode,
     stubs,
 )
-from test_homeassistant_menu import VSH, VSH_PAGES, _pages_in  # noqa: E402
+from test_homeassistant_menu import VSH, VSH_PAGES, _pages_in
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.helpers import entity_registry as er  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
-
-import custom_components.ctc_ecozenith as integration  # noqa: E402
-from custom_components.ctc_ecozenith.catalogue import MenuReading, pages_to_storage  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+import custom_components.ctc_ecozenith as integration
+from custom_components.ctc_ecozenith.catalogue import MenuReading, pages_to_storage
+from custom_components.ctc_ecozenith.const import (
     CONF_IDENTITY,
     CONF_MENU,
     CONF_MENU_VERSION,
@@ -68,7 +69,8 @@ async def test_a_reread_with_a_gap_leaves_the_pages_rows_in_the_registry(hass, s
         domain=DOMAIN,
         unique_id=f"{DOMAIN}_{HOST}",
         title=f"{MODEL} ({HOST})",
-        data={CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1, "model": MODEL},
+        data={CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1,
+              "model": MODEL},
         options={CONF_MENU_VERSION: "0.16.0", CONF_IDENTITY: IDENTITY,
                  CONF_MENU: stored, CONF_SLOW_PAGES: stored},
     )
@@ -89,7 +91,9 @@ async def test_a_reread_with_a_gap_leaves_the_pages_rows_in_the_registry(hass, s
 
     assert stubs.discover.await_count == 1
     assert integration._MENU_TRIES[entry.entry_id] == 1
-    assert entry.options[CONF_MENU_VERSION] == "0.16.0", "en läsning med lucka stämplar ingen version"
+    assert entry.options[CONF_MENU_VERSION] == "0.16.0", (
+        "en läsning med lucka stämplar ingen version"
+    )
     assert _pages_in(entry, CONF_MENU) == VSH_PAGES, "den lagrade menyn står"
     assert _pages_in(entry, CONF_SLOW_PAGES) == VSH_PAGES
     assert _row_entity(hass) is not None, "historiksidans rad har sin registerpost kvar"

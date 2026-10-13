@@ -21,9 +21,9 @@ that already holds a panel or a dashboard is left alone.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+import logging
 from typing import Any
 
 from homeassistant.components import frontend
@@ -171,7 +171,7 @@ def build_config(hass: HomeAssistant) -> dict[str, Any]:
             (MAJOR_VERSION, MINOR_VERSION),
             waiting=_waiting(hass),
         )
-    except Exception:  # noqa: BLE001 - the page must never break the frontend
+    except Exception:  # the page must never break the frontend
         _LOGGER.exception("Could not build the CTC page")
         lang = views.language(hass.config.language)
         return views.message_dashboard(views.TEXT[lang]["failed"], lang)
@@ -263,7 +263,7 @@ async def async_register(hass: HomeAssistant, version: str) -> None:
             config={"mode": "yaml"},
             require_admin=False,
         )
-    except Exception:  # noqa: BLE001 - no page, but the integration runs on
+    except Exception:  # no page, but the integration runs on
         if page is not None and dashboards.get(views.URL_PATH) is page:
             dashboards.pop(views.URL_PATH)
         _LOGGER.warning("Could not add the CTC page to the sidebar", exc_info=True)

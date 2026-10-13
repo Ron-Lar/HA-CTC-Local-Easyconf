@@ -25,7 +25,8 @@ their own.
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from .const import CONTROL_NUMBERS, CONTROL_SELECTS, ControlRegister
 

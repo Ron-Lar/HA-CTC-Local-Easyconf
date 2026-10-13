@@ -21,10 +21,11 @@ about a year later holds the whole first year.
 
 from __future__ import annotations
 
-import logging
+from collections.abc import Collection
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Collection
+from datetime import UTC, date, datetime, timedelta
+import logging
+from typing import Any
 
 from .const import (
     COP_HISTORY_DAYS,
@@ -121,7 +122,7 @@ class CopResult:
 def _parse(stamp: str) -> datetime:
     """Read a stored timestamp, treating a naive one as UTC."""
     value = datetime.fromisoformat(stamp)
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
 def implausible(value: float | None) -> bool:
@@ -427,7 +428,7 @@ class CopTracker:
             newest = self.last_sample_at
             if newest is not None and now <= newest:
                 return
-        when = now or datetime.now(timezone.utc)
+        when = now or datetime.now(UTC)
         stamp = (today or when.date()).isoformat()
         self._samples[stamp] = [float(energy_out), float(energy_in)]
         cutoff = ((today or when.date()) - timedelta(days=COP_HISTORY_DAYS)).isoformat()
@@ -507,7 +508,9 @@ class CopTracker:
             reason = "driftstarten är okänd" if self._anchor is None else None
             return CopResult(None, "first_year", 0, reason=reason)
         out, consumed, span = self._first_year
-        return CopResult(_ratio(out, consumed), "first_year", int(span), round(out, 1), round(consumed, 1))
+        return CopResult(
+            _ratio(out, consumed), "first_year", int(span), round(out, 1), round(consumed, 1)
+        )
 
     def result_day(
         self,
@@ -519,7 +522,7 @@ class CopTracker:
         yesterday. Nothing is returned until such a sample exists."""
         if energy_out is None or energy_in is None:
             return CopResult(None, "day", 0)
-        when = now or datetime.now(timezone.utc)
+        when = now or datetime.now(UTC)
         oldest_allowed = when - timedelta(hours=DAY_MAX_HOURS)
         newest_allowed = when - timedelta(hours=DAY_MIN_HOURS)
         window = [
@@ -537,7 +540,9 @@ class CopTracker:
         hours = (when - _parse(stamp)).total_seconds() / 3600
         value = _ratio(delta_out, delta_in, MIN_CONSUMPTION_KWH_DAY)
         if value is None:
-            return CopResult(None, "day", round(hours / 24), round(delta_out, 1), round(delta_in, 1))
+            return CopResult(
+                None, "day", round(hours / 24), round(delta_out, 1), round(delta_in, 1)
+            )
         return CopResult(
             value,
             "day",
@@ -584,7 +589,10 @@ class CopTracker:
                 # reset. No quotient across that is honest.
                 return CopResult(
                     None, basis, span,
-                    reason=f"räknarna har gått bakåt sedan {older[-1]}, enheten är bytt eller nollställd",
+                    reason=(
+                        f"räknarna har gått bakåt sedan {older[-1]}, "
+                        "enheten är bytt eller nollställd"
+                    ),
                 )
             if per_day:
                 floor = floor * max(1, span)
@@ -593,7 +601,9 @@ class CopTracker:
                 round(delta_out, 1), round(delta_in, 1),
             )
         if not self._samples:
-            return CopResult(None, basis, 0, reason=f"0 av {days} dygn samlade, inget prov sparat ännu")
+            return CopResult(
+                None, basis, 0, reason=f"0 av {days} dygn samlade, inget prov sparat ännu"
+            )
         oldest = min(self._samples)
         collected = (now - date.fromisoformat(oldest)).days
         if collected > days + tolerance:

@@ -5,16 +5,16 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.select import SelectEntity
-from homeassistant.core import HomeAssistant
 from homeassistant.const import EntityCategory
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CtcConfigEntry
 from .attribute_names import with_english
 from .const import CONTROL_SELECTS, ControlRegister
-from .keys import unique_id
 from .entity import async_switch_on_new_defaults
+from .keys import unique_id
 from .modbus_api import CtcModbusError
 from .overrides import pump_option
 
@@ -114,7 +114,9 @@ class CtcControlSelect(CoordinatorEntity, SelectEntity):
             # the numbers.
             "control_active": overriding,
             "register": str(self._register.address),
-            "not": "flyktigt register, nollställs av pumpen cirka fem minuter efter sista skrivningen",
+            "not": (
+                "flyktigt register, nollställs av pumpen cirka fem minuter efter sista skrivningen"
+            ),
         }
         if self._register.mirror is not None:
             # The pump's own mode beside what Home Assistant holds (R49). Not

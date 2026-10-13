@@ -36,6 +36,8 @@ import asyncio
 import inspect
 import json
 
+import pytest
+
 from conftest import FIXTURES
 from fake_panel import (
     BACK,
@@ -52,7 +54,6 @@ from fake_panel import (
     tabs,
     tile,
 )
-import pytest
 
 #: The sweep's budget of presses, catalogue._async_explore's max_taps. The
 #: number is part of what the sweep promises a panel somebody may be standing

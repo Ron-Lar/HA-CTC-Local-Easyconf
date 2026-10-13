@@ -48,9 +48,10 @@ import gzip
 import json
 import os
 
+import pytest
+
 from conftest import FIXTURES
 from fake_panel import DisplaySession
-import pytest
 
 #: What the facit pins of every widget, in this order.
 FIELDS = (

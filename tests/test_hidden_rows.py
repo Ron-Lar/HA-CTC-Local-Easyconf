@@ -24,7 +24,8 @@ def _value(key: str, var: int, label: str, screen: int = 118) -> SlowValue:
 
 
 def _page(*values: SlowValue) -> SlowPage:
-    return SlowPage(page=22, title="Driftinfo Värmepump", screens=[118], route=[], values=list(values))
+    return SlowPage(page=22, title="Driftinfo Värmepump", screens=[118], route=[],
+                    values=list(values))
 
 
 RUNNING = _page(
@@ -55,7 +56,8 @@ def test_both_turns_of_the_slot_survive_any_order_of_readings():
 
 def test_an_old_name_key_that_is_hidden_moves_to_its_place_and_keeps_its_entity():
     # VSH's case at the upgrade: the stored menu still had the name keys.
-    before = [_page(_value("p22_utetemperatur", 36, "Utetemperatur"), _value("p22_kompressor", 37, "Kompressor"))]
+    before = [_page(_value("p22_utetemperatur", 36, "Utetemperatur"),
+                    _value("p22_kompressor", 37, "Kompressor"))]
     menu = keys.with_previous_keys(before, keys.keep_hidden_rows(before, [STANDING]))
     moved = keys.previous_keys(menu)
     assert moved == {"p22_utetemperatur": "p22_s118_v36", "p22_kompressor": "p22_s118_v37"}
@@ -66,9 +68,12 @@ def test_an_old_name_key_that_is_hidden_moves_to_its_place_and_keeps_its_entity(
 
 def test_a_page_the_reading_did_not_reach_is_left_to_the_caller():
     other = SlowPage(page=30, title="Historik", screens=[128], route=[], values=[
-        SlowValue(key="p30_s128_v22", label="Avgiven värme totalt", page=30, screen=128, fmt="%d", var_indices=[22]),
+        SlowValue(key="p30_s128_v22", label="Avgiven värme totalt", page=30, screen=128, fmt="%d",
+                  var_indices=[22]),
     ])
-    assert keys.keep_hidden_rows([RUNNING, other], [STANDING]) == keys.keep_hidden_rows([RUNNING], [STANDING])
+    assert keys.keep_hidden_rows([RUNNING, other], [STANDING]) == (
+        keys.keep_hidden_rows([RUNNING], [STANDING])
+    )
 
 
 def test_both_readers_keep_hidden_rows():
@@ -76,4 +81,6 @@ def test_both_readers_keep_hidden_rows():
 
     root = Path(__file__).resolve().parents[1] / "custom_components" / "ctc_ecozenith"
     assert "keep_hidden_rows(before, menu)" in (root / "__init__.py").read_text(encoding="utf-8")
-    assert "keep_hidden_rows(before, pages)" in (root / "config_flow.py").read_text(encoding="utf-8")
+    assert "keep_hidden_rows(before, pages)" in (
+        (root / "config_flow.py").read_text(encoding="utf-8")
+    )

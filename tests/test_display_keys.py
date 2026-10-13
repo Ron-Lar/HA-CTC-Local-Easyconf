@@ -18,9 +18,9 @@ minutes' entry is left for the registry tidy-up, as 0.17.0 already left it.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 import json
 import re
-from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -93,9 +93,11 @@ def _old_page(catalogue, name: str, data: dict, folded: bool):
     widgets = asyncio.run(FakeClient(data).async_widgets(screen))
     pairing = catalogue._pair_labels(widgets)
     readings = [
-        ((pairing.get(w.index) or f"Värde {w.index}").strip().rstrip(":"), w.value_fmt, list(w.value_vars), w.index)
+        ((pairing.get(w.index) or f"Värde {w.index}").strip().rstrip(":"), w.value_fmt,
+         list(w.value_vars), w.index)
         for w in widgets
-        if w.value_fmt is not None and w.value_vars and w.visible and catalogue.has_conversion(w.value_fmt)
+        if w.value_fmt is not None and w.value_vars and w.visible
+        and catalogue.has_conversion(w.value_fmt)
     ]
     if folded:
         readings = catalogue._join_clock_rows(readings)
@@ -110,7 +112,8 @@ def _old_page(catalogue, name: str, data: dict, folded: bool):
             suffix += 1
         seen.add(key)
         values.append(
-            const.SlowValue(key=key, label=raw_label, page=page, screen=screen, fmt=fmt, var_indices=indices)
+            const.SlowValue(key=key, label=raw_label, page=page, screen=screen, fmt=fmt,
+                            var_indices=indices)
         )
     return const.SlowPage(page=page, title=name, screens=[screen], values=values)
 
@@ -139,7 +142,9 @@ def test_the_fixture_of_keys_covers_the_four_pages_in_full(keys_0_15_1):
 def test_the_menu_of_0_15_1_is_rebuilt_key_for_key(catalogue, page, keys_0_15_1, name):
     # The rebuilt menu is the one the migration is pinned against, so it has
     # to be the one 0.15.1 wrote: the same keys in the same order.
-    assert [v.key for v in _old_page(catalogue, name, page(name), folded=False).values] == keys_0_15_1[name]
+    assert [v.key for v in _old_page(catalogue, name, page(name), folded=False).values] == (
+        keys_0_15_1[name]
+    )
 
 
 # ------------------------------------------------------------- the new key
@@ -159,7 +164,11 @@ def test_a_name_read_differently_keeps_the_key(catalogue, page):
     # The caption of "Avgiven värme totalt" lost for a round: the row is
     # "Värde N" by name, and the key is the one it always has.
     data = page("i255_128")
-    lost = next(w["index"] for w in data["widgets"] if (w.get("label") or "").startswith("Avgiven värme totalt"))
+    lost = next(
+        w["index"]
+        for w in data["widgets"]
+        if (w.get("label") or "").startswith("Avgiven värme totalt")
+    )
     whole = _new_page(catalogue, "i255_128", data)
     gappy = _new_page(catalogue, "i255_128", data, blank=lost)
     assert [v.key for v in gappy.values] == [v.key for v in whole.values]
@@ -263,9 +272,12 @@ def test_a_previous_key_that_is_a_row_now_is_never_moved(const):
     page = const.SlowPage(
         page=22, title="x", screens=[1],
         values=[
-            const.SlowValue(key="p22_s1_v1", label="a", page=22, screen=1, fmt="%d", var_indices=[1], previous_key="p22_s1_v2"),
-            const.SlowValue(key="p22_s1_v2", label="b", page=22, screen=1, fmt="%d", var_indices=[2], previous_key="p22_b"),
-            const.SlowValue(key="p22_s1_v3", label="c", page=22, screen=1, fmt="%d", var_indices=[3], previous_key="p22_s1_v3"),
+            const.SlowValue(key="p22_s1_v1", label="a", page=22, screen=1, fmt="%d",
+                            var_indices=[1], previous_key="p22_s1_v2"),
+            const.SlowValue(key="p22_s1_v2", label="b", page=22, screen=1, fmt="%d",
+                            var_indices=[2], previous_key="p22_b"),
+            const.SlowValue(key="p22_s1_v3", label="c", page=22, screen=1, fmt="%d",
+                            var_indices=[3], previous_key="p22_s1_v3"),
         ],
     )
     assert keys.previous_keys([page]) == {"p22_b": "p22_s1_v2"}
@@ -287,7 +299,8 @@ def test_the_previous_key_survives_storage_and_is_left_out_where_there_is_none(c
         key=CLOCK, label="Drift /24", page=30, screen=128, fmt="%02d:%02d",
         var_indices=[27, 26], unit="min", previous_key="p30_drift_24_h_m",
     ))
-    page.values.append(const.SlowValue(key="p30_s128_v20", label="Total drifttid", page=30, screen=128, fmt="%d", var_indices=[20]))
+    page.values.append(const.SlowValue(key="p30_s128_v20", label="Total drifttid", page=30,
+                                       screen=128, fmt="%d", var_indices=[20]))
     stored = catalogue.pages_to_storage([page])
     assert stored[0]["values"][0]["previous_key"] == "p30_drift_24_h_m"
     assert "previous_key" not in stored[0]["values"][1], "fältet skrivs bara där raden flyttat"
@@ -319,7 +332,8 @@ class MemoryStore:
 
 
 def test_the_seen_record_follows_the_rows():
-    store = MemoryStore({"keys": ["p30_energi_el_total", "hp1_rps"], "numeric": ["p30_energi_el_total", "p30_emxxx"]})
+    store = MemoryStore({"keys": ["p30_energi_el_total", "hp1_rps"],
+                         "numeric": ["p30_energi_el_total", "p30_emxxx"]})
     record = seen_module.SeenValues(store)
     asyncio.run(record.async_load())
     moves = {"p30_energi_el_total": "p30_s128_v25", "p30_emxxx": "p30_s128_v28"}
@@ -327,16 +341,20 @@ def test_the_seen_record_follows_the_rows():
     assert record.keys == {"p30_s128_v25", "hp1_rps"}
     assert record.numeric == {"p30_s128_v25", "p30_s128_v28"}
     asyncio.run(record.async_save())
-    assert store.saved[-1] == {"keys": ["hp1_rps", "p30_s128_v25"], "numeric": ["p30_s128_v25", "p30_s128_v28"]}
+    assert store.saved[-1] == (
+        {"keys": ["hp1_rps", "p30_s128_v25"], "numeric": ["p30_s128_v25", "p30_s128_v28"]}
+    )
     # Done once, nothing moves again.
     assert record.rename(moves) is False
 
 
 def test_the_stored_harvest_follows_the_rows_and_the_later_reading_wins():
-    t0 = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
     stored = harvest.StoredHarvest(
-        values={"p30_avgiven_varme_totalt": 22499.0, "p30_s128_v25": 9116.0, "p30_energi_el_total": 9000.0},
-        read_at={"p30_avgiven_varme_totalt": t0, "p30_s128_v25": t0, "p30_energi_el_total": t0 - timedelta(days=1)},
+        values={"p30_avgiven_varme_totalt": 22499.0, "p30_s128_v25": 9116.0,
+                "p30_energi_el_total": 9000.0},
+        read_at={"p30_avgiven_varme_totalt": t0, "p30_s128_v25": t0,
+                 "p30_energi_el_total": t0 - timedelta(days=1)},
         harvested_at=t0,
         consumption=12.0,
     )

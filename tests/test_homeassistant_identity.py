@@ -26,7 +26,14 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     FakeModbus,
@@ -38,20 +45,13 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.helpers import (  # noqa: E402
-    device_registry as dr,
-    entity_registry as er,
-    issue_registry as ir,
-)
-
-import custom_components.ctc_ecozenith as integration  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+import custom_components.ctc_ecozenith as integration
+from custom_components.ctc_ecozenith.const import (
     CONF_FAST_INTERVAL,
     CONF_IDENTITY,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
+from custom_components.ctc_ecozenith.identity import Identity
 
 #: What the walk finds on the system information page, made up.
 FOUND = Identity(
@@ -166,7 +166,9 @@ async def test_a_reload_asks_github_nothing_and_a_quiet_github_leaves_the_notice
         # A day on, GitHub is asked again but does not answer: the notice
         # stands, and the question is owed again rather than remembered.
         github.return_value = None
-        integration._RELEASE_CHECKED[entry.entry_id] -= integration.UPDATE_CHECK_INTERVAL.total_seconds()
+        integration._RELEASE_CHECKED[entry.entry_id] -= (
+            integration.UPDATE_CHECK_INTERVAL.total_seconds()
+        )
         remembered = integration._RELEASE_CHECKED[entry.entry_id]
         await _advance(hass, integration.UPDATE_CHECK_INTERVAL.total_seconds() + 1)
         assert github.await_count == 2

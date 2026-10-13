@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_HOST
@@ -21,6 +20,7 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+import voluptuous as vol
 
 from .catalogue import (
     MenuReading,
@@ -36,18 +36,18 @@ from .const import (
     CONF_DEVICE_KEY,
     CONF_DISPLAY,
     CONF_ENABLE_CONTROL,
-    CONF_SEND_STATISTICS,
-    CONF_SETTINGS_STEM,
     CONF_FAST_INTERVAL,
     CONF_IDENTITY,
     CONF_LANGUAGE,
-    CONF_MODBUS_PORT,
-    CONF_RESTORE_PAGE,
-    CONF_SLAVE,
-    CONF_SLOW_INTERVAL,
     CONF_MENU,
     CONF_MENU_ROOT,
     CONF_MENU_VERSION,
+    CONF_MODBUS_PORT,
+    CONF_RESTORE_PAGE,
+    CONF_SEND_STATISTICS,
+    CONF_SETTINGS_STEM,
+    CONF_SLAVE,
+    CONF_SLOW_INTERVAL,
     CONF_SLOW_PAGES,
     CONF_VISIT_SYSTEM_INFO,
     CONF_WEB_PORT,
@@ -202,7 +202,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # there is nothing to sweep and the address form follows at once.
             networks = await async_home_assistant_networks(self.hass)
             found = await async_discover(session, networks) if networks else []
-        except Exception as err:  # noqa: BLE001 - a failed sweep must not block setup
+        except Exception as err:  # a failed sweep must not block setup
             _LOGGER.debug("Network sweep failed: %s", err)
             found = []
         configured = self._configured_hosts()
@@ -388,7 +388,7 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         retried_busy, self._busy_retry = self._busy_retry, False
         try:
             verdict = await async_classify(self._host, self._modbus_port, self._slave)
-        except Exception:  # noqa: BLE001 - naming the failure must never break the flow
+        except Exception:  # naming the failure must never break the flow
             _LOGGER.debug("Could not probe the Modbus port", exc_info=True)
             verdict = SILENT
         if verdict == BUSY:
@@ -815,10 +815,14 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
                 CONF_VISIT_SYSTEM_INFO: bool(user_input.get(CONF_VISIT_SYSTEM_INFO, True)),
                 CONF_CHECK_UPDATES: bool(user_input.get(CONF_CHECK_UPDATES, True)),
                 CONF_FAST_INTERVAL: int(
-                    user_input.get(CONF_FAST_INTERVAL, options.get(CONF_FAST_INTERVAL, DEFAULT_FAST_INTERVAL))
+                    user_input.get(
+                        CONF_FAST_INTERVAL, options.get(CONF_FAST_INTERVAL, DEFAULT_FAST_INTERVAL)
+                    )
                 ),
                 CONF_SLOW_INTERVAL: int(
-                    user_input.get(CONF_SLOW_INTERVAL, options.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL))
+                    user_input.get(
+                        CONF_SLOW_INTERVAL, options.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)
+                    )
                 ),
                 CONF_RESTORE_PAGE: bool(
                     user_input.get(CONF_RESTORE_PAGE, options.get(CONF_RESTORE_PAGE, True))

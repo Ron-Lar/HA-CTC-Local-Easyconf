@@ -14,13 +14,13 @@ unchanged, so the consent text need not be.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 
 class FakeStore:
@@ -123,7 +123,9 @@ def test_the_floor_is_three_kilowatt_hours_per_day_in_the_figure(cop):
         "för lite energi ännu, 20.0 av 21 kWh"
     )
     # One more kilowatt hour and there is a figure.
-    assert tracker.result_window(22502, 9117, "week", today=TODAY).value == pytest.approx(63 / 21, abs=0.01)
+    assert tracker.result_window(22502, 9117, "week", today=TODAY).value == (
+        pytest.approx(63 / 21, abs=0.01)
+    )
     # Eight days in the figure raise the floor to 24.
     tracker = _tracker(cop, [(0, 22499, 9116), (8, 22439, 9094)])
     week = tracker.result_window(22499, 9116, "week", today=TODAY)
@@ -136,7 +138,9 @@ def test_a_month_needs_ninety_kilowatt_hours(cop):
     month = tracker.result_window(22499, 9116, "month", today=TODAY)
     assert month.value is None and month.energy_in == 89.0
     assert "89.0 av 90 kWh" in cop.cop_reason(None, "month", 250.0, 89.0, 20000, days=30)
-    assert tracker.result_window(22499, 9117, "month", today=TODAY).value == pytest.approx(250 / 90, abs=0.01)
+    assert tracker.result_window(22499, 9117, "month", today=TODAY).value == (
+        pytest.approx(250 / 90, abs=0.01)
+    )
 
 
 def test_a_still_week_is_too_little_energy_not_a_stuck_counter(cop):
@@ -167,7 +171,9 @@ def test_a_fresh_installation_says_how_far_the_week_has_come(cop):
 
 def test_no_sample_at_all_is_said_so(cop):
     week = cop.CopTracker(FakeStore()).result_window(22499, 9116, "week", today=TODAY)
-    assert week == cop.CopResult(None, "week", 0, reason="0 av 7 dygn samlade, inget prov sparat ännu")
+    assert week == (
+        cop.CopResult(None, "week", 0, reason="0 av 7 dygn samlade, inget prov sparat ännu")
+    )
 
 
 def test_unread_counters_leave_the_window_empty_without_a_progress_text(cop):
@@ -181,7 +187,9 @@ def test_counters_going_backwards_are_said_so_for_a_window(cop):
     tracker = _tracker(cop, [(7, 30000, 12000)])
     week = tracker.result_window(22499, 9116, "week", today=TODAY)
     assert week.value is None
-    assert week.reason == "räknarna har gått bakåt sedan 2026-10-02, enheten är bytt eller nollställd"
+    assert week.reason == (
+        "räknarna har gått bakåt sedan 2026-10-02, enheten är bytt eller nollställd"
+    )
 
 
 def test_a_window_asks_for_a_known_span_only(cop):
@@ -198,7 +206,7 @@ def sensor():
     return load("sensor")
 
 
-NOW = datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 REAL_TODAY = date.today()
 
 
@@ -234,7 +242,15 @@ def _runtime(cop, samples, data=None, success=True):
 
 def _sensors(sensor, runtime):
     added = []
-    run(sensor.async_setup_entry(None, SimpleNamespace(runtime_data=runtime, entry_id="test", options={}, async_on_unload=lambda f: None), added.extend))
+    run(
+        sensor.async_setup_entry(
+            None,
+            SimpleNamespace(
+                runtime_data=runtime, entry_id="test", options={}, async_on_unload=lambda f: None
+            ),
+            added.extend,
+        )
+    )
     return {s._span: s for s in added if isinstance(s, sensor.CtcCopSensor)}
 
 
@@ -305,4 +321,6 @@ def test_the_page_explains_the_two_and_places_them_with_the_energy(explanations,
         assert explanations.source(key) == "Räknas ur energiräknarna"
         assert key in dashboard_views._KNOWN_KEYS
     energy = next(keys for _id, _icon, keys in dashboard_views._READINGS if _id == "energy")
-    assert energy[:6] == ("cop_day", "cop_week", "cop_month", "cop_year", "cop_first_year", "cop_lifetime")
+    assert energy[:6] == (
+        ("cop_day", "cop_week", "cop_month", "cop_year", "cop_first_year", "cop_lifetime")
+    )

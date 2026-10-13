@@ -102,9 +102,10 @@ def test_a_settings_file_is_a_display(discovery):
     "error",
     [
         aiohttp.ClientConnectorError(
-            SimpleNamespace(host="192.0.2.55", port=80, ssl=None), ConnectionRefusedError(61, "refused")
+            SimpleNamespace(host="192.0.2.55", port=80, ssl=None),
+            ConnectionRefusedError(61, "refused")
         ),
-        asyncio.TimeoutError(),
+        TimeoutError(),
     ],
     ids=["refused", "timeout"],
 )
@@ -128,9 +129,9 @@ def test_anything_else_that_answers_is_something_that_is_not_a_ctc(discovery, se
 
 
 def test_the_old_probe_still_gives_the_display_or_nothing(discovery):
-    assert asyncio.run(discovery.async_probe_host(_Session(body="settings_ezi2xx.bin"), "h")).model == (
-        "EcoZenith i255"
-    )
+    assert asyncio.run(
+        discovery.async_probe_host(_Session(body="settings_ezi2xx.bin"), "h")
+    ).model == "EcoZenith i255"
     assert asyncio.run(discovery.async_probe_host(_Session(status=400), "h")) is None
 
 
@@ -188,4 +189,7 @@ def test_catching_up_reads_neither_menu_nor_identity_without_a_display():
 
 def test_no_link_to_a_web_interface_that_did_not_answer():
     setup = _function(INIT, "async_setup_entry")
-    assert "configuration_url=web_interface_url(host, web_port) if has_display(entry.data) else None" in setup
+    assert (
+        "configuration_url=web_interface_url(host, web_port) if has_display(entry.data) else None"
+        in setup
+    )

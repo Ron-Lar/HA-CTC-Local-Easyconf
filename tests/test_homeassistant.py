@@ -26,9 +26,9 @@ test can read back that one client was open at a time.
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 import pathlib
 import sys
-from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -111,7 +111,7 @@ class FakeModbus:
     that no two clients were ever open at once.
     """
 
-    instances: list["FakeModbus"] = []
+    instances: list[FakeModbus] = []
     #: Whether the controller is there at all. A subclass says no.
     answers = True
 

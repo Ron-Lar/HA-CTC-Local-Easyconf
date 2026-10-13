@@ -36,9 +36,12 @@ def _note(config) -> str:
 
 
 def test_a_pump_being_retried_is_named_with_the_reason(dashboard_views):
-    waiting = [{"name": "EcoZenith i255 (192.0.2.55)", "reason": "no Modbus register could be read"}]
+    waiting = [{"name": "EcoZenith i255 (192.0.2.55)",
+                "reason": "no Modbus register could be read"}]
     note = _note(dashboard_views.build_dashboard([], "sv", NEW_HA, waiting=waiting))
-    assert note.startswith("EcoZenith i255 (192.0.2.55) svarar inte just nu (no Modbus register could be read).")
+    assert note.startswith(
+        "EcoZenith i255 (192.0.2.55) svarar inte just nu (no Modbus register could be read)."
+    )
     assert "försöker igen" in note
     english = _note(dashboard_views.build_dashboard([], "en", NEW_HA, waiting=waiting))
     assert "is not answering right now (no Modbus register could be read)" in english
@@ -46,7 +49,8 @@ def test_a_pump_being_retried_is_named_with_the_reason(dashboard_views):
 
 
 def test_a_retry_without_a_reason_has_no_empty_brackets(dashboard_views):
-    note = _note(dashboard_views.build_dashboard([], "sv", NEW_HA, waiting=[{"name": "CTC", "reason": None}]))
+    note = _note(dashboard_views.build_dashboard([], "sv", NEW_HA,
+                                                 waiting=[{"name": "CTC", "reason": None}]))
     assert note.startswith("CTC svarar inte just nu. ")
     assert "()" not in note
 
@@ -70,7 +74,9 @@ def test_the_page_asks_for_the_retried_pumps_and_announces_the_failed_set_up():
     assert "entry.reason" in waiting
     assert "waiting=_waiting(hass)" in dashboard
     setup = _source("__init__.py").split("async def async_setup_entry")[1].split("\nasync def ")[0]
-    failure = setup.split("await modbus.async_config_entry_first_refresh()")[1].split("web_client = ")[0]
+    failure = (
+        setup.split("await modbus.async_config_entry_first_refresh()")[1].split("web_client = ")[0]
+    )
     assert "dashboard.async_announce_change(hass)" in failure, "sidan sägs till även på felvägen"
 
 
@@ -99,7 +105,11 @@ def test_the_harvest_sensor_is_a_diagnostic_timestamp_that_stays_available():
 def test_the_harvest_sensor_reads_its_tallies_with_defaults():
     # The skip tally is another track's (R8); the sensor must work before and
     # after it lands, so every tally is read with getattr and a default.
-    attributes = _source("sensor.py").split("class CtcHarvestSensor")[1].split("def extra_state_attributes")[1]
+    attributes = (
+        _source("sensor.py")
+        .split("class CtcHarvestSensor")[1]
+        .split("def extra_state_attributes")[1]
+    )
     for name in ('"hoppade över i rad"', '"misslyckade i rad"', '"nästa försök"', '"senaste skäl"',
                  '"sidor lästa"', '"sidor missade"'):
         assert name in attributes, name
@@ -127,7 +137,9 @@ def test_the_harvest_sensor_has_a_place_and_an_explanation(dashboard_views, expl
     unit = next(keys for _id, _icon, keys in dashboard_views._TECHNICAL if _id == "unit")
     assert "display_harvest" in unit
     assert explanations.explain("display_harvest").startswith("När displayens sidor senast lästes")
-    assert explanations.source("display_harvest") == "Integrationens egen bokföring av displayskörden"
+    assert explanations.source("display_harvest") == (
+        "Integrationens egen bokföring av displayskörden"
+    )
     for text in explanations.HARVEST.values():
         assert "—" not in text and " – " not in text and " - " not in text
 

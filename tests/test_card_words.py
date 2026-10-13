@@ -249,7 +249,8 @@ def _alarm_chip(words: dict) -> dict:
         {json.dumps(states)});
       const value = page.all(card, (e) => e.className === "value")[0];
       const label = page.all(card, (e) => e.className === "label")[0];
-      console.log(JSON.stringify({{label: label.textContent, value: value.textContent, drawn: !value.hidden}}));
+      console.log(JSON.stringify({{label: label.textContent, value: value.textContent,
+                                   drawn: !value.hidden}}));
     """)
 
 
@@ -264,8 +265,12 @@ def test_a_word_that_is_the_name_over_again_is_not_written_twice():
     # A page whose word for the raised alarm is "Larm", as the one before
     # F7.3 was, or a browser still holding it: the chip reads "Larm" once,
     # in red, rather than "Larm Larm". The case does not count as different.
-    assert _alarm_chip(dict(SV, problem_on="Larm")) == {"label": "Larm", "value": "", "drawn": False}
-    assert _alarm_chip(dict(SV, problem_on="larm")) == {"label": "Larm", "value": "", "drawn": False}
+    assert _alarm_chip(dict(SV, problem_on="Larm")) == (
+        {"label": "Larm", "value": "", "drawn": False}
+    )
+    assert _alarm_chip(dict(SV, problem_on="larm")) == (
+        {"label": "Larm", "value": "", "drawn": False}
+    )
     # The quiet alarm's "OK" is another word and is drawn as before.
     states = dict(STATES)
     assert _node(f"""

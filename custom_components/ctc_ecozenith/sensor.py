@@ -11,6 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    EntityCategory,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -25,11 +26,17 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from homeassistant.const import EntityCategory
-
 from . import CtcConfigEntry
 from .attribute_names import override_in_english, with_english
 from .catalogue import display_state_class, pages_from_storage
+from .const import (
+    CONF_MENU,
+    STATUS_UNKNOWN,
+    ModbusSensor,
+    SlowValue,
+    device_class_for,
+    identity_signal,
+)
 from .cop import (
     WINDOWS,
     counter_rows,
@@ -40,17 +47,10 @@ from .cop import (
     reason_for,
     stale_rows,
 )
-from .const import (
-    CONF_MENU,
-    STATUS_UNKNOWN,
-    ModbusSensor,
-    SlowValue,
-    device_class_for,
-    identity_signal,
-)
 from .entity import async_switch_on_new_defaults
 from .keys import prefix_of, previous_keys, unique_id
 from .overrides import held
+from .rows import due_rows, split_rows, vanished_display_keys
 from .transitions import (
     MEAN_RUN_KEY,
     MEAN_RUN_NAME,
@@ -70,7 +70,6 @@ IDENTITY_ROWS = (
     ("serial", "Serienummer", lambda i: i.serial, "mdi:identifier"),
     ("made", "Tillverkad", lambda i: i.manufactured, "mdi:factory"),
 )
-from .rows import due_rows, split_rows, vanished_display_keys
 
 _LOGGER = logging.getLogger(__name__)
 

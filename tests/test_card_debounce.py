@@ -42,9 +42,11 @@ MODES = ["Släpp styrningen", "Ekonomi", "Normal", "Komfort", "Manuell"]
 SELECT = ("select.dhw_mode", "Släpp styrningen", {"options": MODES})
 #: The hot water program as select.py publishes it at rest since R49: the
 #: state is the pump's own mode out of 61500, and nothing is held.
-DHW = ("select.dhw_mode", "Normal", {"options": MODES, "control_active": False, "pump_value": "Normal"})
+DHW = ("select.dhw_mode", "Normal",
+       {"options": MODES, "control_active": False, "pump_value": "Normal"})
 #: The same list while Home Assistant holds Komfort.
-DHW_HELD = ("select.dhw_mode", "Komfort", {"options": MODES, "control_active": True, "pump_value": "Normal"})
+DHW_HELD = ("select.dhw_mode", "Komfort",
+            {"options": MODES, "control_active": True, "pump_value": "Normal"})
 #: The compressor's top speed, a slider of 120 steps.
 SLIDER = ("number.max_rps", "50", {"min": 0, "max": 120, "step": 1, "unit_of_measurement": "rps"})
 #: The same at rest and held, with the attribute number.py gives it.
@@ -137,7 +139,8 @@ def test_stepping_through_the_list_writes_only_where_it_stops():
       t.step("Normal"); await t.wait(100);
       t.step("Komfort");
       const meanwhile = t.result();
-      if (meanwhile.calls.length || meanwhile.pending !== "1") throw new Error(JSON.stringify(meanwhile));
+      if (meanwhile.calls.length || meanwhile.pending !== "1")
+        throw new Error(JSON.stringify(meanwhile));
       await t.wait(450);
     """, SELECT) == {"calls": ["Komfort"], "value": "Komfort", "pending": "1"}
 
@@ -245,7 +248,8 @@ def test_a_list_at_rest_whose_mirror_is_unread_stands_on_release_with_no_line():
     # own mode to say. The list still stands on Släpp styrningen.
     found = _play("""
       return {value: t.control.value, pump: t.pump(), pending: t.widget.dataset.pending};
-    """, ("select.dhw_mode", "unknown", {"options": MODES, "control_active": False, "pump_value": None}))
+    """, ("select.dhw_mode", "unknown",
+          {"options": MODES, "control_active": False, "pump_value": None}))
     assert found == {"value": "Släpp styrningen", "pump": None, "pending": "0"}
 
 

@@ -14,14 +14,14 @@ command.
 from __future__ import annotations
 
 import asyncio
-import sys
 from datetime import timedelta
+import sys
 
 import pytest
 
 import conftest
-import ha_stub
 from conftest import load
+import ha_stub
 
 
 def _real_homeassistant_is_loaded() -> bool:

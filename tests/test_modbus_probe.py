@@ -12,6 +12,7 @@ the next real client waits in turn.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import errno
 import socket
 import struct
@@ -33,10 +34,8 @@ def loopback(request):
     switches sockets off for every test and lets only 127.0.0.1 through once
     they are switched back on; its own fixture for that is used where it exists.
     """
-    try:
+    with contextlib.suppress(pytest.FixtureLookupError):
         request.getfixturevalue("socket_enabled")
-    except pytest.FixtureLookupError:
-        pass
     modbus_api._CLOSED_AT.clear()
     probe._VERDICTS.clear()
     yield
@@ -217,7 +216,7 @@ def test_an_aborted_connect_is_a_busy_place_too(monkeypatch):
     [
         OSError(errno.ECONNREFUSED, "Connect call failed"),
         OSError(errno.EHOSTUNREACH, "Connect call failed"),
-        asyncio.TimeoutError(),
+        TimeoutError(),
     ],
     ids=["refused", "unreachable", "timeout"],
 )
@@ -251,12 +250,20 @@ def test_the_verdict_of_the_bytes_alone():
     good = struct.pack(">HHHBBBH", 1, 0, 5, unit, 3, 2, 72)
     assert probe.verdict_of_answer(good, 1) == probe.ANSWERED
     # Another unit number on an answer to this very request is still an answer.
-    assert probe.verdict_of_answer(struct.pack(">HHHBBBH", 1, 0, 5, 7, 3, 2, 72), 1) == probe.ANSWERED
+    assert probe.verdict_of_answer(struct.pack(">HHHBBBH", 1, 0, 5, 7, 3, 2, 72), 1) == (
+        probe.ANSWERED
+    )
     assert probe.verdict_of_answer(b"", 1) == probe.BUSY
     assert probe.verdict_of_answer(good[:8], 1) == probe.REJECTED
-    assert probe.verdict_of_answer(struct.pack(">HHHBBB", 1, 0, 3, unit, 0x83, 2), 1) == probe.REJECTED
-    assert probe.verdict_of_answer(struct.pack(">HHHBBBH", 1, 1, 5, unit, 3, 2, 72), 1) == probe.REJECTED
-    assert probe.verdict_of_answer(struct.pack(">HHHBBBH", 2, 0, 5, unit, 3, 2, 72), 1) == probe.REJECTED
+    assert probe.verdict_of_answer(struct.pack(">HHHBBB", 1, 0, 3, unit, 0x83, 2), 1) == (
+        probe.REJECTED
+    )
+    assert probe.verdict_of_answer(struct.pack(">HHHBBBH", 1, 1, 5, unit, 3, 2, 72), 1) == (
+        probe.REJECTED
+    )
+    assert probe.verdict_of_answer(struct.pack(">HHHBBBH", 2, 0, 5, unit, 3, 2, 72), 1) == (
+        probe.REJECTED
+    )
     assert probe.verdict_of_answer(b"HTTP/1.1 400 Bad Request\r\n", 1) == probe.REJECTED
 
 
@@ -343,7 +350,9 @@ def test_the_probe_is_called_from_the_two_failure_paths_and_nowhere_else():
 def test_the_flow_probes_only_once_its_own_client_is_closed():
     flow = _source("config_flow.py")
     connect = flow.split("async def async_step_connect(")[1].split("\n    def ")[0]
-    assert connect.index("await client.async_close()") < connect.index("self._async_modbus_failed()")
+    assert connect.index("await client.async_close()") < (
+        connect.index("self._async_modbus_failed()")
+    )
     failed = flow.split("async def _async_modbus_failed(")[1].split("\n    async def ")[0]
     assert "await async_classify(" in failed
 
@@ -357,7 +366,11 @@ def test_the_set_up_probes_only_once_its_own_client_is_shut():
     )
     # And the notice goes at the first reading that works.
     after = setup.split("raise\n", 1)[1]
-    first = next(line.strip() for line in after.splitlines() if line.strip() and not line.strip().startswith("#"))
+    first = next(
+        line.strip()
+        for line in after.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    )
     assert first == 'ir.async_delete_issue(hass, DOMAIN, f"{entry.entry_id}_{ISSUE_MODBUS_BUSY}")'
 
 

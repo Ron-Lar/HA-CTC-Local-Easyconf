@@ -7,9 +7,6 @@ of Home Assistant imports so this can be checked without installing HA.
 
 from __future__ import annotations
 
-import pytest
-
-
 # ------------------------------------------------------------------ models
 
 

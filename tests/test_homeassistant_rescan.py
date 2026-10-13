@@ -28,7 +28,19 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from datetime import timedelta
+
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.loader import async_get_integration
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     MODEL,
@@ -36,22 +48,10 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     _needs_auto_asyncio_mode,
     stubs,
 )
-from test_homeassistant_menu import VSH  # noqa: E402
+from test_homeassistant_menu import VSH
 
-from datetime import timedelta  # noqa: E402
-
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from homeassistant.util import dt as dt_util  # noqa: E402
-from pytest_homeassistant_custom_component.common import (  # noqa: E402
-    MockConfigEntry,
-    async_fire_time_changed,
-)
-
-from custom_components.ctc_ecozenith.catalogue import pages_to_storage  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.catalogue import pages_to_storage
+from custom_components.ctc_ecozenith.const import (
     CONF_IDENTITY,
     CONF_MENU,
     CONF_MENU_VERSION,
@@ -61,15 +61,15 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_WEB_PORT,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
-from custom_components.ctc_ecozenith.web_api import CtcWebError  # noqa: E402
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
+from custom_components.ctc_ecozenith.web_api import CtcWebError
 
 
 class BlockingPanel(FakePanel):
     """A display whose first answer waits for the test: the harvest holds the panel meanwhile."""
 
     gate: asyncio.Event | None = None
-    instances: list["BlockingPanel"] = []
+    instances: list[BlockingPanel] = []
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)

@@ -10,15 +10,15 @@ cop_sample answers with.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 import json
 import re
-from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from conftest import COMPONENT, load
 
 TEXTS = ("strings.json", "translations/en.json", "translations/sv.json")
-NOW = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 13, 12, 0, tzinfo=UTC)
 DEVICE = {"identifiers": {("ctc_ecozenith", "192.0.2.55")}}
 
 
@@ -90,7 +90,8 @@ def test_the_english_texts_are_the_strings_and_swedish_has_every_key():
 
 def test_every_refusal_the_actions_raise_has_a_text_with_its_placeholders():
     services = _source("services.py")
-    raised = dict(re.findall(r'_(?:refuse|failed)\(\s*"([a-z_]+)"((?:, [a-z_]+=[^,)]+)*)', services))
+    raised = dict(re.findall(r'_(?:refuse|failed)\(\s*"([a-z_]+)"((?:, [a-z_]+=[^,)]+)*)',
+                             services))
     assert set(raised) == {
         "not_a_control", "unknown_entry", "entry_not_loaded", "no_display",
         "no_display_loaded", "panel_busy", "menu_not_read", "menu_busy_and_not_read",
@@ -123,7 +124,9 @@ def test_async_setup_registers_the_actions_once_and_takes_no_yaml():
     assert "async_register_services(hass)" in setup
     services = _source("services.py")
     register = services.split("def async_register_services(")[1]
-    assert register.index("has_service(DOMAIN, SERVICE_RELEASE)") < register.index("async_register(")
+    assert register.index("has_service(DOMAIN, SERVICE_RELEASE)") < (
+        register.index("async_register(")
+    )
     assert "supports_response=SupportsResponse.OPTIONAL" in register
 
 
@@ -198,7 +201,9 @@ def test_an_answer_over_several_pumps_names_every_kind_and_says_nothing_changed_
 
 def test_a_unique_id_gives_back_the_key_it_was_built_from():
     keys = load("keys")
-    assert keys.key_of(keys.unique_id(DEVICE, "ctl_room_setpoint_1"), DEVICE) == "ctl_room_setpoint_1"
+    assert keys.key_of(keys.unique_id(DEVICE, "ctl_room_setpoint_1"), DEVICE) == (
+        "ctl_room_setpoint_1"
+    )
     other = {"identifiers": {("ctc_ecozenith", "192.0.2.56")}}
     assert keys.key_of(keys.unique_id(other, "ctl_room_setpoint_1"), DEVICE) is None
     assert keys.key_of(None, DEVICE) is None
@@ -218,7 +223,9 @@ def test_the_registers_by_key_are_exactly_the_control_tables(const):
     assert {key: register.address for key, register in const.CONTROL_BY_KEY.items()} == {
         register.key: register.address for register in tables
     }
-    assert {register.address for register in const.CONTROL_BY_KEY.values()} == const.CONTROL_ADDRESSES
+    assert {register.address for register in const.CONTROL_BY_KEY.values()} == (
+        const.CONTROL_ADDRESSES
+    )
 
 
 # ------------------------------------------------------------- the sample

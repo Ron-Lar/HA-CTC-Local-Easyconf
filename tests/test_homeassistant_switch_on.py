@@ -32,7 +32,16 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import (
+    RELOAD_AFTER_UPDATE_DELAY,
+    ConfigEntryState,
+)
+from homeassistant.const import CONF_HOST
+from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.loader import async_get_integration
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     MODEL,
@@ -44,18 +53,9 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 
-from homeassistant.config_entries import (  # noqa: E402
-    RELOAD_AFTER_UPDATE_DELAY,
-    ConfigEntryState,
-)
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.helpers import device_registry as dr, entity_registry as er  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
-
-import custom_components.ctc_ecozenith as integration  # noqa: E402
-from custom_components.ctc_ecozenith.catalogue import MenuReading  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+import custom_components.ctc_ecozenith as integration
+from custom_components.ctc_ecozenith.catalogue import MenuReading
+from custom_components.ctc_ecozenith.const import (
     CONF_IDENTITY,
     CONF_MENU_VERSION,
     CONF_MODBUS_PORT,
@@ -63,7 +63,7 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_WEB_PORT,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
+from custom_components.ctc_ecozenith.identity import Identity
 
 #: A display firmware newer than the one the entry has stored, made up.
 NEWER_FIRMWARE = "2026-06-10"
@@ -123,13 +123,15 @@ async def test_what_an_earlier_version_switched_off_comes_on_and_the_owners_choi
     registry = er.async_get(hass)
     off = er.RegistryEntryDisabler
     outdoor = registry.async_get_or_create(
-        "sensor", DOMAIN, _unique_id("outdoor_temp"), config_entry=entry, disabled_by=off.INTEGRATION
+        "sensor", DOMAIN, _unique_id("outdoor_temp"), config_entry=entry,
+        disabled_by=off.INTEGRATION
     )
     flow = registry.async_get_or_create(
         "sensor", DOMAIN, _unique_id("hs1_flow"), config_entry=entry, disabled_by=off.USER
     )
     room = registry.async_get_or_create(
-        "number", DOMAIN, _unique_id("ctl_room_setpoint_1"), config_entry=entry, disabled_by=off.INTEGRATION
+        "number", DOMAIN, _unique_id("ctl_room_setpoint_1"), config_entry=entry,
+        disabled_by=off.INTEGRATION
     )
 
     with caplog.at_level(logging.WARNING):
@@ -191,7 +193,8 @@ async def test_the_owners_option_against_new_entities_switches_nothing_on(hass, 
 
 
 async def _set_up_from_before_0_14(hass) -> MockConfigEntry:
-    """An entry from 0.9.3: the menu owed a reading and one sensor switched off by the integration."""
+    """An entry from 0.9.3: the menu owed a reading and one sensor switched off by the
+    integration."""
     entry = await _entry(hass, menu_version="0.9.3")
     er.async_get(hass).async_get_or_create(
         "sensor",

@@ -30,7 +30,9 @@ def test_the_card_address_carries_the_version_the_set_up_reads_from_the_manifest
     setup = _source("__init__.py").split("async def async_setup_entry")[1].split("\nasync def ")[0]
     assert "integration = await async_get_integration(hass, DOMAIN)" in setup
     assert "await dashboard.async_register(hass, str(integration.version))" in setup
-    register = _source("dashboard.py").split("async def async_register(")[1].split("\nasync def ")[0]
+    register = (
+        _source("dashboard.py").split("async def async_register(")[1].split("\nasync def ")[0]
+    )
     assert "await async_register_card(hass, version)" in register
     card = _source("card.py")
     assert 'versioned = f"{CARD_URL}?v={version}"' in card
@@ -40,6 +42,9 @@ def test_the_card_address_carries_the_version_the_set_up_reads_from_the_manifest
 def test_a_resource_of_ours_at_another_version_is_moved_to_this_one():
     resource = _source("card.py").split("async def _async_register_resource")[1]
     assert 'if first.get("url") != versioned:' in resource
-    assert "await resources.async_update_item(first[\"id\"], {\"res_type\": \"module\", \"url\": versioned})" in resource
+    assert (
+        'await resources.async_update_item(first["id"], {"res_type": "module", "url": versioned})'
+        in resource
+    )
     # And never two of ours.
     assert "for item in stale:" in resource and "async_delete_item(" in resource

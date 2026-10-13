@@ -67,7 +67,8 @@ class Panel:
         async def widgets(screen, values=None, globals_=None):
             self.widget_reads.append(screen // 10)
             if screen == HOME * 10:
-                icon = web_api.Widget(index=0, kind=1, x=340, y=60, width=80, height=80, visible=True)
+                icon = web_api.Widget(index=0, kind=1, x=340, y=60, width=80, height=80,
+                                      visible=True)
                 caption = web_api.Widget(index=1, kind=3, x=330, y=145, width=100, height=20,
                                          visible=True, label="Driftinfo", text_id=532)
                 return [icon, caption]
@@ -244,7 +245,7 @@ class FakeSession:
     async def get(self, url, timeout=None):
         if self.stall:
             self.stall -= 1
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
         return FakeResponse()
 
     async def post(self, url, data=None, timeout=None):
@@ -294,8 +295,8 @@ def test_the_harvest_says_what_it_cost(caplog, coordinator_module, web_api, cons
 
 @pytest.fixture(scope="module")
 def coordinator_module():
-    import ha_stub
     from conftest import load
+    import ha_stub
 
     ha_stub.skip_unless_stubbed()
     return load("coordinator")

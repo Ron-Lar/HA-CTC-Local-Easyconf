@@ -78,7 +78,8 @@ def _play(card: str, states: dict, script: str = "", items: list | None = None) 
           return new Promise((resolve, reject) => open.push({{ resolve, reject }}));
         }},
       }});
-      const card = page.mountCard({json.dumps(str(CARD))}, {json.dumps(card)}, {json.dumps(config)});
+      const card = page.mountCard(
+        {json.dumps(str(CARD))}, {json.dumps(card)}, {json.dumps(config)});
       card.hass = hass({json.dumps(states)});
       const rowClass = {json.dumps("control" if card == "ctc-ecozenith-controls" else "row")};
       const answer = async (verdict) => {{
@@ -149,13 +150,13 @@ def test_a_held_number_is_marked_shows_the_pumps_own_value_and_can_be_let_go_of(
 
 
 def test_the_release_button_calls_the_service_for_that_one_entity_and_goes_with_the_hold():
-    found = _play("ctc-ecozenith-controls", HELD, """
+    found = _play("ctc-ecozenith-controls", HELD, f"""
       t.release().fire("click");
       const busy = t.release().disabled;
       if (!busy) throw new Error("the button can be pressed twice");
       await t.accept();
-      t.state(%s);
-    """ % json.dumps(IDLE))
+      t.state({json.dumps(IDLE)});
+    """)
     assert found["calls"] == [["ctc_ecozenith", "release", {"entity_id": RPS}]]
     number, mode = found["rows"]
     # Let go of: no mark, no line, and the button hidden but ready again.
@@ -231,7 +232,9 @@ def test_a_reading_has_no_mark_at_all():
     found = _play("ctc-ecozenith-rows", {
         "sensor.ctc_outdoor": {"state": "7.5", "attributes": {"control_active": True}},
     }, items=[{"entity": "sensor.ctc_outdoor", "name": "Utetemperatur", "explanation": "Ute."}])
-    assert found["rows"] == [{"held": None, "title": None, "mark": None, "pump": None, "release": None}]
+    assert found["rows"] == (
+        [{"held": None, "title": None, "mark": None, "pump": None, "release": None}]
+    )
 
 
 # ---------------------------------------------------------------- the list

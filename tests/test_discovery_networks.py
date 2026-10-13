@@ -56,7 +56,8 @@ def test_what_is_no_network_for_a_display_is_left_out(discovery):
         _adapter(("127.0.0.1", 8)),
         _adapter(("169.254.10.20", 16)),
         _adapter(("192.168.9.5", 24), enabled=False),
-        {"name": "broken", "enabled": True, "ipv4": [{"address": "not an address", "network_prefix": 24}]},
+        {"name": "broken", "enabled": True,
+         "ipv4": [{"address": "not an address", "network_prefix": 24}]},
         {"name": "no prefix", "enabled": True, "ipv4": [{"address": "192.168.3.3"}]},
         {"name": "no ipv4", "enabled": True},
     ]

@@ -23,7 +23,13 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.helpers import entity_registry as er
+from homeassistant.loader import async_get_integration
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     MODEL,
@@ -35,15 +41,8 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.helpers import entity_registry as er  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
-
-from custom_components.ctc_ecozenith.catalogue import pages_to_storage  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.catalogue import pages_to_storage
+from custom_components.ctc_ecozenith.const import (
     CONF_IDENTITY,
     CONF_MENU,
     CONF_MENU_VERSION,
@@ -55,6 +54,7 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     SlowPage,
     SlowValue,
 )
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
 
 PAGE = 22
 SCREEN = 220
@@ -125,7 +125,9 @@ async def _harvest_again(hass, entry) -> None:
 
 
 def _row_entity(hass, key: str) -> str | None:
-    return er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{HOST}_p{PAGE}_{key}")
+    return er.async_get(hass).async_get_entity_id(
+        "sensor", DOMAIN, f"{DOMAIN}_{HOST}_p{PAGE}_{key}"
+    )
 
 
 async def _entry_with_the_page(hass) -> MockConfigEntry:
@@ -136,7 +138,8 @@ async def _entry_with_the_page(hass) -> MockConfigEntry:
         domain=DOMAIN,
         unique_id=f"{DOMAIN}_{HOST}",
         title=f"{MODEL} ({HOST})",
-        data={CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1, "model": MODEL},
+        data={CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1,
+              "model": MODEL},
         options={CONF_MENU_VERSION: version, CONF_IDENTITY: IDENTITY,
                  CONF_SLOW_PAGES: stored, CONF_MENU: stored},
     )
@@ -166,7 +169,8 @@ async def test_a_row_that_reads_the_marker_gets_its_entity_when_it_first_leaves_
     ServingPanel.vars = [72, 215, 9999, 9999]
     ServingPanel.header = []
     entry = await _set_up_with_the_page(hass)
-    await _advance(hass, MIN_FIRST_DELAY + 1)  # the first harvest is planned, not run in set-up (R6)
+    # the first harvest is planned, not run in set-up (R6)
+    await _advance(hass, MIN_FIRST_DELAY + 1)
 
     assert hass.states.get(_row_entity(hass, "utetemperatur")).state == "7.2"
     assert hass.states.get(_row_entity(hass, "vp_in_ut_1")).state == "21.5"
@@ -176,7 +180,9 @@ async def test_a_row_that_reads_the_marker_gets_its_entity_when_it_first_leaves_
     ServingPanel.vars = [72, 215, 35, 0]
     await _harvest_again(hass, entry)
     assert hass.states.get(_row_entity(hass, "brine_in_ut_1")).state == "3.5"
-    assert hass.states.get(_row_entity(hass, "brine_in_ut_2")).state == "0.0", "en äkta nolla är ett tal"
+    assert hass.states.get(_row_entity(hass, "brine_in_ut_2")).state == "0.0", (
+        "en äkta nolla är ett tal"
+    )
     assert entry.runtime_data.seen.numeric >= {f"p{PAGE}_brine_in_ut_1", f"p{PAGE}_brine_in_ut_2"}
 
     # The marker is back: the entities stay. The harvest carries a row's last
@@ -267,7 +273,8 @@ async def test_the_alarm_the_panel_prints_becomes_a_sensor_and_an_episode(hass, 
     ServingPanel.vars = [72, 215, 9999, 9999]
     ServingPanel.header = [E017]
     entry = await _set_up_with_the_page(hass)
-    await _advance(hass, MIN_FIRST_DELAY + 1)  # the first harvest is planned, not run in set-up (R6)
+    # the first harvest is planned, not run in set-up (R6)
+    await _advance(hass, MIN_FIRST_DELAY + 1)
 
     last = hass.states.get(_entity_id(hass, "sensor", "last_alarm"))
     assert last.state == E017
@@ -301,6 +308,9 @@ async def test_the_alarm_the_panel_prints_becomes_a_sensor_and_an_episode(hass, 
 async def test_without_a_display_page_there_is_no_alarm_sensor(hass, stubs):
     entry = await _set_up(hass)
     assert entry.state is ConfigEntryState.LOADED
-    assert er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{HOST}_last_alarm") is None
+    assert (
+        er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{HOST}_last_alarm")
+        is None
+    )
     alarm = hass.states.get(_entity_id(hass, "binary_sensor", "alarm"))
     assert "episoder" not in alarm.attributes

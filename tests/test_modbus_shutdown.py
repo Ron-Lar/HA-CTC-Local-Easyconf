@@ -69,7 +69,9 @@ def library(monkeypatch) -> FakeLibrary:
 # --------------------------------------------------------------- the two kinds
 
 
-def test_a_close_is_not_final_so_the_next_round_builds_a_new_client(quick, library, modbus_api, host):
+def test_a_close_is_not_final_so_the_next_round_builds_a_new_client(
+    quick, library, modbus_api, host
+):
     client = modbus_api.CtcModbusClient(host)
 
     async def scenario():
@@ -106,7 +108,9 @@ def test_a_shutdown_is_final_for_reads_and_writes_alike(quick, library, modbus_a
     assert library.alive == []
 
 
-def test_a_shutdown_on_a_client_that_never_connected_builds_nothing(quick, library, modbus_api, host):
+def test_a_shutdown_on_a_client_that_never_connected_builds_nothing(
+    quick, library, modbus_api, host
+):
     client = modbus_api.CtcModbusClient(host)
 
     async def scenario():
@@ -180,7 +184,9 @@ def test_a_write_queued_before_the_shutdown_finds_the_door_shut_too(quick, gated
     assert gated.controller.written == [(1010, [215])]
 
 
-def test_after_a_shutdown_a_new_client_for_the_same_pump_is_the_only_one(quick, gated, modbus_api, host):
+def test_after_a_shutdown_a_new_client_for_the_same_pump_is_the_only_one(
+    quick, gated, modbus_api, host
+):
     """What the reload needs: the old entry's object is dead, the new one's lives alone."""
     old = modbus_api.CtcModbusClient(host)
     GatedClient.gates[1010] = asyncio.Event()
@@ -239,7 +245,9 @@ def swallowing(monkeypatch) -> FakeLibrary:
     return FakeLibrary(client_class=CancelSwallowingClient).install(monkeypatch)
 
 
-def test_a_cancel_inside_a_transaction_ends_the_round_as_a_cancel(quick, swallowing, modbus_api, host):
+def test_a_cancel_inside_a_transaction_ends_the_round_as_a_cancel(
+    quick, swallowing, modbus_api, host
+):
     poll = __import__("conftest").load("poll")
     blocks = [(62000, 98), (62107, 41), (62167, 7), (62191, 25)]
     CancelSwallowingClient.gates[62107] = asyncio.Event()
@@ -284,7 +292,9 @@ def test_a_cancel_inside_a_write_is_a_cancel_too(quick, swallowing, modbus_api, 
     assert swallowing.alive == []
 
 
-def test_the_cause_alone_is_enough_when_the_task_is_not_cancelling(quick, library, modbus_api, host):
+def test_the_cause_alone_is_enough_when_the_task_is_not_cancelling(
+    quick, library, modbus_api, host
+):
     """Belt and braces: the chained CancelledError is honoured even without the task flag."""
     from fake_pymodbus import ModbusIOException
 
