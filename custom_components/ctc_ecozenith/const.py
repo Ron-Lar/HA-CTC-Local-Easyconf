@@ -105,6 +105,26 @@ NAV_ALLOWED_EN: Final = (
     "Display setup",
     "System information",
 )
+#: The menus the search for one page (page_search.py, roadmap L7) stays out
+#: of, by the words the panel names them with, in English and in Swedish: a
+#: control whose caption holds one of them as a word is never pressed, and a
+#: page whose heading holds one is never searched, which the search learns
+#: without a press for the page it is asked for and, for a page a tap leads
+#: to, before anything on it is pressed. "Installer" and "Advanced" are
+#: Avancerat, the menu that holds Service and Define (Definiera); "Language"
+#: and "Språk" are the language selection. The search goes no further than
+#: the operation data menu anyway; the words keep a caption that says where a
+#: control leads from being pressed to find out.
+NAV_FORBIDDEN: Final = (
+    "Installer",
+    "Advanced",
+    "Avancerat",
+    "Service",
+    "Define",
+    "Definiera",
+    "Language",
+    "Språk",
+)
 #: Whether the walk may also open the panel's own menu button on the home
 #: screen, where an i550 Pro is thought to keep the system information page.
 #: That is the one press made without a caption to go by, and it has never met

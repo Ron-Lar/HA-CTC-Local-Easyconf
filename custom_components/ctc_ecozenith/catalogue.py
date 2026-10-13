@@ -11,7 +11,7 @@ mirrors how the panel itself is laid out.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 import logging
 import re
@@ -973,16 +973,27 @@ async def _async_return_to_root(
 
 
 async def _async_tap_targets(
-    client: CtcWebClient, page_map: dict[int, list[int]], page: int
+    client: CtcWebClient,
+    page_map: dict[int, list[int]],
+    page: int,
+    exclude: Callable[[list[Widget]], Awaitable[set[tuple[int, int]]]] | None = None,
 ) -> list[tuple[int, int]]:
-    """Return distinct points worth tapping on a page, in reading order."""
+    """Return distinct points worth tapping on a page, in reading order.
+
+    ``exclude`` is given each screen's widgets, from the same reading the
+    points are taken from, and names points to leave out: the search for one
+    page leaves out a control whose caption names a menu it stays out of.
+    """
     seen: set[tuple[int, int, int, int]] = set()
     targets: list[tuple[int, int, int, int]] = []
+    excluded: set[tuple[int, int]] = set()
     for screen in page_map.get(page, []):
         try:
             widgets = await client.async_widgets(screen)
         except CtcWebError:
             continue
+        if exclude is not None:
+            excluded |= await exclude(widgets)
         for widget in widgets:
             if not widget.visible or widget.width < 20 or widget.height < 14:
                 continue
@@ -997,7 +1008,8 @@ async def _async_tap_targets(
                 continue
             seen.add(box)
             targets.append(box)
-    return [(x + w // 2, y + h // 2) for x, y, w, h in _order_targets(targets)]
+    points = [(x + w // 2, y + h // 2) for x, y, w, h in _order_targets(targets)]
+    return [point for point in points if point not in excluded]
 
 
 def _order_targets(

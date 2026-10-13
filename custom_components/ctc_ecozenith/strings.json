@@ -90,14 +90,16 @@
           "rescan": "Read the display's menu again",
           "slow_pages": "Pages to read",
           "visit_system_info": "Let the integration open System information on the panel",
-          "check_updates": "Tell me when a new version is released"
+          "check_updates": "Tell me when a new version is released",
+          "find_page": "Search for the way to a page"
         },
         "data_description": {
           "enable_control": "Creates control entities that write to CTC's volatile 1000 registers. The controller forgets them about five minutes after the last write, so control releases itself if Home Assistant stops. The stored settings in the 61500 block are never written.",
           "send_statistics": "One report per day to {endpoint}: the integration's version, the Home Assistant version, installation type and Python version, the language and the country you configured in Home Assistant, an approximate position rounded to about 11 km, the number of entities and devices, which transports are in use, whether control is enabled, how many display pages are harvested, how many pages the display's menu has and whether the last reading of the menu since Home Assistant started recognised the home screen and got into the operation data menu, whether the row with the unit's operating hours was recognised on the history page, whether the counters behind the coefficient of performance were found on the display or in Modbus and whether each handed over a number at the last read, and when there is no figure, why: too little energy counted so far, a counter standing still although the unit has been running, or a quotient no heat pump could produce. Also the number of failed register reads, the indoor and outdoor unit's model, for an indoor unit the integration does not know yet the family code in the name of the display's settings file (such as ezi4xx, two to sixteen lowercase letters and digits, nothing else), the firmware in the display, the heat pump's control board and the control unit, the product and the year and week of manufacture from the serial number, and the coefficient of performance (COP) over the last day, a rolling year, the machine's first year and the lifetime. One measurement leaves the house, and only when it is wrong: where a counter stands still or the two counters give an impossible quotient, the two lifetime totals in kilowatt hours are sent along with the flag, never otherwise. Never a name, an address, an exact position, a full serial number, an entity name or a page name, never anything finer than one day, and your IP address is not stored. It also sends a random id created when the integration was installed, so that the daily reports can be kept apart and erased on request (the server keeps it only as a hash, and it says nothing about who you are), a hash that links the beolink plugins running on the same Home Assistant, how many warnings and errors the integration logged since the previous report, and whether it is running or waiting to start again, never the messages themselves or the reason. Switching this off also erases what has already been sent. The full list: {privacy_url}",
           "visit_system_info": "The panel walks to the display's System information page once and back, to read the serial number and the display's own software version. It presses nothing but Advanced, Display and System information, checks where the panel went after every press, and gives up at the first surprise.",
           "check_updates": "Asks GitHub once a day whether a newer release of this integration exists, and says so in the repairs view. Home Assistant only offers updates for what HACS installed, so a copy put in place by hand is otherwise never offered one.",
-          "slow_pages": "The figure after each page is how many values it holds."
+          "slow_pages": "The figure after each page is how many values it holds.",
+          "find_page": "For a page of the display that the reading of the menu does not reach, such as Kompressor VP1 on an i550 Pro. The next form asks for the page's number, and the search moves the panel, so somebody should stand at the panel."
         }
       },
       "rescan": {
@@ -108,10 +110,36 @@
           "slow_interval": "How often",
           "restore_page": "Put the panel back afterwards"
         }
+      },
+      "find_page": {
+        "title": "Search for the way to a page",
+        "description": "The search moves the panel in the plant room, so somebody should stand at the panel while it runs. From the operation data menu's root it tries at most {taps} controls, at most {depth} presses deep, stops at the page, records the way there, reads the page and puts the panel back where it was, or on the home screen where it does not know the way back. It never presses anything in Service, Define or the language selection, nothing in a page's heading but the panel's own button, never that button on the home screen, and nothing outside the operation data menu but that button, to leave it. The page's number is in the display's screen map, {screen_map}, the number before each colon. Or walk the panel to the page by hand: the field is filled in with the page the panel shows right now.",
+        "data": {
+          "page": "Page number"
+        },
+        "data_description": {
+          "page": "The number before a colon in the screen map, or the page the panel shows."
+        }
+      },
+      "find_page_found": {
+        "title": "Page found",
+        "description": "Page {page}, {title}, is {steps} presses from the operation data menu's root and was found after {tries} tries. It holds {count} values, and the panel is back where it was, or on the home screen. Submit to add the page to the menu, ticked, so it is read with the other pages; close the dialog and nothing is saved."
       }
     },
+    "error": {
+      "panel_busy": "The panel is in use right now: the integration is reading the display's pages or walking its menu. Try again in a moment.",
+      "page_unknown": "The display's screen map has no page with that number.",
+      "page_outside": "That page is the home screen or a page of a menu the search stays out of, so it was not searched for. Nothing has been saved.",
+      "no_menu": "The operation data menu could not be found on the panel, so nothing in it was pressed. Nothing has been saved.",
+      "page_not_found": "The page was not found within the search's limits, so the way there cannot be reached from the operation data menu just now. An i550 Pro draws the way to some pages only in some operating states, so it may be worth trying again once the operating state has changed. Nothing has been saved, and the panel stands where it was or on the home screen.",
+      "page_lost": "The search lost its way back in the menu and stopped. Nothing has been saved. Look at the panel: it may not be where it was.",
+      "page_empty": "The page was found but holds no value to read. Nothing has been saved.",
+      "page_gap": "The page was found but could not be read whole: a screen or a caption did not answer. Nothing has been saved; try again in a moment.",
+      "display_silent": "The display stopped answering during the search. Nothing has been saved."
+    },
     "abort": {
-      "panel_busy": "The panel is in use right now: the integration is reading the display's pages or walking its menu. Try again in a moment. Nothing has been changed."
+      "panel_busy": "The panel is in use right now: the integration is reading the display's pages or walking its menu. Try again in a moment. Nothing has been changed.",
+      "one_walk": "Tick either Read the display's menu again or Search for the way to a page, not both: each of them moves the panel. Nothing has been changed."
     }
   },
   "issues": {
