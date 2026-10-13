@@ -132,6 +132,31 @@ def serial_product(raw: Any) -> str | None:
     return digits[:SERIAL_GROUP] if digits else None
 
 
+#: The product codes the statistics backend keeps (lib/ingest.ts, METRICS):
+#: a number outside this is clamped to the edge without a word, so a product
+#: group with a leading zero, 0712, would arrive as 1000, another product's
+#: code. Such a group is left out of the report instead.
+PRODUCT_CODE_MIN = 1000
+PRODUCT_CODE_MAX = 9999
+
+
+def product_code_value(product: str | None) -> int | None:
+    """The product group as the report sends it, or None where the backend would change it.
+
+    The first group of a serial is four digits, so it can only fall outside
+    the backend's range at the bottom: a group that starts with a zero. No
+    CTC serial seen so far does (7208, 1002, 7312), but one that did must be
+    left out rather than stored as somebody else's product.
+    """
+    if not product:
+        return None
+    try:
+        code = int(product)
+    except ValueError:
+        return None
+    return code if PRODUCT_CODE_MIN <= code <= PRODUCT_CODE_MAX else None
+
+
 def serial_made(raw: Any) -> str | None:
     """The second group: the year and week it was made, as YYWW.
 
@@ -368,7 +393,7 @@ def build_extra(
         "consumption_total_kwh": energy_value(consumption_total_kwh),
         "built_year": 2000 + int(made[:2]) if made else None,
         "built_week": int(made[2:]) if made else None,
-        "product_code": int(product) if product else None,
+        "product_code": product_code_value(product),
     }
     metrics = {k: v for k, v in metrics.items() if v is not None}
     if metrics:
