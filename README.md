@@ -413,8 +413,10 @@ forgets it about five minutes after the last write. Where the integration gives
 the pump's own value under the override, it stands under the row as *pumpen
 själv*. A held number has a **Släpp** button that lets go of that one alone,
 through the integration's release service, without writing anything; a mode is
-let go of with its own option, *Släpp styrningen*. Searching All values for
-*styrd* lists everything held.
+let go of with its own option, *Släpp styrningen*. At rest a mode list among the
+controls stands on *Släpp styrningen* with the pump's own mode under it as
+*pumpen själv*, so any mode, the one the pump runs included, can be picked and
+held. Searching All values for *styrd* lists everything held.
 
 The coefficient of performance says under its figure what it rests on, the
 last day, the last seven or thirty days, a rolling year, the first year or the

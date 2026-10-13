@@ -164,7 +164,9 @@ def test_the_release_button_calls_the_service_for_that_one_entity_and_goes_with_
         "release": {"shown": False, "disabled": False, "text": "Släpp",
                     "label": "Släpp: Max varvtal"},
     }
-    assert mode["held"] is False and mode["pump"] is None
+    # The list at rest stands on Släpp styrningen, so the pump's own mode is
+    # said under it (F2.4).
+    assert mode["held"] is False and mode["pump"] == "pumpen själv: Normal"
 
 
 def test_a_refused_release_makes_the_button_ready_again():
@@ -181,8 +183,10 @@ def test_a_control_that_is_not_held_shows_neither_mark_nor_button():
     found = _play("ctc-ecozenith-controls", IDLE)
     number, mode = found["rows"]
     assert (number["held"], number["pump"], number["release"]["shown"]) == (False, None, False)
-    # The list's own value at rest is the pump's, so it is not said twice.
-    assert (mode["held"], mode["pump"]) == (False, None)
+    # The list at rest stands on Släpp styrningen rather than on the pump's
+    # own mode, which it could not pick there (F2.4), so the pump's mode is
+    # said under it.
+    assert (mode["held"], mode["pump"]) == (False, "pumpen själv: Normal")
 
 
 def test_a_list_at_rest_whose_value_is_not_the_pumps_says_the_pumps_value():
@@ -241,6 +245,14 @@ def test_the_list_marks_what_is_held_without_a_button():
         "pump": "pumpen själv: 50 rps", "release": None,
     }
     assert (mode["held"], mode["pump"]) == (True, "pumpen själv: Normal")
+
+
+def test_the_list_of_values_shows_a_mode_at_rest_as_its_state_and_says_it_once():
+    # Only the controls card's mode list stands on Släpp styrningen at rest.
+    # The list of values writes the state, the pump's own Normal, and has
+    # nothing to add under it.
+    found = _play("ctc-ecozenith-rows", IDLE)
+    assert (found["rows"][1]["held"], found["rows"][1]["pump"]) == (False, None)
 
 
 def test_a_search_for_the_mark_finds_what_is_held():
