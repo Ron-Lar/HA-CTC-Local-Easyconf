@@ -479,11 +479,14 @@ class CtcActiveOverridesSensor(CoordinatorEntity, SensorEntity):
     keepalive that stops lets go of everything. This says on the overview and
     in the history what is being held: the count as the state, and under
     ``styrningar`` and its English twin ``overrides`` each register's name,
-    number, value and when a write of it last reached the controller.
+    number, value and when that value was set, ``satt`` and ``set_at``.
 
     Written whenever the control manager changes what it holds, a write, a
-    release or an override given up, and with every Modbus round besides, so
-    the moment of the last write follows the keepalive. Available whatever
+    release or an override given up, and with every Modbus round besides.
+    The keepalive's rewrites of the same value change nothing here: the list
+    carries when the value was set or last changed, not when a write last
+    reached the controller, so a value held for hours is one state in the
+    recorder rather than a new row every minute (F6.2). Available whatever
     Modbus does: holding is Home Assistant's own state, and a lost round is
     exactly when it is worth reading, with the button beside it on the page.
     """

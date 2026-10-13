@@ -291,10 +291,12 @@ DERIVED: dict[str, str] = {
     "active_overrides": (
         "Hur många av pumpens flyktiga styrregister Home Assistant håller just nu, alltså skriver "
         "om varje minut. Noll när pumpen följer sina egna inställningar. Attributet styrningar "
-        "(overrides) säger för varje styrning namn, register, värde och när en skrivning senast "
-        "nådde pumpen. Räknas bara från en skrivning som har nått pumpen, och når ingen "
-        "skrivning fram på fem minuter släpps styrningen, eftersom pumpen har glömt den. Släpp "
-        "all styrning släpper allt på en gång."
+        "(overrides) säger för varje styrning namn, register, värde och när värdet sattes, satt "
+        "(set_at): när det först skrevs eller senast ändrades. Omskrivningen varje minut flyttar "
+        "inte klockslaget, så listan ändras bara när en styrning sätts, ändras eller släpps. När "
+        "en skrivning senast nådde pumpen står på reglaget självt. Räknas bara från en skrivning "
+        "som har nått pumpen, och når ingen skrivning fram på fem minuter släpps styrningen, "
+        "eftersom pumpen har glömt den. Släpp all styrning släpper allt på en gång."
     ),
     # The transitions in the heat pump's status, from one Modbus round to the
     # next (transitions.py). Nothing is stored, and the texts say so.

@@ -33,6 +33,7 @@ class Keepalive:
         self._expiry = expiry
         self._values: dict[int, int] = {}
         self._ok_at: dict[int, float] = {}
+        self._set_at: dict[int, float] = {}
         self._failures: dict[int, int] = {}
         self._generation: dict[int, int] = {}
         self._releases: dict[int, int] = {}
@@ -52,6 +53,14 @@ class Keepalive:
     def written_at(self, address: int) -> float | None:
         """When a write of this address last reached the controller."""
         return self._ok_at.get(address)
+
+    def set_at(self, address: int) -> float | None:
+        """When the value in force was set: the write that put it in force or last changed it.
+
+        The keepalive's rewrites of the same value do not move it, so whatever
+        shows it changes when the value does and not once a minute.
+        """
+        return self._set_at.get(address)
 
     def valid_until(self, address: int) -> float | None:
         """Until when the controller is known to hold this address."""
@@ -94,6 +103,8 @@ class Keepalive:
         True when it ends a run of failures, which is worth a word in the log.
         """
         recovered = self._failures.pop(address, 0) > 0
+        if self._values.get(address) != raw:
+            self._set_at[address] = now
         self._values[address] = raw
         self._ok_at[address] = now
         self._moved(address)
@@ -138,6 +149,7 @@ class Keepalive:
         was = address in self._values
         self._values.pop(address, None)
         self._ok_at.pop(address, None)
+        self._set_at.pop(address, None)
         self._failures.pop(address, None)
         if was:
             self._moved(address)
@@ -150,4 +162,5 @@ class Keepalive:
             self._moved(address)
         self._values.clear()
         self._ok_at.clear()
+        self._set_at.clear()
         self._failures.clear()

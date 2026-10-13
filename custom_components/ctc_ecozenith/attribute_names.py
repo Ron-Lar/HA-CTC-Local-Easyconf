@@ -58,12 +58,14 @@ EPISODE_KEYS: Final[dict[str, str]] = {
 }
 
 #: The keys inside each override the sensor Aktiva överstyrningar lists,
-#: Swedish to English, for ``overrides`` (roadmap R49).
+#: Swedish to English, for ``overrides`` (roadmap R49). ``satt`` is when the
+#: value was set, which the keepalive's rewrites do not move (F6.2); it sits
+#: inside the list, so its twin comes from here rather than from ENGLISH.
 OVERRIDE_KEYS: Final[dict[str, str]] = {
     "namn": "name",
     "register": "register",
     "värde": "value",
-    "senast skriven": "last_written",
+    "satt": "set_at",
 }
 
 

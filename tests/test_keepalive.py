@@ -111,6 +111,26 @@ def test_release_and_clear_forget_the_moments_too(keepalive):
     assert keepalive.valid_until(1007) is None
 
 
+def test_the_moment_it_was_set_moves_only_when_the_value_does(keepalive):
+    """F6.2: the keepalive's rewrites leave it, so the sensor's list stands still."""
+    keepalive.written(1010, 215, now=0.0)
+    assert keepalive.set_at(1010) == 0.0
+    keepalive.written(1010, 215, now=60.0)
+    assert keepalive.set_at(1010) == 0.0, "omskrivningen flyttar inte klockslaget"
+    assert keepalive.written_at(1010) == 60.0
+    keepalive.written(1010, 205, now=90.0)
+    assert keepalive.set_at(1010) == 90.0
+    keepalive.release(1010)
+    assert keepalive.set_at(1010) is None
+    keepalive.written(1010, 205, now=120.0)
+    assert keepalive.set_at(1010) == 120.0, "efter ett släpp är samma värde en ny styrning"
+    assert keepalive.failed(1010, now=120.0 + EXPIRY) is True
+    assert keepalive.set_at(1010) is None
+    keepalive.written(1007, 2, now=500.0)
+    keepalive.clear()
+    assert keepalive.set_at(1007) is None
+
+
 def test_a_release_is_counted_whether_or_not_the_address_was_held(keepalive):
     """F1.2: the write that would put it in force may be on its way."""
     assert keepalive.releases(1010) == 0
@@ -318,6 +338,25 @@ def test_releasing_the_last_register_stops_the_timer(manager):
     run(manager.async_set(1002, 450))
     run(manager.async_set(1002, None))
     assert ha_stub.tracked == []
+
+
+def test_the_refresh_leaves_the_moment_the_value_was_set(manager):
+    """F6.2: what the sensor lists moves with the value, not with the keepalive."""
+    start = manager.clock.now
+    run(manager.async_set(1010, 215))
+    for _minute in range(3):
+        manager.clock.now += 60
+        _refresh(manager)
+    assert manager.set_at(1010).timestamp() == start
+    assert manager.written_at(1010).timestamp() == start + 180
+    manager.clock.now += 30
+    run(manager.async_set(1010, 205))
+    assert manager.set_at(1010).timestamp() == start + 210
+    manager.clock.now += 30
+    run(manager.async_set(1010, 205))
+    assert manager.set_at(1010).timestamp() == start + 210, "samma värde igen är ingen ändring"
+    run(manager.async_set(1010, None))
+    assert manager.set_at(1010) is None
 
 
 # ------------------------------------------- the check at the expiry (F2.2)

@@ -43,10 +43,17 @@ def held(
 ) -> list[dict[str, Any]]:
     """Every register Home Assistant holds right now, under the sensor's Swedish keys.
 
-    Name, register, the value as the entity shows it and when a write of it
-    last reached the controller. Only what the manager counts as in force, a
-    write that reached the unit within its five minutes, so the list says
-    what the controller holds rather than what was asked of it.
+    Name, register, the value as the entity shows it and when that value was
+    set, "satt": the write that put it in force or last changed it. Only what
+    the manager counts as in force, a write that reached the unit within its
+    five minutes, so the list says what the controller holds rather than what
+    was asked of it.
+
+    Not when a write last reached the controller: the keepalive moves that
+    every minute, and the list would then give the sensor a new state, and the
+    recorder a row in states and one in state_attributes, every minute while
+    anything is held (F6.2). The controls carry that moment themselves, as
+    senast skriven and gäller till.
     """
     active = control.active
     found: list[dict[str, Any]] = []
@@ -54,13 +61,13 @@ def held(
         raw = active.get(register.address)
         if raw is None:
             continue
-        written = control.written_at(register.address)
+        set_at = control.set_at(register.address)
         found.append(
             {
                 "namn": register.name,
                 "register": str(register.address),
                 "värde": shown_value(register, raw),
-                "senast skriven": written.isoformat(timespec="seconds") if written else None,
+                "satt": set_at.isoformat(timespec="seconds") if set_at else None,
             }
         )
     return found

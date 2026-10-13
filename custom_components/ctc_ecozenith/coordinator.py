@@ -686,6 +686,14 @@ class CtcControlManager:
         """Until when the controller is known to hold this address."""
         return self._moment(self._state.valid_until(address))
 
+    def set_at(self, address: int) -> datetime | None:
+        """When the value in force was set: first written, or last changed.
+
+        Not moved by the keepalive's rewrites, so the sensor Aktiva
+        överstyrningar can list it without a new state every minute (F6.2).
+        """
+        return self._moment(self._state.set_at(address))
+
     @staticmethod
     def _moment(seconds: float | None) -> datetime | None:
         if seconds is None:
