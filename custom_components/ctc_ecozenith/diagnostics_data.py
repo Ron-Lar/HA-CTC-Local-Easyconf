@@ -15,7 +15,7 @@ title, in the device's identifiers and in the error a display client writes
 when it cannot reach the address, and an entry the DHCP flow has moved keeps
 the address it was created with as its device key; the serial number's
 sequence group, the one that identifies a machine, is also the tail of the
-display's MAC address and of its host name (CTC8489). So besides the keys Home
+display's MAC address and of its host name (CTC0001). So besides the keys Home
 Assistant redacts, every string is washed: any IPv4 address, any MAC address
 and the entry's own host and device key become a placeholder, the display's
 host name loses its digits, and a serial number in any spelling is cut down to

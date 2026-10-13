@@ -48,7 +48,7 @@ class Display:
     async def async_vars(self, screen):
         self.vars_read.append(screen)
         if screen == self.system:
-            return ["720825400001", "02:00:00:12:34:56", "20260610", "1.7"]
+            return ["720825400001", "02:00:00:00:00:01", "20260610", "1.7"]
         if screen == self.heatpump:
             return [FIRMWARE, 5, 7]
         return [1, 2, 3]

@@ -1109,9 +1109,14 @@ menu of the diagnostics file. Write the widgets out as
 the page and the captions the panel prints to `REAL_PAGES` and the file to the
 list in `tests/test_fixture_hygiene.py`, and run the pairing over every
 fixture, the old ones too: a rule that puts one layout right can push another
-out of line, which is what the first attempt at 0.15.1's fix did. A fixture
-carries no address from your network and no real serial number, which
-`tests/test_fixture_hygiene.py` checks.
+out of line, which is what the first attempt at 0.15.1's fix did. Before you
+send a fixture in, take your own address, MAC address, host name and serial
+number out of it by hand. `tests/test_fixture_hygiene.py` only catches what
+follows a pattern: a private IPv4 address that is not on its list of made-up
+ones, a MAC address other than the made-up `02:00:00:00:00:0x`, the display's
+host name `CTC` and four digits other than `CTC0001`, and a serial number whose
+last group is not `0001`. It does not see a public address, a name from your
+own DNS or a serial number written some other way.
 
 ### The quality scale and the Home Assistant floor
 

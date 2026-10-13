@@ -67,7 +67,7 @@ from custom_components.ctc_ecozenith.identity import Identity
 #: Where the unit turns up after a new lease, a documentation address too.
 MOVED_TO = "192.0.2.77"
 #: The display's own host name, the way the router's DNS may give it.
-HOST_NAME = "ctc8489.lan"
+HOST_NAME = "ctc0001.lan"
 #: The stand-in display's MAC, as IDENTITY has it, the way DHCP hands it over.
 MAC = IDENTITY["mac"].replace(":", "")
 OTHER_MAC = "020000000002"

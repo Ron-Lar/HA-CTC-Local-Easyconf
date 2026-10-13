@@ -112,7 +112,7 @@ def mac_hex(text: Any) -> str | None:
 
 
 def mac_address(text: Any) -> str | None:
-    """A MAC address the way the device registry writes it, "02:00:00:00:84:89"."""
+    """A MAC address the way the device registry writes it, "02:00:00:00:00:01"."""
     digits = mac_hex(text)
     if digits is None:
         return None
@@ -152,7 +152,7 @@ def match_discovery(
     Otherwise the MAC decides, since it follows the unit and the address
     does not: a configured unit whose MAC turns up at a free address has
     moved there. Only an entry set up with the kind of address a lease hands
-    out can have moved, though. One set up with a host name, "CTC8489" or a
+    out can have moved, though. One set up with a host name, "CTC0001" or a
     name of the router's DNS, already follows the unit wherever its lease
     goes, and one set up with an IPv6 address is not reached through the
     lease at all: either is the unit where it already is, and is left on

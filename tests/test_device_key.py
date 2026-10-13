@@ -169,18 +169,18 @@ def test_nothing_is_held_back_where_nothing_stands_in_the_way():
     assert keys.held_back(KNOWN, "192.0.2.10", None) is None
 
 
-@pytest.mark.parametrize("host", ["ctc8489.lan", "CTC8489", "varmepump.hemma.se", "fd00::1234"])
+@pytest.mark.parametrize("host", ["ctc0001.lan", "CTC0001", "varmepump.hemma.se", "fd00::1234"])
 def test_an_entry_set_up_by_name_or_ipv6_is_where_it_is(host):
     # DNS follows the unit, and DHCP hands out no IPv6 address: the lease's
     # address is no news, and moving the entry there would reload it with a
     # second client knocking on the same pump.
-    known = [keys.Known("e1", host, "02:00:00:00:84:89")]
-    assert keys.match_discovery(known, "192.0.2.77", "020000008489") == (keys.KNOWN, "e1")
+    known = [keys.Known("e1", host, "02:00:00:00:00:01")]
+    assert keys.match_discovery(known, "192.0.2.77", "020000000001") == (keys.KNOWN, "e1")
 
 
 def test_only_an_address_of_the_leases_kind_follows_the_lease():
     assert keys.leased_address(HOST, MOVED_TO)
-    assert not keys.leased_address("ctc8489.lan", MOVED_TO)
+    assert not keys.leased_address("ctc0001.lan", MOVED_TO)
     assert not keys.leased_address("fd00::1234", MOVED_TO)
     assert keys.leased_address("fd00::1234", "fd00::5678")
     assert not keys.leased_address(None, MOVED_TO)
@@ -193,7 +193,7 @@ def test_only_an_address_of_the_leases_kind_follows_the_lease():
 
 def test_a_new_entry_is_known_by_its_address_where_it_is_free():
     assert keys.free_key(HOST, []) == HOST
-    assert keys.free_key(HOST, [MOVED_TO, "ctc8489.lan"]) == HOST
+    assert keys.free_key(HOST, [MOVED_TO, "ctc0001.lan"]) == HOST
 
 
 def test_a_new_entry_at_an_address_a_moved_entry_was_created_with_gets_its_own_key():
@@ -212,9 +212,9 @@ def test_a_connection_at_the_new_address_waits_out_the_close_at_the_old(modbus_a
     # after the move is said, and the new one is the same pump.
     monkeypatch.setattr(modbus_api, "_CLOSED_AT", {})
     monkeypatch.setattr(modbus_api, "_MOVED_FROM", {})
-    modbus_api.note_moved("ctc8489.lan", MOVED_TO, 502)
+    modbus_api.note_moved("ctc0001.lan", MOVED_TO, 502)
     assert modbus_api.settle_wait(MOVED_TO, 502, 1000.0) == 0.0
-    modbus_api.note_close("ctc8489.lan", 502, 1000.0)
+    modbus_api.note_close("ctc0001.lan", 502, 1000.0)
     assert modbus_api.settle_wait(MOVED_TO, 502, 1000.0) == modbus_api.CLOSE_SETTLE
     assert modbus_api.settle_wait(MOVED_TO, 502, 1004.0) == modbus_api.CLOSE_SETTLE - 4.0
     # The newest close of the two counts.

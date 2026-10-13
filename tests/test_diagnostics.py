@@ -404,7 +404,7 @@ def test_a_short_host_name_is_washed_as_a_word_only(diagnostics_data, const):
 
 
 @pytest.mark.parametrize(
-    "key", ["varmepump.hemma.se", "fd00::1234", f"{HOST}#2", "ctc8489.lan"]
+    "key", ["varmepump.hemma.se", "fd00::1234", f"{HOST}#2", "ctc0001.lan"]
 )
 def test_the_device_key_of_a_moved_entry_is_taken_out_as_well(diagnostics_data, const, key):
     # After a move the host is the new address and the key the one the entry
