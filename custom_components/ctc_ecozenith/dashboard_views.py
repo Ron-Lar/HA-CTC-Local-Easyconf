@@ -374,6 +374,17 @@ TEXT = {
         "state_none_start": "ingen start ännu",
         "state_none_run": "ingen körning ännu",
         "state_none_defrost": "ingen avfrostning ännu",
+        # R49: a control Home Assistant holds right now, the hover text that
+        # says what holding means, the pump's own value beside it, and the
+        # button that lets go of one number.
+        "state_controlled": "Styrd",
+        "state_controlled_note": (
+            "Home Assistant håller värdet och skriver om det varje minut. Pumpen glömmer det "
+            "cirka fem minuter efter sista skrivningen, så tystnar Home Assistant går pumpen "
+            "tillbaka till sitt eget värde."
+        ),
+        "state_pump_value": "pumpen själv",
+        "state_release": "Släpp",
     },
     "en": {
         "overview": "Overview",
@@ -444,6 +455,14 @@ TEXT = {
         "state_none_start": "no start yet",
         "state_none_run": "no run yet",
         "state_none_defrost": "no defrost yet",
+        "state_controlled": "Overridden",
+        "state_controlled_note": (
+            "Home Assistant holds this value and writes it again every minute. The pump forgets "
+            "it about five minutes after the last write, so if Home Assistant falls silent the "
+            "pump goes back to its own value."
+        ),
+        "state_pump_value": "pump's own",
+        "state_release": "Release",
     },
 }
 
