@@ -54,11 +54,13 @@ def test_the_latest_leg_never_blocks_a_push_or_a_pull_request(event):
     assert _allowed_to_fail(_latest_leg_allowance(), leg="latest", event=event)
 
 
-def test_the_latest_leg_fails_the_scheduled_run_so_somebody_is_told():
-    assert not _allowed_to_fail(_latest_leg_allowance(), leg="latest", event="schedule")
+@pytest.mark.parametrize("event", ["schedule", "workflow_dispatch"])
+def test_the_latest_leg_fails_the_scheduled_run_so_somebody_is_told(event):
+    """A run started by hand is somebody asking whether all is well now (R57)."""
+    assert not _allowed_to_fail(_latest_leg_allowance(), leg="latest", event=event)
 
 
-@pytest.mark.parametrize("event", ["push", "pull_request", "schedule"])
+@pytest.mark.parametrize("event", ["push", "pull_request", "schedule", "workflow_dispatch"])
 def test_the_pinned_legs_are_never_allowed_to_fail(event):
     allowance = _latest_leg_allowance()
     for leg in ("3.6.9", "3.13.1"):
@@ -70,3 +72,34 @@ def test_the_weekly_run_exists_and_the_latest_leg_takes_whatever_pypi_has():
     assert re.search(r"^\s+- cron: ", text, re.MULTILINE)
     assert "pip install --upgrade pymodbus" in text
     assert re.search(r'pymodbus: \[.*"latest"\]', text)
+
+
+def _job(name: str) -> str:
+    """The lines of one job, from its key to the next job's."""
+    lines = _text().splitlines()
+    start = lines.index(f"  {name}:")
+    end = next(
+        (i for i in range(start + 1, len(lines)) if re.match(r"^  \S", lines[i])), len(lines)
+    )
+    return "\n".join(lines[start:end])
+
+
+def test_the_hacs_job_blocks_every_run():
+    """Public since 2026-09-10, so HACS can read the repository and its verdict counts (R57)."""
+    job = _job("hacs")
+    assert "hacs/action@" in job
+    assert "continue-on-error" not in job
+    assert not re.search(r"^    if:", job, re.MULTILINE)
+
+
+def test_pushes_run_on_main_only_and_a_run_can_be_started_by_hand():
+    text = _text()
+    assert re.search(r"^  push:\n    branches: \[main\]$", text, re.MULTILINE)
+    assert re.search(r"^  workflow_dispatch:$", text, re.MULTILINE)
+
+
+def test_ruff_runs_in_a_pinned_version():
+    """A new ruff release brings new rules; CI goes red over this repository, not over ruff."""
+    job = _job("ruff")
+    assert re.search(r'^\s+RUFF_VERSION: "\d+\.\d+\.\d+"$', job, re.MULTILINE)
+    assert 'pip install "ruff==${RUFF_VERSION}"' in job
