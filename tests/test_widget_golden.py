@@ -306,7 +306,7 @@ def test_an_answer_that_is_not_gzipped_is_read_as_it_is(web_api):
 #: A constructed screen, not a capture, for what screen 118 never draws. Every
 #: number below is written by hand, and so is the facit after it.
 CONSTRUCTED = 900
-#: The globals: [3] is 13, [5] is 0.
+#: The globals: [3] is 13, [4] is 12, [5] is 0.
 CONSTRUCTED_GLOBALS = "1|2026|10|13|12|0|0|"
 #: The screen's variables: 0: 4, 1: the serial number as text, 2: text where a
 #: number is wanted, 3: 2, 4: 5, 5: 0 (hidden), 6 and 7: hours and minutes.
@@ -333,13 +333,15 @@ CONSTRUCTED_T0 = [
     1, 4, 1,  # 4 variable 4 (5) runs past group 1's three alternatives: nothing
     2, 0, 9,  # 5 there is no group 9: nothing
     0, 5, 1,  # 6 global 5 (0) picks group 1's first alternative: text 2003
+    2, 0, 3,  # 7 group 3 is a format by code 4: format 2
 ]
 #: Group 1 mixes a two-slot text, a three-slot format and a two-slot text: a
 #: selector that counted slots instead of alternatives lands on nothing.
-CONSTRUCTED_T1 = [[3, 2001], [3, 2003, 0, 5, 1, 3, 2002], [4, 0]]
+CONSTRUCTED_T1 = [[3, 2001], [3, 2003, 0, 5, 1, 3, 2002], [4, 0], [4, 2]]
 CONSTRUCTED_T2 = [
     ["%02d:%02d", 0, [1, 6, 1, 7]],                   # two variables, as an i550 prints a clock
     ["%.1f°C", 0, [1, 0], "--.-°C", 9999, [None]],    # a reading, and its "no sensor" variant
+    ["%02d:%02d", 0, [0, 4, 0, 5]],                   # a clock of globals 4 and 5 only
 ]
 F = 11  # a reference the decoder does not read
 CONSTRUCTED_C1 = [
@@ -355,6 +357,7 @@ CONSTRUCTED_C1 = [
     [0, "p900i9", 0, 0, 3, 3, F, F, 4, F],             # kind 0 without a text slot
     [7, "p900i10", 0, 0, 3, 3, F, F, 4, F, F, F, 0],   # a kind that carries no text
     [3, "p900i11", 0, 1, 2, 3, F, F, 4, F, F, F, 6],   # caption picked by a global
+    [3, "p900i12", 0, 1, 1, 3, F, F, 4, F, F, F, 7],   # clock of globals: none of its own
 ]
 
 CONSTRUCTED_FACIT = [
@@ -370,6 +373,9 @@ CONSTRUCTED_FACIT = [
     (9, 0, 10, 10, 28, 28, True, None, None, None, None, None),
     (10, 7, 10, 10, 28, 28, True, None, None, None, None, None),
     (11, 3, 10, 40, 200, 28, True, 2003, "T2003", None, None, None),
+    # A format whose references are all globals reads none of the screen's
+    # variables: an empty list, which the catalogue skips, never [4, 5].
+    (12, 3, 10, 40, 40, 28, True, None, None, "%02d:%02d", [], None),
 ]
 
 
