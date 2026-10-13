@@ -17,7 +17,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .alarms import AlarmWatch
@@ -609,6 +609,10 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return await self.client.async_current_page() == target
 
 
+#: How far past valid_until the check at an override's expiry is armed (F2.2).
+_PAST = timedelta(microseconds=1)
+
+
 class CtcControlManager:
     """Keep CTC's volatile control registers alive, and say truthfully which are.
 
@@ -624,11 +628,20 @@ class CtcControlManager:
     Writes take time, and two things can happen while one is on its way. A
     newer value for the same address: sets and the refresh take turns behind
     one lock, an address at a time, so a refresh never writes an older value
-    over a newer one. A release, from the button, a select or the entry being
-    unloaded: those cannot wait for the lock, so the state is read again when
-    the write is done, and a write that was overtaken by a release records
-    nothing. The controller may then hold the value for its five minutes, but
-    Home Assistant no longer claims it, which is what the release asked for.
+    over a newer one. A release, from the button, a select, the action or the
+    entry being unloaded: those cannot wait for the lock, so the state is read
+    again when the write is done, and a write that was overtaken by a release
+    records nothing. A set reads the address's release count and the epoch of
+    Släpp all styrning before it waits for the lock, so a release that comes
+    while it queues behind a refresh, or while its write is the first of an
+    address not yet held, wins as well (F1.2). The controller may then hold
+    the value for its five minutes, but Home Assistant no longer claims it,
+    which is what the release asked for.
+
+    The keepalive learns that the controller has forgotten an address only
+    from a write that fails, once a minute. So the first miss of a run also
+    arms a check at the moment the address expires, which gives it up there
+    and then unless a write has reached the unit since (F2.2).
     """
 
     def __init__(
@@ -644,6 +657,13 @@ class CtcControlManager:
         # moments as timestamps and one clock has to serve both.
         self._clock = clock
         self._unsub = None
+        #: The check at the moment an address expires, per address, armed at
+        #: the first miss of a run and disarmed by a write that reaches the
+        #: unit, a release, Släpp all styrning and the entry going.
+        self._expiries: dict[int, Callable[[], None]] = {}
+        #: The address whose write is on its way under the lock, if any: its
+        #: outcome, not the check at the expiry, says whether it is still held.
+        self._in_flight: int | None = None
         self._listeners: list[Callable[[], None]] = []
         #: Taken by a set for its write and by the refresh for each address.
         self._writing = asyncio.Lock()
@@ -709,33 +729,43 @@ class CtcControlManager:
         """
         if raw is None:
             self._state.release(address)
+            self._cancel_expiry(address)
             if not self._state:
                 self._stop_timer()
             self._notify()
             return
+        # Read before waiting for the lock, not after: a release that comes
+        # while this queues behind a refresh is as much a release as one that
+        # comes during the write, and the address may not be held yet, so the
+        # generation, which a refresh's own write moves, cannot tell either.
+        released = self._released_mark(address)
         async with self._writing:
             if self._stopped:
                 raise CtcModbusError(
                     f"control register {address} was not written: the entry is being unloaded"
                 )
-            generation = self._state.generation(address)
             try:
+                self._in_flight = address
                 await self._client.async_write(address, raw)
             except CtcModbusError as err:
-                if self._stopped or self._state.generation(address) != generation:
+                if self._stopped or self._released_mark(address) != released:
                     raise
                 # A write that fails while an older value is in force counts
                 # against that value's time, like a failed refresh would.
                 now = self._clock()
                 if self._state.failed(address, now):
+                    self._cancel_expiry(address)
                     self._said_released(address)
                     if not self._state:
                         self._stop_timer()
                     self._notify()
                 elif self._state.failures(address) == 1:
                     self._said_missed(address, err)
+                    self._watch_expiry(address)
                 raise
-            if self._stopped or self._state.generation(address) != generation:
+            finally:
+                self._in_flight = None
+            if self._stopped or self._released_mark(address) != released:
                 _LOGGER.debug(
                     "Control register %s was released while %s was on its way, so the "
                     "write is not recorded",
@@ -744,21 +774,27 @@ class CtcControlManager:
                 )
                 return
             recovered = self._state.written(address, raw, self._clock())
+            self._cancel_expiry(address)
         _LOGGER.debug("Control register %s set to %s", address, raw)
         if recovered:
             _LOGGER.info("Control register %s reached the controller again", address)
         self._ensure_timer()
         self._notify()
 
+    def _released_mark(self, address: int) -> tuple[int, int]:
+        """What a set compares before and after its write: the address's releases and the epoch."""
+        return self._state.releases(address), self._state.epoch
+
     def async_release_all(self) -> None:
         """Stop overriding anything and hand the unit back to its own settings.
 
         Nothing is written: the controller forgets an override about five
         minutes after the last write, so it is enough to stop writing. A number
-        has no release position of its own, which makes this the only way back
-        from one short of restarting Home Assistant.
+        has no release position in a list; on its own it is let go of by the
+        action ctc_ecozenith.release, or the page's button on its row.
         """
         self._state.clear()
+        self._cancel_expiries()
         self._stop_timer()
         self._notify()
 
@@ -798,6 +834,7 @@ class CtcControlManager:
                     continue
                 generation = self._state.generation(address)
                 try:
+                    self._in_flight = address
                     await self._client.async_write(address, raw)
                 except CtcModbusError as err:
                     if self._stopped:
@@ -806,13 +843,17 @@ class CtcControlManager:
                         continue
                     now = self._clock()
                     if self._state.failed(address, now):
+                        self._cancel_expiry(address)
                         self._said_released(address)
                         changed = True
                     elif self._state.failures(address) == 1:
                         self._said_missed(address, err)
+                        self._watch_expiry(address)
                     else:
                         _LOGGER.debug("Could not refresh control register %s: %s", address, err)
                     continue
+                finally:
+                    self._in_flight = None
                 if self._stopped:
                     return
                 if self._state.generation(address) != generation:
@@ -821,7 +862,9 @@ class CtcControlManager:
                         address,
                     )
                     continue
-                if self._state.written(address, raw, self._clock()):
+                recovered = self._state.written(address, raw, self._clock())
+                self._cancel_expiry(address)
+                if recovered:
                     _LOGGER.info("Control register %s reached the controller again", address)
                     changed = True
                 else:
@@ -843,6 +886,56 @@ class CtcControlManager:
             until.isoformat(timespec="seconds") if until else "?",
         )
 
+    def _watch_expiry(self, address: int) -> None:
+        """Give the address up at the moment the controller forgets it (F2.2).
+
+        Armed at the first miss of a run. Otherwise only a write that fails
+        gives an address up, and the keepalive's next one may come up to a
+        minute after valid_until, while the controls go on saying control is
+        in force and the sensor goes on counting it, with nothing told to
+        draw again. At valid_until this gives the address up unless a write
+        has reached the unit since, which disarms it anyway, says so once,
+        stops the keepalive when nothing is left and tells the listeners. A
+        write of the address that is on its way just then decides instead:
+        if it fails, the miss gives the address up, since the time has passed.
+
+        Armed a microsecond past valid_until: the moment goes to the timer
+        rounded to whole microseconds, and rounded down it would fire a hair
+        before the manager's own clock counts the expiry as reached.
+        """
+        self._cancel_expiry(address)
+        ok_at = self._state.written_at(address)
+        until = self._moment(self._state.valid_until(address))
+        if ok_at is None or until is None:
+            return
+        until += _PAST
+        from homeassistant.helpers.event import async_track_point_in_time
+
+        @callback
+        def _expire(_now: datetime) -> None:
+            self._expiries.pop(address, None)
+            if self._stopped or self._in_flight == address:
+                return
+            if self._state.written_at(address) != ok_at:
+                return
+            if not self._state.expire(address, self._clock()):
+                return
+            self._said_released(address)
+            if not self._state:
+                self._stop_timer()
+            self._notify()
+
+        self._expiries[address] = async_track_point_in_time(self._hass, _expire, until)
+
+    def _cancel_expiry(self, address: int) -> None:
+        unsub = self._expiries.pop(address, None)
+        if unsub is not None:
+            unsub()
+
+    def _cancel_expiries(self) -> None:
+        for address in list(self._expiries):
+            self._cancel_expiry(address)
+
     def _said_released(self, address: int) -> None:
         _LOGGER.warning(
             "Control register %s released: no write has reached the controller for %s s, "
@@ -861,6 +954,7 @@ class CtcControlManager:
         """
         self._stopped = True
         self._stop_timer()
+        self._cancel_expiries()
         self._state.clear()
         async with self._writing:
             pass
