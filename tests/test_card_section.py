@@ -279,6 +279,36 @@ def test_the_card_is_hidden_as_the_page_hides_it_and_says_so_only_in_the_editor(
     assert found["back"]["note"] is None
 
 
+def test_what_home_assistant_holds_is_seen_only_while_the_count_is_above_zero():
+    # The page shows the overrides section (R49) only while the sensor counts
+    # anything held, with a numeric state condition; the section card keeps
+    # the same rule rather than showing a chip that says 0.
+    held = "sensor.ctc_overrides"
+    rule = [{"condition": "numeric_state", "entity": held, "above": 0}]
+    chips = {**CHIPS, "items": [{"entity": held, "name": "Aktiva överstyrningar"}],
+             "visibility": rule}
+    found = _run(f"""
+        answer({{ cards: [{json.dumps(chips)}] }});
+        card.setConfig({{ device_id: {json.dumps(DEVICE)}, section: "overrides" }});
+        const counted = (state) => ({{ ...{json.dumps(STATES)}, [{json.dumps(held)}]: {{
+          state, attributes: {{}} }} }});
+        card.hass = hass(counted("0"));
+        await tick();
+        const none = seen();
+        card.hass = hass(counted("2"));
+        const two = seen();
+        card.hass = hass(counted("unavailable"));
+        const lost = seen();
+        card.hass = hass({json.dumps(STATES)});
+        const missing = seen();
+        print({{ none, two, lost, missing }});
+    """)
+    assert found["none"]["hidden"] is True and found["none"]["cards"][0]["hidden"] is True
+    assert found["two"]["hidden"] is False and found["two"]["cards"][0]["hidden"] is False
+    assert found["lost"]["hidden"] is True
+    assert found["missing"]["hidden"] is True
+
+
 def test_an_empty_section_draws_nothing_and_a_card_the_section_card_cannot_draw_is_left_out():
     found = _run(f"""
         answer({{ cards: [] }});
