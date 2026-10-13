@@ -91,10 +91,14 @@ jobs:
       - run: pytest -q
 
   # The suite runs against stand-ins for Home Assistant, so a moved Home
-  # Assistant import, a selector config the real selector refuses or a
-  # Lovelace class that changed would first show on a house as an entry that
-  # does not load (R58). scripts/smoke_real_ha.py imports every module and
-  # builds every form that needs no network under a real release, three ways.
+  # Assistant name, a selector config the real selector refuses or a Lovelace
+  # class that changed would first show on a house (R58). Under a real release,
+  # three ways, scripts/smoke_real_ha.py imports every module, runs every Home
+  # Assistant import at every depth, looks up every attribute of a Home
+  # Assistant module the source reaches for, and builds the forms that need no
+  # network, the CTC page's class and the actions. Methods on objects
+  # (hass.config_entries, a ConfigEntry, a selector) and the arguments they
+  # take are not seen there.
 
   smoke-house:
     name: real Home Assistant, the houses' release
@@ -119,10 +123,13 @@ jobs:
 
   smoke-floor:
     name: real Home Assistant, the floor in hacs.json
-    # The release hacs.json promises, read from the file, on the Python that
-    # release was built for, so raising the floor is a change to hacs.json
-    # alone. Every run: a promise that stops being true is found at the
-    # change that broke it. If this goes red, raise the floor.
+    # The release hacs.json promises, read from the file and named nowhere
+    # here, on the Python that release was built for. Every run, so a change
+    # that starts using a Home Assistant module, function, class or attribute
+    # newer than the floor goes red here, wherever in the source it stands;
+    # raise hacs.json and add the need to NEEDS in tests/test_ha_floor.py. A
+    # method on an object or an argument to one is not seen here and goes
+    # into NEEDS by hand.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

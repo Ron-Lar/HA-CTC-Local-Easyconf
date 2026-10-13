@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
-"""Import every module of the integration and build its forms under a real Home Assistant.
+"""Load the integration under a real Home Assistant: its modules, its names and its forms.
 
 The ordinary test suite runs against stand-ins for Home Assistant
 (tests/ha_stub.py), and the Home Assistant tests run against the one release
-pytest-homeassistant-custom-component pins. A moved or renamed Home Assistant
-import, a selector config the real selector refuses, or a Lovelace class whose
-constructor has changed is invisible to the first and seen by the second only
-for that release; on a house it shows as an entry that does not load. CI runs
-this against the release the houses run, against the floor hacs.json promises,
-and every week against the newest release (roadmap R58).
+pytest-homeassistant-custom-component pins. A Home Assistant name that has
+moved, been renamed or not yet come (imported or reached for anywhere in the
+source, inside a function too), a selector config the real selector refuses, or
+a Lovelace class whose constructor has changed is invisible to the first and
+seen by the second only for that release; on a house it shows as an entry that
+does not load, or as a feature that stops without a word. CI runs this against
+the release the houses run, against the floor hacs.json promises, and every
+week against the newest release (roadmap R58).
 
 Nothing here touches a network or a heat pump. In order:
 
 - every module of the package is imported (pkgutil.walk_packages);
+- every Home Assistant import in the package is run as it is written, at every
+  depth, inside functions and try blocks too; every attribute reached from a
+  name such an import binds (frontend.async_panel_exists, er.async_get) is
+  looked up, every call of a function or class reached that way is held to its
+  real signature, and so is the call seen_history.py hands the recorder;
 - the config flow's forms that need no network are built: the first menu, the
   address forms, the busy and confirm steps, and the search and page steps with
   the network sweep and the menu reading replaced by one found unit and a menu
@@ -28,13 +35,21 @@ Nothing here touches a network or a heat pump. In order:
 
 An error logged by the integration itself during any of it fails the run.
 
+What an object has is not seen: a method on hass.config_entries, a ConfigEntry
+or a selector made from its class, and the arguments it takes, are reached
+through a value, not an import. Code that starts using one newer than the floor
+in hacs.json needs its line in NEEDS in tests/test_ha_floor.py, by hand.
+
 With --strict, the weekly run against the newest release, a DeprecationWarning
 attributed to one of the integration's own modules is an error, and so is Home
 Assistant's own notice that the integration uses something on its way out.
 Home Assistant gives those notices in its log (helpers.frame and
 helpers.deprecation), not as DeprecationWarning, so the run reads its log as
-well. Without --strict such a notice is printed and the run still passes:
-the release the houses run is not to be failed over a removal a year ahead.
+well. Each import and lookup of the names step is made as from the file and
+line it is written on, so the notice names the integration for a name reached
+inside a function too. Without --strict such a notice is printed and the run
+still passes: the release the houses run is not to be failed over a removal a
+year ahead.
 
 Usage:
     pip install homeassistant==<version>
@@ -44,9 +59,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ast
 import asyncio
 import contextlib
+import enum
 import importlib
+import inspect
 import ipaddress
 import json
 import logging
@@ -213,6 +231,358 @@ def _import_everything(report: Report) -> set[str]:
             importlib.import_module(name)
             imported.add(name.rsplit(".", 1)[1])
     return imported
+
+
+#: The syntax that opens a scope of its own, and the part of it that takes arguments.
+_FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+_SCOPES = (*_FUNCTIONS, ast.ClassDef, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+
+#: One name an import binds: the statement and the alias in it.
+_Binding = tuple[ast.Import | ast.ImportFrom, ast.alias]
+
+
+def _from_home_assistant(statement: ast.Import | ast.ImportFrom, alias: ast.alias) -> bool:
+    if isinstance(statement, ast.ImportFrom):
+        if statement.level:
+            return False
+        module = statement.module or ""
+    else:
+        module = alias.name
+    return module == "homeassistant" or module.startswith("homeassistant.")
+
+
+def _bound_name(alias: ast.alias) -> str:
+    return alias.asname or alias.name.partition(".")[0]
+
+
+def _same(binding: _Binding) -> tuple[str, ...]:
+    """What a binding refers to, so that two imports of one thing count as one."""
+    statement, alias = binding
+    if isinstance(statement, ast.ImportFrom):
+        return (statement.module or "", alias.name)
+    return (alias.name if alias.asname else _bound_name(alias),)
+
+
+class _Scope:
+    """What one scope of a module binds: names from Home Assistant imports, and the rest."""
+
+    def __init__(self, parent: _Scope | None, is_class: bool = False) -> None:
+        self.parent = parent
+        self.is_class = is_class
+        self.imported: dict[str, list[_Binding]] = {}
+        self.other: set[str] = set()
+
+    def bind(self, name: str, binding: _Binding | None = None) -> None:
+        if binding is None:
+            self.other.add(name)
+        else:
+            self.imported.setdefault(name, []).append(binding)
+
+    def lookup(self, name: str) -> _Binding | None:
+        """The Home Assistant import a name read here is bound by, if it is one.
+
+        A name the scope binds in any other way (an argument, an assignment, a
+        loop) is a local and is never followed, nor is one bound to two
+        different things.
+        """
+        scope, here = self, True
+        while scope is not None:
+            # A class body's own names are not seen from the functions in it.
+            if here or not scope.is_class:
+                if name in scope.other:
+                    return None
+                if name in scope.imported:
+                    found = scope.imported[name]
+                    return found[0] if len({_same(b) for b in found}) == 1 else None
+            scope, here = scope.parent, False
+        return None
+
+
+def _scan(
+    tree: ast.Module,
+) -> tuple[list[_Binding], list[tuple[ast.Attribute, _Scope]], list[tuple[ast.Call, _Scope]]]:
+    """Every Home Assistant import in a module at every depth, inside functions
+    and try blocks too, and every attribute chain and call, with the scope each
+    is read in."""
+    imports: list[_Binding] = []
+    chains: list[tuple[ast.Attribute, _Scope]] = []
+    calls: list[tuple[ast.Call, _Scope]] = []
+    module = _Scope(None)
+
+    def walk(node: ast.AST, scope: _Scope) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                scope.bind(child.name)
+            if isinstance(child, _SCOPES):
+                inner = _Scope(scope, is_class=isinstance(child, ast.ClassDef))
+                if isinstance(child, _FUNCTIONS):
+                    for arg in ast.walk(child.args):
+                        if isinstance(arg, ast.arg):
+                            inner.bind(arg.arg)
+                walk(child, inner)
+                continue
+            if isinstance(child, ast.Import | ast.ImportFrom):
+                for alias in child.names:
+                    if alias.name == "*":
+                        continue
+                    if _from_home_assistant(child, alias):
+                        imports.append((child, alias))
+                        scope.bind(_bound_name(alias), (child, alias))
+                    else:
+                        scope.bind(_bound_name(alias))
+            elif isinstance(child, ast.Name) and not isinstance(child.ctx, ast.Load):
+                scope.bind(child.id)
+            elif isinstance(child, ast.Global | ast.Nonlocal):
+                for name in child.names:
+                    scope.bind(name)
+                    module.bind(name)
+            elif isinstance(child, ast.ExceptHandler | ast.MatchAs | ast.MatchStar):
+                if child.name:
+                    scope.bind(child.name)
+            elif isinstance(child, ast.MatchMapping) and child.rest:
+                scope.bind(child.rest)
+            elif isinstance(child, ast.Attribute) and not (
+                isinstance(node, ast.Attribute) and node.value is child
+            ):
+                # An attribute assigned to is not looked up; what it is set on is.
+                if isinstance(child.ctx, ast.Load):
+                    chains.append((child, scope))
+                elif isinstance(child.value, ast.Attribute):
+                    chains.append((child.value, scope))
+            if isinstance(child, ast.Call):
+                calls.append((child, scope))
+            walk(child, scope)
+
+    walk(tree, module)
+    return imports, chains, calls
+
+
+def _module_name(path: Path) -> str:
+    parts = path.relative_to(COMPONENT).with_suffix("").parts
+    return ".".join((PACKAGE, *(parts[:-1] if parts[-1] == "__init__" else parts)))
+
+
+def _as_written(path: Path, node: ast.stmt | ast.expr, names: dict[str, Any] | None = None) -> Any:
+    """Run one import, or evaluate one expression, as from the file and line it is on.
+
+    Home Assistant names the integration in its notice that something is on its
+    way out by the file of the code that reached for it, and Python files a
+    DeprecationWarning under the module that code runs in. Done from this
+    script, the notice would name nobody and --strict would not see it.
+    """
+    namespace = {"__name__": _module_name(path), **(names or {})}
+    if isinstance(node, ast.expr):
+        return eval(compile(ast.Expression(node), str(path), "eval"), namespace)
+    exec(compile(ast.Module([node], type_ignores=[]), str(path), "exec"), namespace)
+    return namespace
+
+
+def _qualified(owner: Any) -> str:
+    if inspect.ismodule(owner):
+        return owner.__name__
+    return f"{owner.__module__}.{owner.__qualname__}"
+
+
+def _attribute(path: Path, node: ast.Attribute, names: dict[str, Any], owner: Any) -> Any:
+    """One step of a chain; a module's submodule counts even when nothing imported it yet."""
+    try:
+        return _as_written(path, node, names)
+    except AttributeError:
+        if inspect.ismodule(owner):
+            submodule = f"{owner.__name__}.{node.attr}"
+            try:
+                return importlib.import_module(submodule)
+            except ModuleNotFoundError as err:
+                if err.name != submodule:
+                    raise
+        raise
+
+
+def _follow(
+    path: Path, root: str, start: Any, steps: list[ast.Attribute], where: str,
+    missed: dict[str, BaseException],
+) -> tuple[Any, Any] | None:
+    """Walk a chain from a name an import binds, while each step is a module or a class.
+
+    Returns what the whole chain reaches and what it was reached on, or None
+    when a step is missing (written down in missed) or the chain goes on into
+    something else, an object whose attributes are its own.
+    """
+    names = {root: start}
+    target, owner = start, None
+    for step in steps:
+        if not (inspect.ismodule(target) or inspect.isclass(target)):
+            return None
+        owner = target
+        try:
+            target = _attribute(path, step, names, owner)
+        except Exception as err:
+            missed.setdefault(f"{where}:{step.lineno} {_qualified(owner)}.{step.attr}", err)
+            return None
+    return target, owner
+
+
+def _fits(target: Any, owner: Any, call: ast.Call) -> bool:
+    """Whether the call was held to the target's real signature; TypeError if it does not fit.
+
+    Only the number of positional arguments and the keywords' names are held to
+    it, and only for a function or class reached from an import: a method
+    reached through its class takes self first, and a TypedDict or an enum is
+    not called for an instance in the way a signature describes.
+    """
+    if any(isinstance(arg, ast.Starred) for arg in call.args) or any(
+        keyword.arg is None for keyword in call.keywords
+    ):
+        return False
+    if inspect.isclass(owner):
+        return False
+    if inspect.isclass(target):
+        if issubclass(target, dict | enum.Enum) or hasattr(target, "__total__"):
+            return False
+    elif not (inspect.isfunction(target) or inspect.isbuiltin(target)):
+        return False
+    try:
+        signature = inspect.signature(target)
+    except (TypeError, ValueError):
+        return False
+    try:
+        signature.bind(*([None] * len(call.args)), **dict.fromkeys(k.arg for k in call.keywords))
+    except TypeError as err:
+        raise TypeError(f"{err}; the signature is {signature}") from None
+    return True
+
+
+def _names(report: Report) -> dict[tuple[str, str], Any]:
+    """Resolve every Home Assistant name the source spells, under the installed release.
+
+    Importing a module runs only its top level. An import inside a function
+    runs first when the function does, and an attribute of a Home Assistant
+    module is looked up first when the line runs, at set-up or later; a
+    feature that catches its own errors (the history in seen_history.py) then
+    stops without a word, and one that does not keeps the entry from loading.
+    So every Home Assistant import in the package is run here as it is
+    written, at every depth and in try blocks too, every attribute reached
+    from a name such an import binds is looked up (frontend.async_panel_exists,
+    er.async_get, selector.SelectSelectorMode.LIST), and every call of a
+    function or class reached that way is held to its real signature. A name
+    the code binds any other way is a local and is not followed, so what an
+    object has (hass.config_entries, a ConfigEntry, a selector made from its
+    class) and the arguments its methods take are not seen here.
+
+    Returns the objects the imports bound, by file and name, None for an
+    import that failed.
+    """
+    resolved: dict[tuple[str, str], Any] = {}
+    for path in sorted(COMPONENT.rglob("*.py")):
+        imports, chains, calls = _scan(ast.parse(path.read_text(encoding="utf-8"), str(path)))
+        if not imports:
+            continue
+        where = path.relative_to(COMPONENT).as_posix()
+        objects: dict[int, Any] = {}
+        missed: dict[str, BaseException] = {}
+        for statement, alias in imports:
+            alone = ast.copy_location(
+                ast.ImportFrom(module=statement.module, names=[alias], level=0)
+                if isinstance(statement, ast.ImportFrom)
+                else ast.Import(names=[alias]),
+                statement,
+            )
+            name = ".".join(filter(None, (getattr(statement, "module", None), alias.name)))
+            try:
+                objects[id(alias)] = _as_written(path, alone)[_bound_name(alias)]
+            except Exception as err:
+                missed.setdefault(f"{where}:{statement.lineno} {name}", err)
+            resolved[(where, _bound_name(alias))] = objects.get(id(alias))
+
+        followed: dict[tuple[tuple[str, ...], tuple[str, ...]], tuple[Any, Any] | None] = {}
+        reached: dict[int, tuple[Any, Any] | None] = {}
+        for chain, scope in chains:
+            steps = [chain]
+            while isinstance(steps[-1].value, ast.Attribute):
+                steps.append(steps[-1].value)
+            steps.reverse()
+            root = steps[0].value
+            binding = scope.lookup(root.id) if isinstance(root, ast.Name) else None
+            if binding is None or id(binding[1]) not in objects:
+                continue
+            key = (_same(binding), tuple(step.attr for step in steps))
+            if key not in followed:
+                followed[key] = _follow(
+                    path, root.id, objects[id(binding[1])], steps, where, missed
+                )
+            reached[id(chain)] = followed[key]
+
+        bound = 0
+        for call, scope in calls:
+            if isinstance(call.func, ast.Name):
+                binding = scope.lookup(call.func.id)
+                found = (
+                    (objects[id(binding[1])], None)
+                    if binding is not None and id(binding[1]) in objects
+                    else None
+                )
+            else:
+                found = reached.get(id(call.func))
+            if found is None:
+                continue
+            try:
+                bound += _fits(*found, call)
+            except Exception as err:
+                missed.setdefault(f"{where}:{call.lineno} {ast.unparse(call.func)}(...)", err)
+
+        for what, err in missed.items():
+            with report.step("names", what):
+                raise err
+        if not missed:
+            with report.step("names", f"{where}, {len(imports)} imports, "
+                             f"{len(followed)} attributes, {bound} calls"):
+                pass
+    return resolved
+
+
+def _statistics(hass: Any, report: Report, resolved: dict[tuple[str, str], Any]) -> None:
+    """seen_history.py's call into the recorder, which goes through its executor.
+
+    The function is handed to async_add_executor_job rather than called, so the
+    arguments it gets are held to its real signature here, the ones the source
+    gives it, read from the source.
+    """
+    path = COMPONENT / "seen_history.py"
+    function = resolved.get(("seen_history.py", "statistics_during_period"))
+    if function is None and ("seen_history.py", "statistics_during_period") in resolved:
+        # Its import is a failure of its own above, with the reason.
+        return
+    call = next(
+        (
+            node
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            if isinstance(node, ast.Call)
+            and node.args
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id == "statistics_during_period"
+        ),
+        None,
+    )
+    line = call.lineno if call is not None else "?"
+    with report.step("names", f"seen_history.py:{line} statistics_during_period(...), "
+                     "the arguments the history gives it"):
+        assert call is not None and function is not None, (
+            "seen_history.py no longer imports statistics_during_period and hands it to "
+            "the executor: follow the call here"
+        )
+
+        def given(node: ast.expr) -> Any:
+            if isinstance(node, ast.Name) and node.id == "hass":
+                return hass
+            try:
+                return ast.literal_eval(node)
+            except ValueError:
+                return ast.unparse(node)
+
+        inspect.signature(function).bind(
+            *(given(arg) for arg in call.args[1:]),
+            **{keyword.arg: given(keyword.value) for keyword in call.keywords if keyword.arg},
+        )
 
 
 async def _config_flow(hass: Any, report: Report, view: Any) -> None:
@@ -424,6 +794,7 @@ async def _run(strict: bool, captured: Captured) -> int:
         try:
             await _start(hass)
             imported = _import_everything(report)
+            _statistics(hass, report, _names(report))
             # What a module that did not import would have built is not tried:
             # its import has failed the run already, with the reason.
             if "config_flow" in imported:
