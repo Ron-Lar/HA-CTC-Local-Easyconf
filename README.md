@@ -381,7 +381,9 @@ it is never out of date. Each heat pump gets four tabs.
   figures as large numbers. The status chips that are booleans, an alarm, a
   block, a defrost, a running compressor or heater, SmartGrid, are on the line
   only while they are on, in the theme's colour for what they mean: an alarm is
-  a red chip, and a quiet pump shows no row of "Av".
+  a red chip, and a quiet pump shows no row of "Av". While Home Assistant holds
+  any control register, a small section says how many, with **Släpp all
+  styrning** beside the count.
 - **Controls.** Everything writable, as the thing it is, a mode picked from a
   list, a setpoint slid or typed, grouped by what it does to the house rather
   than by entity domain: heating, hot water, operation and power. Letting go of
@@ -493,6 +495,24 @@ whoever set the override, a person or an energy manager, sets it anew. An
 energy manager that reads the entity should treat that combination as a lost
 command rather than as somebody's manual change.
 
+Every control says whether it is held, in *control_active*, and a control
+with a stored setting beside it also carries the pump's own value, in
+*pump_value*, while Home Assistant holds a value of its own as much as while
+it does not: the room setpoint, the compressor's top speed, the two immersion
+heater limits and the hot water mode, and for extra hot water the time left
+as the pump reports it in 61503, whose relation to the control has not been
+tried on a running unit yet. While nothing is held the hot water mode shows
+the pump's own program from 61500 rather than *Släpp styrningen*, which stays
+in the list for letting go; choosing a mode, from an automation or an energy
+manager, writes it as before, whatever the list showed. The zone mode and the
+hot water setpoint have no such value:
+the stored heating mode (61542) has other modes than the zone mode, and 62001
+is the hot water stop temperature, not the setpoint. The sensor **Aktiva
+överstyrningar** counts what Home Assistant holds right now and lists each
+held register with its value and when a write last reached the controller,
+and the overview shows it, with **Släpp all styrning** beside it, whenever
+anything is held.
+
 The stored settings in the 61500 block are exposed read only and never written.
 CTC states plainly that the number of write cycles there is limited and that
 frequent writing can destroy the controller. That is enforced in code, not left
@@ -571,8 +591,10 @@ managers that read them should move to the English names now.
 | `senast läst` | `read_at` | every display row |
 | `senast skriven` | `last_written` | the controls, while an override is in force |
 | `gäller till` | `valid_until` | the controls, while an override is in force |
-| `styrning aktiv`, `ja` or `nej` | `control_active`, `true` or `false` | the number controls |
+| `styrning aktiv`, `ja` or `nej` | `control_active`, `true` or `false` | the controls |
+| `pumpens värde` | `pump_value` | the controls with a stored setting beside them, also while an override is in force |
 | `episoder`, each with `kod`, `text`, `start`, `slut`, `utetemperatur` | `episodes`, each with `code`, `text`, `start`, `end`, `outdoor_temperature` | the binary sensor *Larm* |
+| `styrningar`, each with `namn`, `register`, `värde`, `senast skriven` | `overrides`, each with `name`, `register`, `value`, `last_written` | the sensor *Aktiva överstyrningar* |
 
 Values that are text, such as a reason, what a figure rests on or where the
 consumed energy was read, stay in Swedish under both names, like the entity
