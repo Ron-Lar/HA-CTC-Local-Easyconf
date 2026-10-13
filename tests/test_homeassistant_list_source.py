@@ -59,6 +59,8 @@ async def test_the_collection_gives_every_display_value_its_screen_and_place(
 async def test_the_list_of_all_values_says_where_a_display_row_is(hass, hass_storage, stubs):
     from custom_components.ctc_ecozenith import dashboard
 
+    # The page speaks Home Assistant's language (R23); this one is Swedish.
+    hass.config.language = "sv"
     entry = await _vsh_entry(hass)
     await _set_up(hass, entry)
     # A display row is made when it first reads as a number (L3).

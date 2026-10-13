@@ -345,6 +345,8 @@ async def test_a_display_that_will_not_answer_is_shown_as_such(hass, hass_storag
 async def test_the_page_names_a_pump_being_retried_and_why(hass, hass_storage, stubs):
     from custom_components.ctc_ecozenith import dashboard
 
+    # The page speaks Home Assistant's language (R23); this one is Swedish.
+    hass.config.language = "sv"
     entry = await _vsh_entry(hass)
     with patch(f"custom_components.{DOMAIN}.CtcModbusClient", DeadModbus):
         entry.add_to_hass(hass)

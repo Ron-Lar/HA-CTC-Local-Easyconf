@@ -5,8 +5,7 @@ one's own. It names a heat pump by its device id and a section by its id, and
 asks ctc_ecozenith/items for the cards to draw; section_card.py cuts them out of
 the page as the page would be built this moment, from the description of the
 pump the page itself is built from (dashboard._collect), in the language the
-page is built in: the first running pump's, in the page's order, worked out
-over every running pump (dashboard_views.page_language).
+page is built in: Home Assistant's (dashboard.page_language).
 
 Anyone signed in may ask, as anyone signed in may open the page, and the answer
 holds nothing the page does not show. The device has to be a heat pump of this
@@ -27,7 +26,6 @@ import voluptuous as vol
 
 from . import dashboard
 from .const import DOMAIN
-from .dashboard_views import page_language
 from .section_card import SECTIONS, section_cards
 
 COMMAND: Final = f"{DOMAIN}/items"
@@ -88,11 +86,9 @@ def ws_items(
     if not pumps:
         connection.send_error(msg["id"], ERR_NOT_RUNNING, "The heat pump is not running")
         return
-    # The page builds every pump in the first one's language, by name, so the
-    # section asks for the same: a second pump whose panel speaks another
-    # language reads here in the page's words. The pump asked for is running,
-    # so the whole list has it, and the fallback is never reached.
-    lang = page_language(dashboard._collect(hass), pumps[0].get("language"))
+    # The page is built in Home Assistant's language (roadmap R23), whatever
+    # language a pump's panel is read in, and so is the section.
+    lang = dashboard.page_language(hass)
     connection.send_result(msg["id"], {
         "cards": section_cards(
             pumps[0], msg["section"], (MAJOR_VERSION, MINOR_VERSION), lang=lang
