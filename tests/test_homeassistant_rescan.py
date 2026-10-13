@@ -46,7 +46,7 @@ from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     MODEL,
     FakePanel,
     _needs_auto_asyncio_mode,
-    stubs,
+    stubs_fixture,
 )
 from test_homeassistant_menu import VSH
 

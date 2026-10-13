@@ -207,8 +207,11 @@ def _needs_auto_asyncio_mode(request):
         pytest.skip("run with -o asyncio_mode=auto: the Home Assistant fixtures are async")
 
 
-@pytest.fixture(autouse=True)
-def stubs(hass, enable_custom_integrations):
+# The test files import the function as stubs_fixture and take the fixture as
+# the parameter stubs: with the two names apart no parameter redefines an
+# import, so ruff's F811 stays on for the tests and catches a test written twice.
+@pytest.fixture(autouse=True, name="stubs")
+def stubs_fixture(hass, enable_custom_integrations):
     """Everything the integration touches outside the controller, stubbed.
 
     Also starts every run from a clean slate: the counters the integration

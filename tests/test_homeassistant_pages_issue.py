@@ -22,7 +22,7 @@ from homeassistant.helpers import issue_registry as ir
 from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _needs_auto_asyncio_mode,
     _set_up,
-    stubs,
+    stubs_fixture,
 )
 from test_homeassistant_menu import VSH
 
