@@ -22,6 +22,7 @@ from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 import voluptuous as vol
 
+from . import page_search
 from .catalogue import (
     MenuReading,
     PanelBusy,
@@ -87,6 +88,7 @@ from .keys import (
 )
 from .modbus_api import CtcModbusClient, CtcModbusError, note_moved
 from .modbus_probe import ANSWERED, BUSY, REJECTED, SILENT, async_classify
+from .page_search import MAX_DEPTH, MAX_TAPS, PageSearch, async_search_page_locked
 from .web_api import CtcWebClient, CtcWebError
 
 _LOGGER = logging.getLogger(__name__)
@@ -118,6 +120,24 @@ STEP_MODBUS_FAILED = "modbus_failed"
 #: Modbus accepted the connection and dropped it at the first request: another
 #: client holds the controller's one place (roadmap L12).
 STEP_MODBUS_BUSY = "modbus_busy"
+#: The options' search for the way to one page (roadmap L7): the tick box on
+#: the first form, the step that asks for the page and searches, the field
+#: the page is given in, and the step that shows what was found.
+CONF_FIND_PAGE = "find_page"
+STEP_FIND_PAGE = "find_page"
+CONF_PAGE = "page"
+STEP_FIND_PAGE_FOUND = "find_page_found"
+#: What the form says for a search that ended without the page, by why.
+SEARCH_ERRORS = {
+    page_search.UNKNOWN: "page_unknown",
+    page_search.OUTSIDE: "page_outside",
+    page_search.NO_MENU: "no_menu",
+    page_search.NOT_FOUND: "page_not_found",
+    page_search.LOST: "page_lost",
+    page_search.EMPTY: "page_empty",
+    page_search.GAP: "page_gap",
+    page_search.SILENT: "display_silent",
+}
 
 
 class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -797,6 +817,8 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         #: menu again" is saved: a tick in that box used to throw the rest of
         #: the form away, intervals and tick boxes alike.
         self._pending: dict[str, Any] = {}
+        #: What the search for the way to a page found, until it is saved.
+        self._search: PageSearch | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -832,12 +854,19 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
                 ),
                 CONF_SEND_STATISTICS: bool(user_input.get(CONF_SEND_STATISTICS, True)),
             }
+            if user_input.get("rescan") and user_input.get(CONF_FIND_PAGE):
+                # Each walks the panel, and one after the other in one dialog
+                # is more of the panel than anybody asked for at once.
+                return self.async_abort(reason="one_walk")
             if user_input.get("rescan"):
                 # The rest of the form rides along to the next step and is
                 # saved with it. Nothing is written yet: a write reloads the
                 # entry, and the walk below must not meet the reload's own
                 # first harvest on the panel.
                 return await self.async_step_rescan()
+            if user_input.get(CONF_FIND_PAGE):
+                # The same: the rest of the form is saved with what it finds.
+                return await self.async_step_find_page()
             return await self._async_save(self._pending)
 
         options = self._entry.options
@@ -901,6 +930,12 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
                     default=options.get(CONF_SEND_STATISTICS, True),
                 ): bool,
                 vol.Optional("rescan", default=False): bool,
+                # Only where there is a display to search (roadmap L7).
+                **(
+                    {vol.Optional(CONF_FIND_PAGE, default=False): bool}
+                    if has_display(self._entry.data)
+                    else {}
+                ),
             }
         )
         return self.async_show_form(
@@ -1079,3 +1114,131 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             # The pages the reading found, not the stored ones kept beside them.
             description_placeholders={"count": str(len(reading.pages) or len(self._pages))},
         )
+
+    # ------------------------------------------------- the way to one page
+
+    async def async_step_find_page(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for a page the reading of the menu does not reach, and search for the way there.
+
+        Roadmap L7, on the owner's decision to build it now and run it at the
+        panel: the search moves the panel, so it runs only when the owner
+        submits this form, never by itself, and the form says that somebody
+        should stand at the panel. The field is filled in with the page the
+        panel shows, read without a press, so an owner who has walked the
+        panel to the page by hand has nothing to type. The search takes the
+        panel lock every walk takes (page_search.async_search_page_locked),
+        and a panel already taken is said on the form at once. A search that
+        ends without the page says why on the form and saves nothing; one
+        that finds it shows what it found on the next step, where submitting
+        saves it with the rest of the first form.
+        """
+        client = self._web_client()
+        if user_input is None:
+            return self._find_page_form(await _async_page_shown(client))
+        target = int(user_input[CONF_PAGE])
+        try:
+            search = await async_search_page_locked(client, target)
+        except PanelBusy:
+            return self._find_page_form(target, "panel_busy")
+        if not search.found:
+            return self._find_page_form(target, SEARCH_ERRORS.get(search.reason, "page_not_found"))
+        self._search = search
+        return await self.async_step_find_page_found()
+
+    def _find_page_form(self, page: int | None, error: str | None = None) -> ConfigFlowResult:
+        """The form that asks for the page, filled in with ``page`` where it is known."""
+        field = (
+            vol.Required(CONF_PAGE, default=page) if page is not None else vol.Required(CONF_PAGE)
+        )
+        host = self._entry.data[CONF_HOST]
+        port = int(self._entry.data.get(CONF_WEB_PORT, DEFAULT_WEB_PORT))
+        where = host if port == DEFAULT_WEB_PORT else f"{host}:{port}"
+        return self.async_show_form(
+            step_id=STEP_FIND_PAGE,
+            data_schema=vol.Schema(
+                {
+                    field: selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=65535, step=1, mode=selector.NumberSelectorMode.BOX
+                        )
+                    )
+                }
+            ),
+            errors={"base": error} if error else {},
+            # hassfest refuses a URL in strings.json, so the screen map's
+            # address travels as a placeholder, like the statistics' addresses.
+            description_placeholders={
+                "taps": str(MAX_TAPS),
+                "depth": str(MAX_DEPTH),
+                "screen_map": f"http://{where}/sm/all",
+            },
+        )
+
+    async def async_step_find_page_found(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Say what the search found; submitting adds the page to the menu, ticked."""
+        search = self._search
+        assert search is not None and search.page is not None
+        if user_input is not None:
+            return await self._async_save(self._found_page_changes(search))
+        page = search.page
+        return self.async_show_form(
+            step_id=STEP_FIND_PAGE_FOUND,
+            description_placeholders={
+                "page": str(page.page),
+                "title": page.title,
+                "count": str(len(page.values)),
+                "steps": str(len(page.route)),
+                "tries": str(search.tries),
+            },
+        )
+
+    def _found_page_changes(self, search: PageSearch) -> dict[str, Any]:
+        """The options with the page the search found in the menu, and ticked.
+
+        In the stored menu where it was, as the search read it, route and
+        all, or last where the menu did not have it; ticked along with what
+        the first form ticked. A page the menu had keeps the keys of its rows
+        and the rows it showed before and hides now, as after a reading of
+        the menu (keys.keep_hidden_rows, keys.with_previous_keys). The
+        version stamp is left alone: one page is not a reading of the menu,
+        and the reading owed after an update keeps the page while it is
+        ticked and has its route (catalogue.still_offered). The root is
+        stored where it was not.
+        """
+        assert search.page is not None
+        options = self._entry.options
+        settings = {**options, **self._pending}
+        stored_menu = pages_from_storage(options.get(CONF_MENU))
+        stored_selection = pages_from_storage(settings.get(CONF_SLOW_PAGES))
+        before = union_by_page(stored_menu, stored_selection)
+        (found,) = with_previous_keys(before, keep_hidden_rows(before, [search.page]))
+        menu = [found if page.page == found.page else page for page in before]
+        if found.page not in {page.page for page in before}:
+            menu.append(found)
+        ticked = {page.page for page in stored_selection} | {found.page}
+        changes = {
+            **self._pending,
+            CONF_MENU: pages_to_storage(menu),
+            CONF_SLOW_PAGES: pages_to_storage([page for page in menu if page.page in ticked]),
+        }
+        if options.get(CONF_MENU_ROOT) is None and search.root is not None:
+            changes[CONF_MENU_ROOT] = search.root
+        return changes
+
+
+async def _async_page_shown(client: Any) -> int | None:
+    """The page the panel shows, read without a press, or None where it cannot be said.
+
+    Not while another walk holds the panel: the page it shows then is the
+    walk's, not one the owner chose.
+    """
+    if client.panel.locked():
+        return None
+    try:
+        return await client.async_current_page()
+    except CtcWebError:
+        return None

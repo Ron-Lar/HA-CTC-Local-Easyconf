@@ -25,10 +25,13 @@ Nothing here touches a network or a heat pump. In order:
   the network sweep and the menu reading replaced by one found unit and a menu
   of two pages;
 - the options form is built with an empty and with a filled menu, and so is the
-  form after reading the menu again; the page schema is built on its own, empty
-  and filled, through the real selectors;
+  form after reading the menu again, and the search for one page's two forms,
+  the one that asks for the page and the one that shows what was found; the
+  page schema is built on its own, empty and filled, through the real
+  selectors;
 - every form goes through the code that hands it to the frontend, and
-  strings.json must name each step, each menu option and each field;
+  strings.json must name each step, each menu option, each field and each
+  error the form shows;
 - the CTC page's Lovelace class is built, made once and asked for its layout;
 - services.yaml is read and validated with Home Assistant's own schema, and
   must list exactly the actions services.py registers.
@@ -212,6 +215,9 @@ def _check_step(view: Any, where: str, result: Any) -> list[str]:
     fields = [field["name"] for field in data.get("data_schema") or []]
     missing = [field for field in fields if field not in texts.get("data", {})]
     assert not missing, f"strings.json has no label for {missing} in {where}.step.{step}"
+    errors = list((result.get("errors") or {}).values())
+    missing = [error for error in errors if error not in STRINGS[where].get("error", {})]
+    assert not missing, f"strings.json has no {where}.error for {missing}"
     return fields
 
 
@@ -676,6 +682,7 @@ async def _options_flow(hass: Any, report: Report, view: Any) -> None:
         with report.step("flow", f"options: init, {label}"):
             fields = _check_step(view, "options", await new_flow(options).async_step_init())
             assert ("slow_pages" in fields) is bool(options), fields
+            assert "find_page" in fields, fields
 
     async def read_again(*_args: Any, **_kwargs: Any) -> Any:
         return _reading()
@@ -685,6 +692,32 @@ async def _options_flow(hass: Any, report: Report, view: Any) -> None:
             result = await new_flow(filled).async_step_rescan()
         fields = _check_step(view, "options", result)
         assert fields == ["slow_pages", "slow_interval", "restore_page"], fields
+
+    class _Shown:
+        """A display client that says which page the panel shows, and nothing else."""
+
+        panel = asyncio.Lock()
+
+        async def async_current_page(self) -> int:
+            return 42
+
+    for label, client in (("the page shown", _Shown()), ("no page", None)):
+        with report.step("flow", f"options: find_page, the form, {label}"):
+            flow = new_flow(filled)
+            if client is not None:
+                flow._web_client = lambda client=client: client
+                result = await flow.async_step_find_page()
+            else:
+                result = flow._find_page_form(None, "page_not_found")
+            assert _check_step(view, "options", result) == ["page"], result
+
+    with report.step("flow", "options: find_page_found, what the search found"):
+        flow = new_flow(filled)
+        page_search = _module("page_search")
+        flow._search = page_search.PageSearch(
+            target=22, reason=page_search.FOUND, page=_pages()[0], root=MENU_ROOT, tries=5
+        )
+        assert _check_step(view, "options", await flow.async_step_find_page_found()) == []
 
 
 def _page_schema(report: Report, view: Any) -> None:

@@ -90,14 +90,16 @@
           "rescan": "Läs om displayens meny",
           "slow_pages": "Sidor att hämta",
           "visit_system_info": "Låt integrationen öppna Systeminformation på panelen",
-          "check_updates": "Säg till när en ny version släpps"
+          "check_updates": "Säg till när en ny version släpps",
+          "find_page": "Sök väg till en sida"
         },
         "data_description": {
           "enable_control": "Skapar styrentiteter som skriver till CTC:s flyktiga 1000-register. De nollställs av pumpen cirka fem minuter efter sista skrivningen, så styrningen släpper av sig själv om Home Assistant stannar. De lagrade inställningarna i 61500-serien rörs aldrig.",
           "send_statistics": "En rapport per dygn till {endpoint}: integrationens version, Home Assistant-version, installationstyp och Python-version, språket och landet du ställt in i Home Assistant, en ungefärlig plats avrundad till cirka 11 km, antal entiteter och enheter, vilka transporter som används, om styrning är påslagen, hur många displaysidor som hämtas, hur många sidor displayens meny har och om senaste läsningen av menyn sedan Home Assistant startade kände igen hemskärmen och kom in i driftinfomenyn, om raden med total drifttid kändes igen på historiksidan, om räknarna bakom värmefaktorn hittades på displayen eller i Modbus och om var och en lämnade ett tal vid senaste läsningen, samt när värmefaktorn saknas varför: för lite energi räknad ännu, en räknare som står still fast enheten varit igång, eller en kvot ingen värmepump kan ge. Dessutom antal misslyckade registeravläsningar, innedelens och utedelens modell, för en innedel integrationen inte känner till ännu familjekoden i namnet på displayens inställningsfil (till exempel ezi4xx, två till sexton små bokstäver och siffror, inget annat), programversionen i displayen, värmepumpens styrkort och styrenheten, produkt samt tillverkningsår och tillverkningsvecka ur serienumret, och värmefaktorn (COP) för senaste dygnet, rullande år, maskinens första år och hela livslängden. Ett mätvärde lämnar huset, och bara när det är fel: står en räknare still eller ger de två räknarna en omöjlig kvot skickas de två livstidsräknarna i kilowattimmar tillsammans med flaggan, aldrig annars. Aldrig namn, adress, exakt position, fullständigt serienummer, entitetsnamn eller sidnamn, aldrig något finare än ett dygn, och din IP-adress sparas inte. Dessutom skickas ett slumpat id som skapas vid installationen, så att dygnsrapporterna kan hållas isär och raderas på begäran (servern sparar det bara som en hash, och det säger inget om vem du är), en hash som knyter ihop beolinks plugin på samma Home Assistant, hur många varningar och fel integrationen loggat sedan förra rapporten, och om den är igång eller väntar på att starta igen, aldrig själva meddelandena eller skälet. Stänger du av den raderas också det som redan skickats. Hela listan: {privacy_url}",
           "visit_system_info": "Panelen går till displayens sida Systeminformation en gång och tillbaka igen, för att läsa serienummer och displayens egen programversion. Den trycker bara på Avancerat, Display och Systeminformation, kontrollerar var panelen hamnade efter varje tryck och avbryter vid minsta avvikelse.",
           "check_updates": "Frågar GitHub en gång om dygnet om det finns en nyare release av integrationen, och säger till i reparationsvyn. Home Assistant erbjuder bara uppdateringar för det HACS installerat, så en kopia som lagts dit för hand får annars aldrig någon.",
-          "slow_pages": "Talet efter varje sida är hur många värden den har."
+          "slow_pages": "Talet efter varje sida är hur många värden den har.",
+          "find_page": "För en sida på displayen som menyläsningen inte når, till exempel Kompressor VP1 på en i550 Pro. Nästa formulär frågar efter sidans nummer, och sökningen flyttar panelen, så någon bör stå vid panelen."
         }
       },
       "rescan": {
@@ -108,10 +110,36 @@
           "slow_interval": "Hur ofta",
           "restore_page": "Ställ tillbaka panelen efteråt"
         }
+      },
+      "find_page": {
+        "title": "Sök väg till en sida",
+        "description": "Sökningen flyttar panelen i pannrummet, så någon bör stå vid panelen medan den pågår. Från driftinfomenyns rot provar den högst {taps} reglage, högst {depth} tryck djupt, stannar vid sidan, sparar vägen dit, läser sidan och ställer tillbaka panelen där den stod, eller på hemskärmen där den inte vet vägen tillbaka. Den trycker aldrig på något i Service, Definiera eller språkvalet, ingenting i en sidas rubrik utom panelens egen knapp, aldrig den knappen på hemskärmen och ingenting utanför driftinfomenyn utom den knappen, för att lämna sidan. Sidans nummer står i displayens skärmkarta, {screen_map}, talet före varje kolon. Eller gå till sidan på panelen för hand: fältet är ifyllt med sidan panelen visar just nu.",
+        "data": {
+          "page": "Sidans nummer"
+        },
+        "data_description": {
+          "page": "Talet före ett kolon i skärmkartan, eller sidan panelen visar."
+        }
+      },
+      "find_page_found": {
+        "title": "Sidan hittades",
+        "description": "Sida {page}, {title}, ligger {steps} tryck från driftinfomenyns rot och hittades efter {tries} försök. Den har {count} värden, och panelen står där den stod eller på hemskärmen. Skicka för att lägga sidan i menyn, ikryssad, så hämtas den med de andra sidorna; stäng dialogen så sparas ingenting."
       }
     },
+    "error": {
+      "panel_busy": "Panelen används just nu: integrationen läser displayens sidor eller går genom menyn. Försök om en stund.",
+      "page_unknown": "Displayens skärmkarta har ingen sida med det numret.",
+      "page_outside": "Sidan är hemskärmen eller en sida i en meny som sökningen håller sig borta från, så den söktes inte. Inget har sparats.",
+      "no_menu": "Driftinfomenyn gick inte att hitta på panelen, så ingenting i den trycktes. Inget har sparats.",
+      "page_not_found": "Sidan hittades inte inom sökningens gränser, så vägen dit går inte att nå från driftinfomenyn just nu. En i550 Pro ritar vägen till vissa sidor bara i vissa driftlägen, så det kan löna sig att försöka igen när driftläget har ändrats. Inget har sparats, och panelen står där den stod eller på hemskärmen.",
+      "page_lost": "Sökningen tappade vägen tillbaka i menyn och avbröts. Inget har sparats. Titta på panelen: den står kanske inte där den stod.",
+      "page_empty": "Sidan hittades men har inget värde att läsa. Inget har sparats.",
+      "page_gap": "Sidan hittades men gick inte att läsa hel: en skärm eller en rubrik svarade inte. Inget har sparats; försök igen om en stund.",
+      "display_silent": "Displayen slutade svara under sökningen. Inget har sparats."
+    },
     "abort": {
-      "panel_busy": "Panelen används just nu: integrationen läser displayens sidor eller går genom menyn. Försök om en stund. Inget har ändrats."
+      "panel_busy": "Panelen används just nu: integrationen läser displayens sidor eller går genom menyn. Försök om en stund. Inget har ändrats.",
+      "one_walk": "Kryssa i antingen Läs om displayens meny eller Sök väg till en sida, inte båda: var och en flyttar panelen. Inget har ändrats."
     }
   },
   "issues": {

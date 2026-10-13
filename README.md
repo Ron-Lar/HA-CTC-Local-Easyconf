@@ -252,6 +252,29 @@ So the display is treated as a supplement, not the base:
   saved with the pages you tick, and the three background tries start over, so
   a menu the background had given up on is read again after the save. A
   reading that misses writes neither the menu nor the version.
+- A page the reading of the menu does not reach can be searched for once,
+  under Configure, *Search for the way to a page*. The reading tries at most 26
+  controls, two levels deep, and on an i550 Pro whose operation data root is a
+  schematic with many places to press that is spent before *Kompressor VP1*,
+  the page with the delivered heat and the power input. Give the page's
+  number, from the display's screen map at `http://<display>/sm/all` (the
+  number before each colon), or walk the panel to the page by hand and the
+  form offers the page it shows. The search starts at the operation data
+  root, tries at most 40 controls at most three presses deep, stops at the
+  page, records the way there, reads the page as the reading of the menu does
+  and puts the panel back where it was, or on the home screen where it does
+  not know the way back. It presses only what the reading would press, never
+  a control whose caption names Avancerat, Service, Define or the language
+  selection, and nothing on a page whose heading names one of them or whose
+  own back button leads out of the operation data menu, but that button. It
+  takes the same turn at the panel as every other walk, and runs only when you
+  submit the form, never by itself, so stand at the panel while it runs. What
+  it found is shown first; submitting adds the page to the menu, ticked, with
+  the way the harvest then takes to it, and the reading of the menu after an
+  update keeps the page while it is ticked. A page it does not find within its
+  limits is said on the form and nothing is saved. An i550 Pro draws the way
+  to *Kompressor VP1* only in some operating states, so a search that misses
+  it may find it later.
 
 There is no second session to escape this with. The `/click2/` and `/scroll2/`
 endpoints exist in the display's own JavaScript but the firmware answers 400 to
@@ -409,6 +432,7 @@ the form reloads the entry.
 | Tell me when a new version is released | on | Asks GitHub once a day and says so in the repairs view. |
 | Send anonymous usage statistics | on | One report a day; see [Anonymous statistics](https://github.com/beolink/HA-CTC-Local-Easyconf#anonymous-statistics). Switching it off erases what was sent. |
 | Read the display's menu again | off | Walks the menu now and offers the pages again on the next form; see [The catch with the display](https://github.com/beolink/HA-CTC-Local-Easyconf#the-catch-with-the-display-and-what-the-integration-does-about-it). |
+| Search for the way to a page | off | For a page the reading of the menu does not reach: asks for its number on the next form and searches for the way there once, with somebody at the panel. Offered where the entry has a display; see [The catch with the display](https://github.com/beolink/HA-CTC-Local-Easyconf#the-catch-with-the-display-and-what-the-integration-does-about-it). |
 
 The address, the ports and the Modbus address are not options: see the end of
 [Setup](https://github.com/beolink/HA-CTC-Local-Easyconf#setup) for how a new
