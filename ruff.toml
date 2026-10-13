@@ -1,0 +1,38 @@
+# The same rules as HA-Nibe-Easyconf, so a contributor meets one style across
+# these integrations (roadmap R57). CI pins the ruff version in
+# .github/workflows/validate.yaml: a new ruff release adds rules, and CI should
+# go red over a change in this repository, not over one in ruff.
+#
+# Python 3.12 is the oldest interpreter the Home Assistant floor in hacs.json
+# runs on, so the upgrade rules suggest nothing newer.
+target-version = "py312"
+line-length = 100
+# The tests import their helpers (conftest, ha_stub, fake_pymodbus and the
+# fixtures of test_homeassistant) as top-level modules, as pytest puts tests/
+# on the path; listed here, the import sorter files them with the repository's
+# own code rather than among the third-party packages.
+src = [".", "tests"]
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    # Home Assistant entity classes set attributes rather than properties.
+    "RUF012",
+]
+
+[lint.isort]
+force-sort-within-sections = true
+combine-as-imports = true
+
+[lint.per-file-ignores]
+# stats.py is a shared file, copied verbatim between these integrations so the
+# reporting behaviour stays identical across all of them and a fix in one is a
+# straight copy into the others. Linting it here would fork it for cosmetic
+# reasons, so its own style is left alone.
+"custom_components/*/stats.py" = ["I001", "UP035", "SIM105", "RUF100"]
+# The explanations behind every value and the register tables are Swedish
+# sentences and one-line table rows: broken to fit a hundred columns they get
+# harder to read and to search for, which is the opposite of what the limit is
+# for.
+"custom_components/*/explanations.py" = ["E501"]
+"custom_components/*/const.py" = ["E501"]
