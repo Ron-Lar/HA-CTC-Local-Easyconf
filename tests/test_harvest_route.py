@@ -324,7 +324,9 @@ def test_the_root_among_stored_pages_is_the_one_with_no_route(catalogue, const):
 
 def test_the_root_is_stored_with_the_menu_and_handed_to_the_client():
     init = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
-    reread = init.split("async def _async_reread_menu")[1].split("\ndef ")[0]
+    # Folded in by _menu_changes, which the re-read after an update and the
+    # reread_menu action (R76) share.
+    reread = init.split("\ndef _menu_changes(")[1].split("\nasync def ")[0]
     assert "CONF_MENU_ROOT" in reread and "reading.root" in reread
     setup = init.split("async def async_setup_entry")[1].split("\nasync def ")[0]
     assert "web_client.root =" in setup

@@ -1,0 +1,27 @@
+release:
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          integration: ctc_ecozenith
+          domain:
+            - number
+            - select
+          multiple: true
+
+reread_menu:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: ctc_ecozenith
+
+cop_sample:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: ctc_ecozenith

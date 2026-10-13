@@ -21,7 +21,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    issue_registry as ir,
+)
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
 from homeassistant.helpers.storage import Store
@@ -32,6 +37,7 @@ from .alarms import STORAGE_VERSION as ALARM_STORAGE_VERSION, AlarmLog
 from .catalogue import (
     MenuReading,
     async_discover_pages,
+    async_rescan_pages,
     menu_is_due,
     menu_root,
     menu_wait,
@@ -114,6 +120,7 @@ from .seen import (
     migrate as migrate_seen,
 )
 from .seen_history import async_seed_from_statistics
+from .services import async_register_services
 from .stats import async_setup_stats, async_stop_stats
 from .stats_extra import ErrorCounter, build_extra, entry_stem
 from .transitions import TransitionWatch, find_starts_per_day, sample_of
@@ -125,6 +132,21 @@ _LOGGER = logging.getLogger(__name__)
 #: is kept, so this is about not missing a day rather than about resolution.
 COP_SAMPLE_INTERVAL = timedelta(hours=6)
 
+#: Set up from config entries alone. async_setup exists for the actions, and
+#: hassfest asks an integration that has one to say that it takes nothing
+#: from configuration.yaml.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the integration's actions, once for the domain (roadmap R76).
+
+    Here rather than with each entry, so they are there whether or not an
+    entry has loaded, and an automation that calls one at a moment no entry
+    is loaded is told so in words instead of finding no such action.
+    """
+    async_register_services(hass)
+    return True
 
 
 
@@ -674,7 +696,20 @@ async def _async_reread_menu(
         if reading.error is not None:
             raise CtcWebError(reading.error)
         return {}
+    return _menu_changes(options, reading, version)
 
+
+def _menu_changes(
+    options: Any, reading: MenuReading, version: str
+) -> dict[str, Any]:
+    """What a whole reading of the menu writes into the options.
+
+    The reading folded into the stored menu (merge_menu), every row with the
+    key it had where that was another, the selection that follows, the
+    version stamp and the root the sweep found. One rule for the reading
+    owed after an update and for the reread_menu action (roadmap R76), so
+    the two cannot fold a menu in two ways.
+    """
     stored_menu = pages_from_storage(options.get(CONF_MENU))
     stored_selection = pages_from_storage(options.get(CONF_SLOW_PAGES))
     menu, selected = merge_menu(
@@ -697,6 +732,53 @@ async def _async_reread_menu(
     if reading.root is not None:
         changed[CONF_MENU_ROOT] = reading.root
     return changed
+
+
+async def async_reread_menu_now(
+    hass: HomeAssistant, entry: "CtcConfigEntry", version: str
+) -> MenuReading:
+    """Read the display's whole menu now, for the reread_menu action (roadmap R76).
+
+    The same reading as "read the menu again" in the options (R13): under the
+    runtime's one panel lock, which a harvest, the reading owed after an
+    update and the walk to the system information page take as well, and
+    never waited for. A panel already taken raises PanelBusy at once and
+    nothing is walked or written. The tries the background counts start over
+    (menu_read_from_the_options), so a menu it had given up on is owed again.
+
+    A whole reading is folded in by the background's own rule (_menu_changes):
+    a page switched off stays off, a new page comes on, the version is
+    stamped, and the write reloads the entry, which is where new pages are
+    picked up. Anything less writes nothing and leaves the stored menu as it
+    is, since nobody stands at a form to tick what an interrupted sweep found.
+    The write waits for the panel lock, like the catch-up's: a harvest that
+    queued while the menu was read walks to its end first, and its store is
+    written out before the reload, so the set-up that follows owes the next
+    harvest an interval later rather than walking the panel again at once.
+    Returns the reading, for the action to say what came of it.
+    """
+    runtime = entry.runtime_data
+    client = runtime.web_client
+    try:
+        reading = await async_rescan_pages(client)
+    except CtcWebError as err:
+        _LOGGER.warning("Could not read the display's menu: %s", err)
+        reading = MenuReading(error=str(err))
+    menu_read_from_the_options(entry.entry_id, hass.loop.time(), reading)
+    if not reading.pages or not reading.complete:
+        _LOGGER.info(
+            "The reread_menu action could not read the display's whole menu (%s), so "
+            "the stored menu stands",
+            reading.how_far() if not reading.pages else "only part of it was read",
+        )
+        return reading
+    options = {**entry.options, **_menu_changes(entry.options, reading, version)}
+    async with client.panel:
+        memory = getattr(runtime, "harvest_memory", None)
+        if memory is not None:
+            await memory.async_flush()
+        hass.config_entries.async_update_entry(entry, options=options)
+    return reading
 
 
 async def _async_name_the_failure(
@@ -965,6 +1047,38 @@ class CtcRuntime:
     #: half a minute after that, and _async_catch_up holds the panel until it
     #: has, rather than start a walk the reload would cut short.
     switched_on: int = 0
+
+    async def async_record_cop(self, read_at: datetime | None = None) -> bool:
+        """Write the two lifetime counters down as a sample, and say whether one was kept.
+
+        The six hour timer calls this, and so does the cop_sample action
+        (roadmap R76), so a sample after a change need not wait for the timer.
+        A sample is the pair as it stood when the panel was read, and it is
+        stamped with that moment, never with the clock: the timer fires
+        whether or not the history page has been reached since, and a page
+        that has stopped being reached (R5) leaves the pair standing in the
+        data. Without a fresh reading of both counters there is no sample,
+        and a moment the tracker has already kept is the same reading again,
+        which it drops itself. ``read_at`` is handed in for the pair that
+        came back out of the display store at start-up, with its own moment.
+        """
+        tracker = self.cop
+        if tracker is None:
+            return False
+        out, consumed = current_totals(self)
+        if read_at is None:
+            read_at = counters_read_at(self)
+        before = tracker.last_sample_at
+        try:
+            commissioned = commissioning_date(self)
+            if commissioned is not None:
+                await tracker.async_set_anchor(commissioned)
+            if read_at is not None:
+                await tracker.async_record(out, consumed, now=read_at)
+        except Exception as err:  # noqa: BLE001 - a missed sample is not fatal
+            _LOGGER.debug("Could not write down the energy counters: %s", err)
+            return False
+        return tracker.last_sample_at != before
 
 
 type CtcConfigEntry = ConfigEntry[CtcRuntime]
@@ -1266,25 +1380,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     )
 
     if runtime.cop is not None:
-        async def _record_cop(_now=None, read_at=None) -> None:
-            # A sample is the pair as it stood when the panel was read, and it
-            # is stamped with that moment, never with the clock: the timer
-            # fires every six hours whether or not the history page has been
-            # reached since, and a page that has stopped being reached (R5)
-            # leaves the pair standing in the data. Without a fresh reading of
-            # both counters there is no sample, and a moment the tracker has
-            # already kept is the same reading again, which it drops itself.
-            out, consumed = current_totals(runtime)
-            if read_at is None:
-                read_at = counters_read_at(runtime)
-            try:
-                commissioned = commissioning_date(runtime)
-                if commissioned is not None:
-                    await runtime.cop.async_set_anchor(commissioned)  # type: ignore[union-attr]
-                if read_at is not None:
-                    await runtime.cop.async_record(out, consumed, now=read_at)  # type: ignore[union-attr]
-            except Exception as err:  # noqa: BLE001 - a missed sample is not fatal
-                _LOGGER.debug("Could not write down the energy counters: %s", err)
+        async def _record_cop(_now=None) -> None:
+            # The pair as it stood when the panel was last read, and its
+            # moment; see CtcRuntime.async_record_cop.
+            await runtime.async_record_cop()
 
         # The counters as they came back from the store, stamped with the
         # moment they were read rather than with now: a restart is not a
@@ -1292,7 +1391,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         # pass for yesterday's in the daily figure. Handed in as they are,
         # however old: a pair read before the restart is a reading at its own
         # moment, and the tracker keeps a moment once.
-        await _record_cop(read_at=runtime.web.last_read(runtime.energy_out.key))  # type: ignore[union-attr]
+        await runtime.async_record_cop(read_at=runtime.web.last_read(runtime.energy_out.key))  # type: ignore[union-attr]
         entry.async_on_unload(
             async_track_time_interval(hass, _record_cop, COP_SAMPLE_INTERVAL)
         )

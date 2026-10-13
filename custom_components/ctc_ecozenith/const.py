@@ -463,6 +463,14 @@ CONTROL_ADDRESSES: Final[frozenset[int]] = frozenset(
     register.address for register in CONTROL_NUMBERS + CONTROL_SELECTS
 )
 
+#: The control registers by entity key, for the release action (roadmap R76),
+#: which is handed an entity and finds its register from the key in the
+#: entity's unique_id. Derived like the addresses, so it holds exactly the
+#: registers the tables hold.
+CONTROL_BY_KEY: Final[dict[str, ControlRegister]] = {
+    register.key: register for register in CONTROL_NUMBERS + CONTROL_SELECTS
+}
+
 # How often the volatile control registers are refreshed. CTC requires at least
 # every five minutes; a minute leaves a wide margin.
 CONTROL_KEEPALIVE_SECONDS: Final = 60

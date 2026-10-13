@@ -479,7 +479,8 @@ pump quietly returns to its own settings.
 A mode is released by choosing *Släpp styrningen*. A setpoint has no such
 position, so **Släpp all styrning** stops every override at once: Home Assistant
 stops writing, and the controller goes back to its own settings within about
-five minutes.
+five minutes. The action `ctc_ecozenith.release` lets go of one control, or a
+few, and leaves the rest held; see [Actions](#actions).
 
 What Home Assistant shows is what the controller holds. An override counts as
 in force only from a write that actually reached the unit, each control entity
@@ -498,6 +499,54 @@ frequent writing can destroy the controller. That is enforced in code, not left
 to convention: the Modbus client refuses any address outside the control
 registers before it even takes the connection, and the test suite checks that a
 write to 61500, 61503 or 62000 never reaches the wire.
+
+## Actions
+
+Three actions, for automations, scripts and energy managers, under *Developer
+tools, Actions* as everywhere else. None of them writes anything outside the
+control registers, and the first writes nothing at all.
+
+- **`ctc_ecozenith.release`** lets go of the controls it is given, one or
+  several number or select entities of this integration, in `entity_id`.
+  Nothing is written: Home Assistant stops writing those registers, the
+  controller goes back to its own setting within about five minutes, and every
+  other override stays as it is. An energy manager can drop a power limit
+  without letting go of the hot water. An entity that is not a control of a
+  loaded heat pump is refused, and then nothing in the call is released.
+
+  ```yaml
+  action: ctc_ecozenith.release
+  data:
+    entity_id:
+      - number.ctc_ecozenith_i255_styr_max_elpatron_nedre
+  ```
+
+- **`ctc_ecozenith.reread_menu`** reads the display's menu again, the same
+  reading as *Read the display's menu again* in the options, for the heat pump
+  named in `config_entry_id` or, without it, for every loaded heat pump that has
+  a display. Pages switched off stay off and new pages are read from then on;
+  the integration reloads to pick them up. It moves the physical panel and puts
+  it back, so it is not something to run on a timer. A panel that is in use
+  right now, because the integration is reading it or walking it, is answered
+  with an error at once rather than waited for, and a reading that does not get
+  the whole menu changes nothing. An entry set up on Modbus alone has no menu
+  and is refused.
+
+- **`ctc_ecozenith.cop_sample`** writes the two lifetime energy counters down as
+  a sample of the coefficient of performance now, rather than at the next six
+  hourly sample, for the heat pump in `config_entry_id` or for every one that
+  has the counters, and answers with them per entry: `heat_out_kwh`,
+  `energy_in_kwh`, `energy_in_from` (`display` or `modbus`), `read_at`, the
+  moment the counters were read off the panel, `last_sample_at` and
+  `recorded`, whether this call kept a new sample. A sample is the counters as
+  they were last read, never the clock, so a reading that is already a sample
+  is not taken twice and a counter page that has not been reached lately gives
+  none.
+
+  ```yaml
+  action: ctc_ecozenith.cop_sample
+  response_variable: counters
+  ```
 
 ## Attribute names
 

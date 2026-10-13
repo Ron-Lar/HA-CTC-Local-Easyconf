@@ -146,6 +146,65 @@
     },
     "modbus_closed": {
       "message": "The heat pump does not accept a connection on its Modbus port: it is switched off or out of reach, the address is wrong, or Modbus TCP is off at the panel"
+    },
+    "not_a_control": {
+      "message": "{entity_id} is not a control of a loaded CTC Local Easyconf heat pump, so there is nothing to release"
+    },
+    "unknown_entry": {
+      "message": "{entry_id} is not a CTC Local Easyconf heat pump"
+    },
+    "entry_not_loaded": {
+      "message": "{entry} is not loaded right now"
+    },
+    "no_display": {
+      "message": "{entry} was set up on Modbus alone and has no display menu to read"
+    },
+    "no_display_loaded": {
+      "message": "No loaded heat pump has a display menu to read"
+    },
+    "panel_busy": {
+      "message": "The panel of {entries} is in use right now: the integration is reading the display's pages or walking its menu. Try again in a moment. Nothing has been changed."
+    },
+    "menu_not_read": {
+      "message": "The display's whole menu of {entries} could not be read, so the stored menu stands and nothing has been changed"
+    },
+    "no_counters": {
+      "message": "{entry} has no energy counters among the display pages it reads, so there is no coefficient of performance to sample"
+    },
+    "no_counters_loaded": {
+      "message": "No loaded heat pump has the energy counters the coefficient of performance is worked out from"
+    }
+  },
+  "services": {
+    "release": {
+      "name": "Release control",
+      "description": "Stops Home Assistant holding the given controls, without writing anything to the heat pump. The heat pump goes back to its own setting within about five minutes, when it forgets the last write. Other controls stay as they are.",
+      "fields": {
+        "entity_id": {
+          "name": "Controls",
+          "description": "The number or select entities of this integration to release."
+        }
+      }
+    },
+    "reread_menu": {
+      "name": "Read the display's menu again",
+      "description": "Walks the display's menu once, as Read the display's menu again in the integration's options does, and folds the pages it finds into the stored menu: a page that is switched off stays off, and a new page is read from then on. Moves the physical panel and puts it back. A panel that is in use right now is not waited for.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Heat pump",
+          "description": "Which heat pump. Leave out for every heat pump with a display."
+        }
+      }
+    },
+    "cop_sample": {
+      "name": "Take a sample of the coefficient of performance",
+      "description": "Writes down the two lifetime energy counters, as they stood when the display was last read, as a sample of the coefficient of performance now rather than at the next six hourly sample, and answers with the counters. A reading that is already a sample is not taken twice.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Heat pump",
+          "description": "Which heat pump. Leave out for every heat pump with the energy counters."
+        }
+      }
     }
   },
   "entity": {

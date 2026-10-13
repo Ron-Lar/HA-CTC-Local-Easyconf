@@ -84,6 +84,19 @@ def unique_id(device: Mapping[str, Any], key: str) -> str:
     return f"{prefix_of(device)}{key}"
 
 
+def key_of(unique_id: Any, device: Mapping[str, Any]) -> str | None:
+    """The entity's own key in a unique_id of this heat pump's, the reverse of unique_id.
+
+    None for a unique_id of another heat pump, or of anything else: an action
+    that is handed an entity finds out what it is from here (roadmap R76),
+    rather than by taking the unique_id apart somewhere else.
+    """
+    prefix = prefix_of(device)
+    if not isinstance(unique_id, str) or not unique_id.startswith(prefix):
+        return None
+    return unique_id[len(prefix):] or None
+
+
 def mac_hex(text: Any) -> str | None:
     """A MAC address as its twelve hex digits, or None when it is not one.
 

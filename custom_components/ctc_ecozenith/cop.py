@@ -908,6 +908,34 @@ def counters_read_at(runtime: Any) -> datetime | None:
     return row_read_at(web, rows[0].key)
 
 
+def sample_summary(runtime: Any, recorded: bool) -> dict[str, Any]:
+    """What the cop_sample action answers for one heat pump (roadmap R76).
+
+    The two lifetime counters as they stood when the panel was last read,
+    where the consumed energy came from, the moment they were read, the
+    moment of the newest sample the tracker keeps, and whether this call kept
+    a new one. A pair that has not been read again since the last sample is
+    the same reading coming round and is not kept twice, which is why
+    ``recorded`` can be false with both counters there; ``read_at`` is empty
+    where a counter row has not been read or has gone stale, which gives no
+    sample at all. Plain JSON under English keys, the names the sensors'
+    English twins use, since what reads it is an automation.
+    """
+    out, consumed = current_totals(runtime)
+    read_at = counters_read_at(runtime)
+    tracker = getattr(runtime, "cop", None)
+    newest = tracker.last_sample_at if tracker is not None else None
+    display = getattr(runtime, "energy_in", None) is not None
+    return {
+        "recorded": bool(recorded),
+        "heat_out_kwh": out,
+        "energy_in_kwh": consumed,
+        "energy_in_from": "display" if display else "modbus",
+        "read_at": read_at.isoformat(timespec="seconds") if read_at is not None else None,
+        "last_sample_at": newest.isoformat(timespec="seconds") if newest is not None else None,
+    }
+
+
 #: The coefficient of performance figures the report carries, by the name the
 #: report builder takes them under. Returned as a mapping rather than a tuple:
 #: adding a figure to a tuple silently breaks every caller that unpacks it, and

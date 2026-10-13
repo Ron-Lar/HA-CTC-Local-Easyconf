@@ -146,6 +146,65 @@
     },
     "modbus_closed": {
       "message": "Värmepumpen tar inte emot någon anslutning på Modbus-porten: den är avstängd eller utom räckhåll, adressen är fel, eller Modbus TCP är avslaget vid panelen"
+    },
+    "not_a_control": {
+      "message": "{entity_id} är inget reglage i en laddad värmepump från CTC Local Easyconf, så det finns inget att släppa"
+    },
+    "unknown_entry": {
+      "message": "{entry_id} är ingen värmepump från CTC Local Easyconf"
+    },
+    "entry_not_loaded": {
+      "message": "{entry} är inte laddad just nu"
+    },
+    "no_display": {
+      "message": "{entry} är uppsatt med enbart Modbus och har ingen displaymeny att läsa"
+    },
+    "no_display_loaded": {
+      "message": "Ingen laddad värmepump har en displaymeny att läsa"
+    },
+    "panel_busy": {
+      "message": "Panelen på {entries} används just nu: integrationen läser displayens sidor eller går genom menyn. Försök om en stund. Inget har ändrats."
+    },
+    "menu_not_read": {
+      "message": "Hela displayens meny på {entries} kunde inte läsas, så den sparade menyn står kvar och inget har ändrats"
+    },
+    "no_counters": {
+      "message": "{entry} har inga energiräknare bland de displaysidor som hämtas, så det finns ingen värmefaktor att ta prov av"
+    },
+    "no_counters_loaded": {
+      "message": "Ingen laddad värmepump har de energiräknare som värmefaktorn räknas ur"
+    }
+  },
+  "services": {
+    "release": {
+      "name": "Släpp styrning",
+      "description": "Slutar hålla de valda reglagen utan att skriva något till värmepumpen. Den går tillbaka till sin egen inställning inom cirka fem minuter, när den glömmer den senaste skrivningen. Övriga reglage står kvar som de är.",
+      "fields": {
+        "entity_id": {
+          "name": "Reglage",
+          "description": "Reglagen i den här integrationen, tal eller listval, som ska släppas."
+        }
+      }
+    },
+    "reread_menu": {
+      "name": "Läs om displayens meny",
+      "description": "Går igenom displayens meny en gång, som Läs om displayens meny i integrationens inställningar gör, och för in sidorna den hittar i den sparade menyn: en sida som är avvald förblir avvald, och en ny sida hämtas från och med nu. Flyttar den fysiska panelen och ställer tillbaka den. En panel som används just nu väntas inte ut.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Värmepump",
+          "description": "Vilken värmepump. Utelämna för alla värmepumpar med display."
+        }
+      }
+    },
+    "cop_sample": {
+      "name": "Ta ett prov av värmefaktorn",
+      "description": "Skriver ner de två livstidsräknarna för energi, så som de stod när displayen senast lästes, som ett prov av värmefaktorn nu i stället för vid nästa prov var sjätte timme, och svarar med räknarna. En avläsning som redan är ett prov tas inte två gånger.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Värmepump",
+          "description": "Vilken värmepump. Utelämna för alla värmepumpar med energiräknarna."
+        }
+      }
     }
   },
   "entity": {
