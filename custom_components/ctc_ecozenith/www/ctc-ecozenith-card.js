@@ -217,7 +217,16 @@
     /* A display rule of a card, or ha-card's own :host rule, would otherwise beat
        the browser's [hidden] and leave closed explanations on the page. */
     [hidden] { display: none !important; }
-    :host { display: block; }
+    /* R40: color-scheme as a safety net, so a list, a number field or the
+       search field never takes its pop-up, arrows or clear button from a
+       scheme the card did not ask for. Home Assistant's theme normally sets
+       it on the root and it is inherited here; light dark follows the
+       operating system where it is not. */
+    :host { display: block; color-scheme: light dark; }
+    /* R40: tabular figures wherever a number stands, so a value in the list
+       does not move sideways when 9.8 becomes 10.2: the list's values and its
+       count, the key figures, and the reading beside a slider. */
+    .value, .big, .reading, .count { font-variant-numeric: tabular-nums; }
     ha-card { padding: 12px 16px; }
     .why {
       flex: none; background: none; border: none; padding: 0 2px; cursor: pointer;
