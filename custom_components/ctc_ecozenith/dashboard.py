@@ -36,13 +36,7 @@ from homeassistant.helpers.json import json_bytes, json_fragment
 
 from . import dashboard_views as views
 from .card import async_register_card
-from .const import (
-    CONF_LANGUAGE,
-    CONF_SLOW_INTERVAL,
-    DEFAULT_SLOW_INTERVAL,
-    DOMAIN,
-    LANG_SWEDISH,
-)
+from .const import CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL, DOMAIN
 from .keys import prefix_of
 
 _LOGGER = logging.getLogger(__name__)
@@ -100,7 +94,6 @@ def _collect(hass: HomeAssistant, entry_id: str | None = None) -> list[dict[str,
             unused = seen.unused(current)
         device = next(iter(dr.async_entries_for_config_entry(dev_reg, entry.entry_id)), None)
         name = (device and (device.name_by_user or device.name)) or runtime.device.get("name")
-        display_language = int(entry.options.get(CONF_LANGUAGE, LANG_SWEDISH))
         pumps.append({
             "name": name or entry.title,
             "entities": entities,
@@ -130,11 +123,18 @@ def _collect(hass: HomeAssistant, entry_id: str | None = None) -> list[dict[str,
                 int(entry.options.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL))
                 if runtime.web is not None else None
             ),
-            # The tiles carry the integration's Swedish names and the display
-            # rows the panel's own language, so the headings follow the panel.
-            "language": "sv" if display_language == LANG_SWEDISH else "en",
+            # Home Assistant's language, as the integration's own entity names
+            # have it through their translations (roadmap R23). The panel's
+            # language, CONF_LANGUAGE, is how its menu and rows are read, and
+            # names the display rows; it no longer picks the page's words.
+            "language": page_language(hass),
         })
     return pumps
+
+
+def page_language(hass: HomeAssistant) -> str:
+    """The language the page is built in: Swedish for a Swedish Home Assistant, else English."""
+    return views.language(hass.config.language)
 
 
 @callback
@@ -153,27 +153,19 @@ def _waiting(hass: HomeAssistant) -> list[dict[str, Any]]:
     ]
 
 
-def _panel_language(hass: HomeAssistant) -> str:
-    """The language a pump's panel is read in, known even while none is running."""
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        chosen = entry.options.get(CONF_LANGUAGE, LANG_SWEDISH)
-        return "sv" if int(chosen) == LANG_SWEDISH else "en"
-    return views.language(hass.config.language)
-
-
 @callback
 def build_config(hass: HomeAssistant) -> dict[str, Any]:
     """The page as it should look right now. Never raises: a broken page says so."""
     try:
         return views.build_dashboard(
             _collect(hass),
-            _panel_language(hass),
+            page_language(hass),
             (MAJOR_VERSION, MINOR_VERSION),
             waiting=_waiting(hass),
         )
     except Exception:  # the page must never break the frontend
         _LOGGER.exception("Could not build the CTC page")
-        lang = views.language(hass.config.language)
+        lang = page_language(hass)
         return views.message_dashboard(views.TEXT[lang]["failed"], lang)
 
 

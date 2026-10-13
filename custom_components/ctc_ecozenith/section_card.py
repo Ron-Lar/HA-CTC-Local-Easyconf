@@ -14,10 +14,9 @@ tab the section is on is built by the very function that builds it for the
 page, from the very description of the pump the page is built from
 (dashboard._collect), in the language the page is built in, and the section is
 picked out of the result by its heading. The page has one language for all its
-pumps, the first one's (dashboard_views.page_language), which the websocket
-command works out over every running pump and passes on; a second pump whose
-panel speaks another language is drawn in the page's words, not its own. So the
-section card shows exactly what the page shows in that section, the rule that
+pumps, Home Assistant's (roadmap R23), which the websocket command passes on,
+whatever language a pump's panel is read in. So the section card shows
+exactly what the page shows in that section, the rule that
 leaves out a reading only ever zero included, and follows the page when the
 page changes. Nothing is added: the cards come back as the page has them, and
 only the integration's own cards, which are all the section card can draw.
@@ -103,12 +102,10 @@ def section_cards(
     or nothing in it this installation has. Raises KeyError for a section that
     is not in SECTIONS, which the websocket command's schema keeps out.
 
-    ``lang`` is the language the page is built in, which is the first pump's
-    for every pump on it (dashboard_views.page_language over all the running
-    pumps); the section's words and the heading it is found by are both in it.
-    Without it the section is built in the pump's own language, the language
-    of its panel, which is the page's only while the pump is the first by name
-    or its panel speaks the first one's language.
+    ``lang`` is the language the page is built in, Home Assistant's
+    (dashboard.page_language); the section's words, its explanations and the
+    heading it is found by are all in it. Without it the section is built in
+    the language the pump carries, which dashboard._collect sets to the same.
 
     The status is the first section whose heading is the pump's name, since it
     is built first; every other section is the last whose heading is its own,

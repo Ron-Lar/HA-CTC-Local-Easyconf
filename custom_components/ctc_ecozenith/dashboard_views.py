@@ -14,7 +14,7 @@ entities up every time the page is opened and hands this module one dict per pum
      "unused": [key],                   # readings this installation only ever gave as 0
      "control_enabled": bool,
      "display_interval": int | None,    # seconds between display harvests
-     "language": "sv" | "en"}
+     "language": "sv" | "en"}           # Home Assistant's, which the page is built in
 
 A key is what follows "<domain>_<host>_" in the entity's unique_id: the Modbus keys in
 const.py, the derived binary sensors, the control registers, the COP spans, the
@@ -48,6 +48,14 @@ because a heat pump has a hundred values and they have to fit on a screen: chips
 the status, large numbers for the key figures, a row with the control itself for
 anything writable, and a dense list everywhere else. Each name carries the blue "i"
 that explains the value, see explanations.py.
+
+The page speaks Home Assistant's language (roadmap R23): Swedish where Home Assistant
+is set to Swedish and English otherwise, its headings from TEXT and every explanation
+and source from explanations.py, while the integration's own entity names follow the
+same language through their translations. What the panel prints stays the panel's:
+a display row is named by its row on the panel, read in Swedish whatever the panel or
+Home Assistant is set to, and the controller's states and modes are its own Swedish
+words, which automations and the history rest on.
 """
 
 from __future__ import annotations
@@ -91,10 +99,8 @@ def _hidden_states(key: str) -> list[str]:
     """The states in which a value has nothing to show and its card hides it."""
     return [UNAVAILABLE] if key.startswith(_COP_PREFIX) else list(HIDDEN_STATES)
 
-#: For an entity this layout does not know yet, from a newer integration.
-UNKNOWN_EXPLANATION = (
-    "Ett värde från integrationen som sidan ännu inte har någon egen förklaring för."
-)
+#: Where an entity this layout does not know yet, from a newer integration,
+#: says it comes from. Its explanation is TEXT's unknown_explanation.
 UNKNOWN_SOURCE = "CTC Local Easyconf"
 
 CHIPS_CARD = "custom:ctc-ecozenith-chips"
@@ -278,8 +284,12 @@ def _graph_icon(graph_id: str, kind: str) -> str:
 #: The sections of readings, where a value only ever zero is left out.
 _LEARNT_SECTIONS = frozenset({"temperatures", "hot_water", "energy", "compressor"})
 
-#: How every control entity's name starts (const.CONTROL_NUMBERS and _SELECTS).
+#: How every control entity's name starts, in Swedish and in English: the names
+#: in translations/sv.json and en.json, sv.json's taken word for word from
+#: const.CONTROL_NUMBERS and _SELECTS.
 _CONTROL_PREFIX = "Styr "
+_CONTROL_PREFIX_EN = "Control "
+_CONTROL_PREFIXES = (_CONTROL_PREFIX, _CONTROL_PREFIX_EN)
 #: A button has no value: its state is the time it was last pressed, unknown
 #: until then, so it has a row where it can be pressed and none in the list.
 _BUTTON = "button."
@@ -302,6 +312,8 @@ _KNOWN_KEYS = frozenset(
 
 TEXT = {
     "sv": {
+        # The language itself, which the builders hand the explanations.
+        "language": "sv",
         "overview": "Översikt",
         "controls": "Styrning",
         "performance": "Prestanda",
@@ -397,8 +409,13 @@ TEXT = {
         ),
         "state_pump_value": "pumpen själv",
         "state_release": "Släpp",
+        # For an entity this layout does not know yet, from a newer integration.
+        "unknown_explanation": (
+            "Ett värde från integrationen som sidan ännu inte har någon egen förklaring för."
+        ),
     },
     "en": {
+        "language": "en",
         "overview": "Overview",
         "controls": "Controls",
         "performance": "Performance",
@@ -480,8 +497,14 @@ TEXT = {
         ),
         "state_pump_value": "pump's own",
         "state_release": "Release",
+        "unknown_explanation": (
+            "A value from the integration that the page has no explanation of its own for yet."
+        ),
     },
 }
+
+#: The explanation of a value from a newer integration than the page, in Swedish.
+UNKNOWN_EXPLANATION = TEXT["sv"]["unknown_explanation"]
 
 #: Keys whose 0 the pump means as no limit at all, so the card writes the word
 #: (state_no_limit) rather than a 0: the compressor's top speed, where an i255
@@ -617,16 +640,23 @@ class _Builder:
         }
         self.unused = set(pump.get("unused") or [])
         self.placed: set[str] = set()
+        #: The language the explanations are given in: the language of the
+        #: words the tab is built with, which is the page's.
+        self.lang = language(text.get("language"))
 
     def explanation(self, key: str) -> dict[str, str]:
-        """What a value is and where it comes from, for the card to show."""
+        """What a value is and where it comes from, in the page's language, for the card."""
         found: dict[str, str] = {}
         if key in self.rows_of_page:
             value, page = self.rows_of_page[key]
-            found["explanation"] = display_explanation(value.get("label"), page.get("title"))
+            found["explanation"] = display_explanation(
+                value.get("label"), page.get("title"), self.lang
+            )
         else:
-            found["explanation"] = explain(key) or UNKNOWN_EXPLANATION
-        found["source"] = source(key, self.pages, self.interval) or UNKNOWN_SOURCE
+            found["explanation"] = (
+                explain(key, self.lang) or TEXT[self.lang]["unknown_explanation"]
+            )
+        found["source"] = source(key, self.pages, self.interval, self.lang) or UNKNOWN_SOURCE
         return found
 
     def entity_id(self, key: str) -> str | None:
@@ -652,16 +682,17 @@ class _Builder:
 
     @staticmethod
     def _under_a_control_heading(name: str) -> str:
-        """The name without the "Styr" every control's name starts with.
+        """The name without the "Styr" or "Control" every control's name starts with.
 
         Under a heading that already says control the prefix says nothing, and
         with the control beside it, it takes the room the name needs:
         "Styr max elpatron nedre" and "... övre" both end in "Styr max elpatr…".
         """
-        if not name.startswith(_CONTROL_PREFIX):
-            return name
-        rest = name[len(_CONTROL_PREFIX):]
-        return rest[:1].upper() + rest[1:]
+        for prefix in _CONTROL_PREFIXES:
+            if name.startswith(prefix):
+                rest = name[len(prefix):]
+                return rest[:1].upper() + rest[1:]
+        return name
 
     def item(
         self, key: str, hideable: bool, learnt: bool = False, trim: bool = False
@@ -999,11 +1030,14 @@ def _sort(pumps: Iterable[Any]) -> list[Mapping[str, Any]]:
 def page_language(pumps: Iterable[Any], fallback: str | None) -> str:
     """The one language the whole page is built in, for every pump on it.
 
-    The language of the first pump's panel, with the pumps in the page's own
-    order (by name), or ``fallback`` while no pump runs. The page and the
-    section card (section_card.py, asked through websocket.py) both take it
-    from here, so that a section of a second pump whose panel speaks another
-    language reads on a dashboard of its own as it does on the page.
+    The language the first pump carries, with the pumps in the page's own
+    order (by name), or ``fallback`` while no pump runs. dashboard.py gives
+    every pump Home Assistant's language (roadmap R23), so in a running Home
+    Assistant this is that language whatever the pumps; a panel's own
+    language only decides how its menu is read. The page and the section
+    card (section_card.py, asked through websocket.py) both take it from
+    here, so that a section reads on a dashboard of its own as it does on
+    the page.
     """
     ordered = _sort(pumps)
     return language(ordered[0].get("language") if ordered else fallback)

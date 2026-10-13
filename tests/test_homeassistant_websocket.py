@@ -66,9 +66,11 @@ async def client(hass, stubs, hass_ws_client, hass_read_only_access_token):
     The shared stubs count the http component as set up, which the websocket
     server needs for real; it is set up here instead, as Home Assistant would.
     The stubs put the name in with set.update, past the component set's own
-    bookkeeping, so it comes out the same way.
+    bookkeeping, so it comes out the same way. Home Assistant is set to
+    Swedish, the language the page is then built in (R23).
     """
     set.discard(hass.config.components, "http")
+    hass.config.language = "sv"
     entry = await _set_up(hass)
     assert entry.state is ConfigEntryState.LOADED
     socket = await hass_ws_client(hass, hass_read_only_access_token)
@@ -151,9 +153,9 @@ async def test_the_status_and_a_control_section_are_the_pages_too(hass, client):
 
 
 async def test_a_second_pump_with_an_english_panel_reads_in_the_pages_words(hass, client):
-    # The page builds every pump in the first one's language, by name: the
-    # i255's Swedish. The section of the i550 Pro, whose panel is read in
-    # English, has to be the page's to the letter, not built in its own.
+    # The page builds every pump in Home Assistant's language (R23), Swedish
+    # here. The section of the i550 Pro, whose panel is read in English, has
+    # to be the page's to the letter, not built in its panel's language.
     other = await _set_up_a_second_pump_in_english(hass)
     assert other.state is ConfigEntryState.LOADED
     first_id, other_id = _device_id(hass, client.entry), _device_id(hass, other)
@@ -161,7 +163,7 @@ async def test_a_second_pump_with_an_english_panel_reads_in_the_pages_words(hass
     devices = dr.async_get(hass)
     first_name, other_name = (devices.async_get(i).name.casefold() for i in (first_id, other_id))
     assert first_name < other_name
-    assert [pump["language"] for pump in dashboard._collect(hass, other.entry_id)] == ["en"]
+    assert [pump["language"] for pump in dashboard._collect(hass, other.entry_id)] == ["sv"]
 
     reply = await _ask(client, other_id, "temperatures")
     assert reply["success"], reply
