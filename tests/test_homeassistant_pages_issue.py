@@ -16,18 +16,18 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.helpers import issue_registry as ir
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _needs_auto_asyncio_mode,
     _set_up,
     stubs,
 )
-from test_homeassistant_menu import VSH  # noqa: E402
+from test_homeassistant_menu import VSH
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.helpers import issue_registry as ir  # noqa: E402
-
-from custom_components.ctc_ecozenith.catalogue import pages_to_storage  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.catalogue import pages_to_storage
+from custom_components.ctc_ecozenith.const import (
     CONF_MENU,
     CONF_SLOW_PAGES,
     DOMAIN,

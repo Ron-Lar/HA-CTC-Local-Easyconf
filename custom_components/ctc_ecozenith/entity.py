@@ -32,14 +32,16 @@ stand in the registry unavailable.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable
+import logging
 from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def async_switch_on_new_defaults(hass: Any, entry: Any, platform: str, entities: Iterable[Any]) -> int:
+def async_switch_on_new_defaults(
+    hass: Any, entry: Any, platform: str, entities: Iterable[Any]
+) -> int:
     """Switch on what this integration once switched off and now creates switched on.
 
     ``entities`` are the ones the platform is about to add at set-up. One

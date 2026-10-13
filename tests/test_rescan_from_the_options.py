@@ -27,12 +27,18 @@ def _method(source: str, name: str) -> str:
 
 def test_a_reading_from_the_options_starts_the_background_tries_over():
     source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
-    helper = source.split("def menu_read_from_the_options")[1].split("\ndef ")[0].split("\nasync def ")[0]
+    helper = (
+        source.split("def menu_read_from_the_options")[1]
+        .split("\ndef ")[0]
+        .split("\nasync def ")[0]
+    )
     assert "_MENU_TRIES.pop(entry_id, None)" in helper, "räknaren nollställs"
     assert "_MENU_LAST[entry_id] = now" in helper, "formulärets läsning är senaste försöket"
     # The reading in the background still asks menu_is_due with the count,
     # so a count started over is three new tries after the save.
-    assert "_MENU_TRIES.get(entry.entry_id, 0)" in source.split("def _menu_is_due")[1].split("\n\n")[0]
+    assert "_MENU_TRIES.get(entry.entry_id, 0)" in (
+        source.split("def _menu_is_due")[1].split("\n\n")[0]
+    )
 
 
 def test_the_form_books_its_reading_after_walking_and_not_at_a_busy_panel():
@@ -56,7 +62,9 @@ def test_a_missed_reading_writes_neither_the_menu_nor_the_version():
     rescan = _method(_flow(), "async_step_rescan")
     save = rescan.split("if user_input is not None:")[1].split("\n        try:")[0]
     before, guarded = save.split("if self._fresh:")
-    assert "CONF_MENU:" not in before and "CONF_MENU]" not in before, "menyn skrivs inte ovillkorligt"
+    assert "CONF_MENU:" not in before and "CONF_MENU]" not in before, (
+        "menyn skrivs inte ovillkorligt"
+    )
     assert "changes[CONF_MENU] = pages_to_storage(self._pages)" in guarded
     assert "changes[CONF_MENU_VERSION] = await _async_version(self.hass)" in guarded
     # The tick boxes are the person's choice and are saved either way.
@@ -66,7 +74,10 @@ def test_a_missed_reading_writes_neither_the_menu_nor_the_version():
 def test_the_first_form_rides_along_to_the_rescan_step_and_is_saved_with_it():
     flow = _flow()
     init = _method(flow, "async_step_init")
-    submitted = init.split("if user_input is not None:")[1].split("\n        options = self._entry.options")[0]
+    submitted = (
+        init.split("if user_input is not None:")[1]
+        .split("\n        options = self._entry.options")[0]
+    )
     assert "self._pending = {" in submitted
     pending_at = submitted.index("self._pending = {")
     rescan_at = submitted.index("return await self.async_step_rescan()")
@@ -95,7 +106,10 @@ def test_the_first_form_rides_along_to_the_rescan_step_and_is_saved_with_it():
     # And the rescan form is offered as the first form left things.
     offered = rescan.split("menu_after_rescan(")[1]
     assert "settings = {**self._entry.options, **self._pending}" in offered
-    assert "settings.get(CONF_SLOW_INTERVAL" in offered and "settings.get(CONF_RESTORE_PAGE" in offered
+    assert (
+        "settings.get(CONF_SLOW_INTERVAL" in offered
+        and "settings.get(CONF_RESTORE_PAGE" in offered
+    )
 
 
 def test_switching_the_statistics_off_is_acted_on_at_the_save_only():

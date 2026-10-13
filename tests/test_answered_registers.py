@@ -16,8 +16,8 @@ import asyncio
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 MARKER = 0xFFFF
 ENERGY = 62341
@@ -39,7 +39,9 @@ def poll():
 def blocks(coordinator_module, modbus_api) -> list[tuple[int, int]]:
     """The register blocks the coordinator plans, from a throwaway instance."""
     client = modbus_api.CtcModbusClient("192.0.2.55")
-    return list(coordinator_module.CtcModbusCoordinator(hass=object(), client=client, interval=30)._blocks)
+    return list(
+        coordinator_module.CtcModbusCoordinator(hass=object(), client=client, interval=30)._blocks
+    )
 
 
 def _block_for(blocks, address: int) -> tuple[int, int]:
@@ -94,7 +96,8 @@ def test_a_pair_that_reads_the_marker_is_an_answer_without_a_reading(
 def test_a_zero_is_both_an_answer_and_a_reading(
     coordinator_module, poll, modbus_api, blocks, cop, monkeypatch
 ):
-    coordinator = _scripted(coordinator_module, poll, modbus_api, monkeypatch, [_words(blocks, ENERGY)])
+    coordinator = _scripted(coordinator_module, poll, modbus_api, monkeypatch,
+                            [_words(blocks, ENERGY)])
     data = _round(coordinator)
     assert data["compressor_kwh"] == 0.0
     assert cop.modbus_consumption(data) == 0.0
@@ -142,7 +145,9 @@ def test_the_reason_names_the_register_while_it_has_not_answered(cop):
     assert "62341" in cop.cop_reason(None, "day", None, None, modbus_answered=False)
     assert "62341" in cop.cop_reason(None, "first_year", None, None, modbus_answered=False)
     # Once it has answered, the ordinary reasons take over.
-    assert "inte lästs" in cop.cop_reason(None, "lifetime", 12000.0, None, 20000, modbus_answered=True)
+    assert "inte lästs" in (
+        cop.cop_reason(None, "lifetime", 12000.0, None, 20000, modbus_answered=True)
+    )
     assert "20 till 30 timmar" in cop.cop_reason(None, "day", None, None, modbus_answered=True)
     # A consumed total that is there was read, whatever Modbus is doing.
     assert "för lite energi" in cop.cop_reason(None, "lifetime", 5.0, 4.0, 2, modbus_answered=False)

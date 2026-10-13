@@ -20,7 +20,10 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.loader import async_get_integration
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _advance,
     _let_the_background_run,
     _needs_auto_asyncio_mode,
@@ -28,16 +31,13 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-
-import custom_components.ctc_ecozenith as integration  # noqa: E402
-from custom_components.ctc_ecozenith.catalogue import (  # noqa: E402
+import custom_components.ctc_ecozenith as integration
+from custom_components.ctc_ecozenith.catalogue import (
     MenuReading,
     pages_from_storage,
     pages_to_storage,
 )
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.const import (
     CONF_MENU,
     CONF_MENU_VERSION,
     CONF_SLOW_PAGES,
@@ -115,13 +115,13 @@ async def test_an_interrupted_rereading_keeps_the_stored_menu_and_its_stamp(hass
     # version makes sense of that the old one passed over.
     version = str((await async_get_integration(hass, DOMAIN)).version)
     stubs.discover.return_value = MenuReading(
-        pages=VSH + [menu_page(27, "Kompressor")], complete=True
+        pages=[*VSH, menu_page(27, "Kompressor")], complete=True
     )
     await _advance(hass, integration.MENU_READ_RETRY.total_seconds() + 60)
     await hass.async_block_till_done()
 
     assert stubs.discover.await_count == 2
     assert entry.options[CONF_MENU_VERSION] == version
-    assert _pages_in(entry, CONF_MENU) == VSH_PAGES + [27]
-    assert _pages_in(entry, CONF_SLOW_PAGES) == VSH_PAGES + [27], "den nya sidan kryssas i"
+    assert _pages_in(entry, CONF_MENU) == [*VSH_PAGES, 27]
+    assert _pages_in(entry, CONF_SLOW_PAGES) == [*VSH_PAGES, 27], "den nya sidan kryssas i"
     assert entry.state is ConfigEntryState.LOADED

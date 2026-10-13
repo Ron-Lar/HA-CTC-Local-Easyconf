@@ -26,12 +26,15 @@ def test_the_source_line_names_the_screen_and_the_place_in_the_page(explanations
     assert explanations.source("p53_s61_v4", pages, 1800) == (
         "Displaysidan Värmesystem, skärm 61, rad 3, hämtas var 30:e minut"
     )
-    assert explanations.source("p53_s61_v1", pages, None) == "Displaysidan Värmesystem, skärm 61, rad 1"
+    assert explanations.source("p53_s61_v1", pages, None) == (
+        "Displaysidan Värmesystem, skärm 61, rad 1"
+    )
 
 
 def test_a_page_without_screen_and_place_reads_as_before(explanations):
     # What a page built from an older collection looks like, and the fixtures.
-    pages = [{"title": "Driftinfo Värmepump", "values": [{"key": "p22_x", "label": "X", "unit": None}]}]
+    pages = [{"title": "Driftinfo Värmepump",
+              "values": [{"key": "p22_x", "label": "X", "unit": None}]}]
     assert explanations.source("p22_x", pages, 1800) == (
         "Displaysidan Driftinfo Värmepump, hämtas var 30:e minut"
     )
@@ -50,7 +53,7 @@ def _numbered(pump):
 def test_the_rows_that_share_a_name_get_source_lines_of_their_own(dashboard_views, pumps):
     pump = _numbered(pumps["pt"])
     pump["display_interval"] = 1800
-    heating = [p for p in pump["pages"] if p["title"] == "Värmesystem"][0]
+    heating = next(p for p in pump["pages"] if p["title"] == "Värmesystem")
     # The i550's Värmesystem: four "Status 2" and four "Status 3". The fixture
     # has the page but not its entities, which a running i550 has.
     for value in heating["values"]:

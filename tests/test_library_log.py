@@ -1,4 +1,5 @@
-"""pymodbus' own error line about a silent register stays out of the log while an entry is loaded (F1.5, R2).
+"""pymodbus' own error line about a silent register stays out of the log while an
+entry is loaded (F1.5, R2).
 
 With the library's timeout as the only timer, every register nobody answers
 reaches the library's Log.error, "No response received after 0 retries,
@@ -84,7 +85,9 @@ def test_an_undo_called_twice_releases_once(modbus_api, library_logger):
     second = modbus_api.hold_library_quiet()
     first()
     first()
-    assert library_logger.filters == [modbus_api._QUIET], "a double undo must not free another entry's hold"
+    assert library_logger.filters == [modbus_api._QUIET], (
+        "a double undo must not free another entry's hold"
+    )
     second()
     assert library_logger.filters == []
     assert modbus_api._QUIET_HOLDS == 0

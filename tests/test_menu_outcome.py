@@ -238,7 +238,9 @@ class AddressedNoTile(NoTile):
 
 
 def _said(caplog, level):
-    return [r.getMessage() for r in caplog.records if r.levelno == level and "menu" in r.getMessage()]
+    return [
+        r.getMessage() for r in caplog.records if r.levelno == level and "menu" in r.getMessage()
+    ]
 
 
 def test_a_failure_is_one_warning_per_run_and_a_success_one_info_line(
@@ -263,7 +265,9 @@ def test_the_walk_says_whether_it_has_warned_of_no_menu_on_this_display(catalogu
     # second warning of the same thing (F3.3).
     assert not catalogue.warned_of_no_menu(_menu(web_api, AddressedNoTile))
     run(catalogue.async_discover_pages(_menu(web_api, Addressed), require_root=True))
-    assert not catalogue.warned_of_no_menu(_menu(web_api, Addressed)), "en läst meny är ingen varning"
+    assert not catalogue.warned_of_no_menu(_menu(web_api, Addressed)), (
+        "en läst meny är ingen varning"
+    )
     run(catalogue.async_discover_pages(_menu(web_api, AddressedNoTile), require_root=True))
     assert catalogue.warned_of_no_menu(_menu(web_api, AddressedNoTile))
     # Without an address there is no record to go by, and the line that ends

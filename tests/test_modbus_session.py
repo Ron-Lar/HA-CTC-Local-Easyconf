@@ -89,7 +89,9 @@ def test_the_library_version_is_said_once(quick, library, modbus_api, host, monk
 # --------------------------------------------------- never two at the same time
 
 
-def test_a_line_the_library_gave_up_is_closed_before_another_is_built(quick, library, modbus_api, host):
+def test_a_line_the_library_gave_up_is_closed_before_another_is_built(
+    quick, library, modbus_api, host
+):
     client = modbus_api.CtcModbusClient(host)
 
     async def scenario():
@@ -153,7 +155,9 @@ def test_a_connect_that_is_cancelled_leaves_nothing_open(quick, library, modbus_
     assert library.alive == []
 
 
-def test_close_hands_the_slot_back_and_notes_the_time(quick, library, modbus_api, host, monkeypatch):
+def test_close_hands_the_slot_back_and_notes_the_time(
+    quick, library, modbus_api, host, monkeypatch
+):
     client = modbus_api.CtcModbusClient(host)
 
     async def scenario():
@@ -268,7 +272,7 @@ def test_the_two_kinds_are_told_apart_by_the_library_exception(library, modbus_a
     from fake_pymodbus import ConnectionException, ModbusIOException
 
     assert modbus_api.is_silence(ModbusIOException("No response received after 0 retries"))
-    assert modbus_api.is_silence(asyncio.TimeoutError())
+    assert modbus_api.is_silence(TimeoutError())
     assert not modbus_api.is_silence(ConnectionException("Not connected"))
     assert not modbus_api.is_silence(OSError("reset by peer"))
     assert not modbus_api.is_silence(TypeError("unexpected keyword"))
@@ -294,7 +298,7 @@ def test_requests_are_paced(library, modbus_api, host, monkeypatch):
     library.controller.on_request = lambda *_: stamps.append(time.monotonic())
     client = modbus_api.CtcModbusClient(host)
     run(client.async_read(62000, 250))
-    gaps = [b - a for a, b in zip(stamps, stamps[1:])]
+    gaps = [b - a for a, b in itertools.pairwise(stamps)]
     assert len(gaps) == 2
     assert min(gaps) >= 0.03 * 0.8
 

@@ -97,8 +97,10 @@ def _node(script: str, storage: str = "none") -> object:
       const headings = (card) => page.all(card, (e) => e.className === "heading")
         .map((h) => [h.textContent, !h.hidden]);
       const count = (card) => page.all(card, (e) => e.className === "count")[0].textContent;
-      const field = (card) => page.all(card, (e) => e.tagName === "input" && e.type === "search")[0];
-      const box = (card) => page.all(card, (e) => e.tagName === "input" && e.type === "checkbox")[0];
+      const field = (card) =>
+        page.all(card, (e) => e.tagName === "input" && e.type === "search")[0];
+      const box = (card) =>
+        page.all(card, (e) => e.tagName === "input" && e.type === "checkbox")[0];
       const search = (card, text) => {{ const f = field(card); f.value = text; f.fire("input"); }};
       const tick = (card, on) => {{ const b = box(card); b.checked = on; b.fire("change"); }};
       const CONFIG = {json.dumps(CONFIG)};
@@ -140,7 +142,8 @@ def test_ticking_the_box_shows_every_row():
       console.log(JSON.stringify({all, again: count(card)}));
     """)
     assert found["all"] == {
-        "shown": ["Utetemperatur", "Senaste larm", "Varmvattenbörvärde", "Värde 3", "Värde 4", "Värde 5"],
+        "shown": ["Utetemperatur", "Senaste larm", "Varmvattenbörvärde", "Värde 3", "Värde 4",
+                  "Värde 5"],
         "count": "6 / 3 / 6",
     }
     assert found["again"] == "3 / 3 / 6"
@@ -181,7 +184,8 @@ def test_a_list_without_the_box_shows_every_row_as_before():
     found = _node("""
       const {show_empty, count: words, ...rest} = CONFIG;
       const card = mount(rest, STATES);
-      console.log(JSON.stringify({shown: shown(card), count: count(card), box: Boolean(box(card))}));
+      console.log(JSON.stringify({
+        shown: shown(card), count: count(card), box: Boolean(box(card))}));
     """)
     assert found["shown"] == [
         "Utetemperatur", "Senaste larm", "Varmvattenbörvärde", "Värde 3", "Värde 4", "Värde 5",
@@ -200,7 +204,8 @@ def test_an_unknown_row_that_says_why_it_has_no_figure_is_not_empty():
       const cop = (entity, name) => ({entity, name, explanation: "Värmefaktorn.",
         source: "Räknad", sub: ["underlag", "basis"], reason: ["skäl", "reason"]});
       const config = {...CONFIG, rows: [...CONFIG.rows, cop("sensor.cop_year", "Värmefaktor år"),
-        cop("sensor.cop_day", "Värmefaktor dygn"), cop("sensor.cop_life", "Värmefaktor livslängd")]};
+        cop("sensor.cop_day", "Värmefaktor dygn"),
+        cop("sensor.cop_life", "Värmefaktor livslängd")]};
       const states = {...STATES,
         "sensor.cop_year": {state: "unknown", attributes: {"skäl": "Inget års underlag ännu"}},
         "sensor.cop_day": {state: "unknown", attributes: {}},
@@ -211,7 +216,9 @@ def test_an_unknown_row_that_says_why_it_has_no_figure_is_not_empty():
       const sub = year.children.find((c) => c.className === "sub");
       console.log(JSON.stringify({shown: shown(card), count: count(card), sub: sub.textContent}));
     """)
-    assert found["shown"] == ["Utetemperatur", "Senaste larm", "Varmvattenbörvärde", "Värmefaktor år"]
+    assert found["shown"] == (
+        ["Utetemperatur", "Senaste larm", "Varmvattenbörvärde", "Värmefaktor år"]
+    )
     assert found["count"] == "4 / 4 / 9"
     assert found["sub"] == "Inget års underlag ännu"
 
@@ -243,8 +250,10 @@ def test_a_row_without_an_explanation_opens_home_assistants_dialog():
       const notes = page.all(card, (e) => e.className === "note").map((n) => !n.hidden);
       const style = page.styleOf(card);
       const rule = style.match(/\\.row \\{([^}]*)\\}/)[1];
-      console.log(JSON.stringify({events, notes, tap: [plain, explained, text].map((r) => r.dataset.tap || null),
-        plainRule: rule.includes("cursor"), tapRule: style.includes('.row[data-tap="1"] { cursor: pointer; }'),
+      console.log(JSON.stringify({events, notes,
+        tap: [plain, explained, text].map((r) => r.dataset.tap || null),
+        plainRule: rule.includes("cursor"),
+        tapRule: style.includes('.row[data-tap="1"] { cursor: pointer; }'),
         hover: style.includes('.row[data-tap="1"]:hover'), bareHover: /\\.row:hover/.test(style)}));
     """)
     assert found["events"] == [["hass-more-info", "sensor.outdoor", True, True]]

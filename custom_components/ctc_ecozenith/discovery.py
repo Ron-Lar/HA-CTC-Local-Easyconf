@@ -15,11 +15,13 @@ and nothing else; see async_home_assistant_networks and networks_from_adapters.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable, Mapping
+import contextlib
+from dataclasses import dataclass
 import ipaddress
 import logging
 import re
-from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 import aiohttp
 
@@ -110,13 +112,11 @@ async def _port_open(host: str, port: int, timeout: float = PORT_TIMEOUT) -> boo
         _, writer = await asyncio.wait_for(
             asyncio.open_connection(host, port), timeout=timeout
         )
-    except (asyncio.TimeoutError, OSError):
+    except (TimeoutError, OSError):
         return False
     writer.close()
-    try:
+    with contextlib.suppress(TimeoutError, OSError):
         await writer.wait_closed()
-    except (OSError, asyncio.TimeoutError):  # pragma: no cover
-        pass
     return True
 
 
@@ -150,7 +150,7 @@ async def async_probe_web(
             if response.status != 200:
                 return WebProbe(None, answered=True)
             body = (await response.text()).strip()
-    except (aiohttp.ClientConnectorError, asyncio.TimeoutError):
+    except (TimeoutError, aiohttp.ClientConnectorError):
         return WebProbe(None, answered=False)
     except (aiohttp.ClientError, UnicodeDecodeError):
         return WebProbe(None, answered=True)
@@ -229,7 +229,7 @@ async def async_home_assistant_networks(hass) -> list[ipaddress.IPv4Network]:
     """
     try:
         adapters = await _async_adapters(hass)
-    except Exception as err:  # noqa: BLE001 - no adapters is an empty sweep, not a failure
+    except Exception as err:  # no adapters is an empty sweep, not a failure
         _LOGGER.debug("Could not read adapters from Home Assistant: %s", err)
         return []
     return networks_from_adapters(adapters)

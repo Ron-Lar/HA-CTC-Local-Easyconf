@@ -35,10 +35,11 @@ instead of a client that is talking too fast.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 import logging
 import time
-from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any
 
 from .const import CONTROL_ADDRESSES, SENTINELS, ModbusSensor, enum_label
 
@@ -374,7 +375,7 @@ class CtcModbusClient:
         self._client = client
         try:
             connected = await client.connect()
-        except Exception as err:  # noqa: BLE001 - the library raises broadly
+        except Exception as err:  # the library raises broadly
             await self._drop_client()
             raise CtcModbusTransportError(
                 f"could not connect to {self._host}:{self._port}: {err}"
@@ -400,7 +401,7 @@ class CtcModbusClient:
                 result = close()
                 if asyncio.iscoroutine(result):
                     await result
-            except Exception:  # noqa: BLE001 - closing a dead socket may complain
+            except Exception:  # closing a dead socket may complain
                 _LOGGER.debug("Closing the Modbus client raised", exc_info=True)
         note_close(self._host, self._port, time.monotonic())
 
@@ -498,7 +499,7 @@ class CtcModbusClient:
                 await self._pace()
                 try:
                     result = await client.read_holding_registers(at, count=chunk, **kwargs)
-                except Exception as err:  # noqa: BLE001 - pymodbus raises broadly
+                except Exception as err:  # pymodbus raises broadly
                     raise await self._failed(err, at, "read") from err
                 self._last_request = time.monotonic()
                 if result is None or getattr(result, "isError", lambda: True)():
@@ -527,7 +528,7 @@ class CtcModbusClient:
             await self._pace()
             try:
                 result = await client.write_registers(address, [raw], **kwargs)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 raise await self._failed(err, address, "write") from err
             self._last_request = time.monotonic()
             if result is None or getattr(result, "isError", lambda: True)():

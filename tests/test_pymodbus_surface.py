@@ -20,7 +20,12 @@ import pytest
 
 pymodbus = pytest.importorskip("pymodbus")
 
-MANIFEST = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "ctc_ecozenith" / "manifest.json"
+MANIFEST = (
+    pathlib.Path(__file__).resolve().parent.parent
+    / "custom_components"
+    / "ctc_ecozenith"
+    / "manifest.json"
+)
 
 
 def run(coro):

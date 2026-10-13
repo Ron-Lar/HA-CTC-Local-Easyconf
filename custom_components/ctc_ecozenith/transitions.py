@@ -38,9 +38,10 @@ in as an aware datetime in local time, which is what midnight is judged on.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
-from typing import Any, Callable
+from typing import Any
 
 from .catalogue import is_period_count
 from .const import (

@@ -1,4 +1,5 @@
-"""The control manager under contention: writes that take time while the state moves (F2.1, F2.2, F2.3, R46).
+"""The control manager under contention: writes that take time while the state
+moves (F2.1, F2.2, F2.3, R46).
 
 A keepalive write waits behind the poll's lock for a moment every minute, and
 in that moment the state can change under it: Släpp all styrning, a select
@@ -23,9 +24,9 @@ import logging
 
 import pytest
 
-import ha_stub
 from conftest import load
 from fake_pymodbus import FakeClient, FakeLibrary
+import ha_stub
 from test_keepalive import expiries, record_expiries
 
 EXPIRY = 300.0
@@ -110,7 +111,9 @@ def test_the_generation_moves_on_at_every_write_and_release():
     keepalive.release(1010)
     assert keepalive.generation(1010) == 3
     keepalive.release(1010)
-    assert keepalive.generation(1010) == 3, "the state did not change, so neither did the generation"
+    assert keepalive.generation(1010) == 3, (
+        "the state did not change, so neither did the generation"
+    )
     assert keepalive.releases(1010) == 2, "but the release is counted, held or not (F1.2)"
     keepalive.written(1010, 215, now=120.0)
     keepalive.written(1005, 1, now=120.0)
@@ -398,13 +401,15 @@ def test_a_refresh_writes_the_value_set_a_moment_before_it_got_its_turn(manager)
 # ------------------------------------------------------ the first miss's warning
 
 
-def test_a_run_of_misses_that_begins_in_a_set_warns_once_with_the_moment(manager, caplog):
+def test_a_run_of_misses_that_begins_in_a_set_warns_once_with_the_moment(
+    manager, caplog, modbus_api
+):
     """F2.3: the warning with "until about" comes whichever path the first miss took."""
     async def scenario():
         await manager.async_set(1010, 215)
         manager.client.failing = True
         manager.clock.now += 30
-        with pytest.raises(Exception):
+        with pytest.raises(modbus_api.CtcModbusError):
             await manager.async_set(1010, 225)
         manager.clock.now += 30
         await _refresh(manager)
@@ -420,11 +425,10 @@ def test_a_run_of_misses_that_begins_in_a_set_warns_once_with_the_moment(manager
     assert manager.active == {1010: 215}, "the old value is still what the unit holds"
 
 
-def test_a_failed_set_of_an_address_not_in_force_warns_nothing(manager, caplog):
+def test_a_failed_set_of_an_address_not_in_force_warns_nothing(manager, caplog, modbus_api):
     manager.client.failing = True
-    with caplog.at_level(logging.DEBUG):
-        with pytest.raises(Exception):
-            run(manager.async_set(1010, 215))
+    with caplog.at_level(logging.DEBUG), pytest.raises(modbus_api.CtcModbusError):
+        run(manager.async_set(1010, 215))
     assert [r for r in caplog.records if r.levelno == logging.WARNING] == []
 
 

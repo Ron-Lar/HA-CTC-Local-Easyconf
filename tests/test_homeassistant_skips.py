@@ -25,7 +25,12 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.loader import async_get_integration
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     MODEL,
@@ -35,16 +40,10 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     _needs_auto_asyncio_mode,
     stubs,
 )
-from test_homeassistant_menu import menu_page  # noqa: E402
+from test_homeassistant_menu import menu_page
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
-
-from custom_components.ctc_ecozenith.catalogue import pages_to_storage  # noqa: E402
-from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.catalogue import pages_to_storage
+from custom_components.ctc_ecozenith.const import (
     CONF_IDENTITY,
     CONF_MENU,
     CONF_MENU_VERSION,
@@ -56,6 +55,7 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     DOMAIN,
     HARVEST_SKIP_LIMIT,
 )
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
 
 HOME = 20
 HISTORY = 25
@@ -66,7 +66,7 @@ INTERVAL = 1800
 class MovablePanel(FakePanel):
     """A display whose panel the test moves by hand, and whose moves it can read."""
 
-    instances: list["MovablePanel"] = []
+    instances: list[MovablePanel] = []
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)

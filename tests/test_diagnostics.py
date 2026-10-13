@@ -13,11 +13,11 @@ but the serial number's product and week groups.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 import json
 import pathlib
 import re
-from collections.abc import Mapping
-from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -30,7 +30,7 @@ COMPONENT = ROOT / "custom_components" / "ctc_ecozenith"
 HOST = "192.0.2.55"
 SERIAL = "720825400001"
 MAC = "02:00:00:00:00:01"
-NOW = datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture(scope="module")
@@ -399,7 +399,7 @@ def test_a_short_host_name_is_washed_as_a_word_only(diagnostics_data, const):
     # A host given by name is washed wherever it is spelt, but only as a whole
     # token: "ctc" as a host must not eat into ctc_ecozenith.
     entry = {**data(const), "host": "ctc"}
-    found, text = dump(diagnostics_data, entry, {"note": "ctc_ecozenith on ctc:80"}, None)
+    found, _text = dump(diagnostics_data, entry, {"note": "ctc_ecozenith on ctc:80"}, None)
     assert found["entry"]["options"]["note"] == "ctc_ecozenith on **REDACTED**:80"
 
 

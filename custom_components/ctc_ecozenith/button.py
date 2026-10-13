@@ -8,8 +8,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CtcConfigEntry
-from .keys import unique_id
 from .entity import async_switch_on_new_defaults
+from .keys import unique_id
 
 
 async def async_setup_entry(

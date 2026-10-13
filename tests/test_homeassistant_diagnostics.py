@@ -23,7 +23,9 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     DeadModbus,
@@ -32,10 +34,8 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-
-from custom_components.ctc_ecozenith import diagnostics  # noqa: E402
-from custom_components.ctc_ecozenith.const import DOMAIN  # noqa: E402
+from custom_components.ctc_ecozenith import diagnostics
+from custom_components.ctc_ecozenith.const import DOMAIN
 
 SEQUENCE = re.compile(r"(?<!\d)0001(?!\d)")
 

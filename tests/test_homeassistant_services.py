@@ -25,7 +25,14 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.loader import async_get_integration
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     MODEL,
@@ -37,29 +44,22 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     _set_up,
     stubs,
 )
-from test_homeassistant_cop_freshness import (  # noqa: E402
+from test_homeassistant_cop_freshness import (
     CONSUMED,
     HEAT,
     HistoryPanel,
     _entry as _history_entry,
 )
-from test_homeassistant_harvest import LivePanel, _fire, _prefill  # noqa: E402
-from test_homeassistant_menu import VSH  # noqa: E402
+from test_homeassistant_harvest import LivePanel, _fire, _prefill
+from test_homeassistant_menu import VSH
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from homeassistant.util import dt as dt_util  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
-
-import custom_components.ctc_ecozenith as integration  # noqa: E402
-from custom_components.ctc_ecozenith.catalogue import (  # noqa: E402
+import custom_components.ctc_ecozenith as integration
+from custom_components.ctc_ecozenith.catalogue import (
     MenuReading,
     pages_from_storage,
     pages_to_storage,
 )
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.const import (
     CONF_DISPLAY,
     CONF_IDENTITY,
     CONF_MENU,
@@ -73,7 +73,7 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONTROL_KEEPALIVE_SECONDS,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
 
 #: Where the reading the actions make is patched in: catalogue's own walk,
 #: which async_rescan_pages calls under the panel lock, as the options do.
@@ -111,8 +111,10 @@ async def test_release_lets_go_of_one_control_and_keeps_the_rest_without_writing
     (client,) = FakeModbus.instances
     room = _entity_id(hass, "number", "ctl_room_setpoint_1")
     speed = _entity_id(hass, "number", "ctl_max_rps")
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5}, blocking=True)
-    await hass.services.async_call("number", "set_value", {"entity_id": speed, "value": 60}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5},
+                                   blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": speed, "value": 60},
+                                   blocking=True)
     assert client.writes == [(1010, 215), (1002, 600)]
     assert _held(entry) == {1010: 215, 1002: 600}
 
@@ -136,8 +138,10 @@ async def test_release_takes_a_select_and_a_list_of_entities(hass):
     entry = await _set_up(hass)
     mode = _entity_id(hass, "select", "ctl_dhw_mode")
     room = _entity_id(hass, "number", "ctl_room_setpoint_1")
-    await hass.services.async_call("select", "select_option", {"entity_id": mode, "option": "Komfort"}, blocking=True)
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 22}, blocking=True)
+    await hass.services.async_call("select", "select_option",
+                                   {"entity_id": mode, "option": "Komfort"}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 22},
+                                   blocking=True)
     assert set(_held(entry)) == {1007, 1010}
     await _call(hass, "release", {"entity_id": [mode, room]})
     assert _held(entry) == {}
@@ -151,7 +155,8 @@ async def test_release_takes_a_select_and_a_list_of_entities(hass):
 async def test_release_refuses_what_is_not_a_control_and_then_releases_nothing(hass):
     entry = await _set_up(hass)
     room = _entity_id(hass, "number", "ctl_room_setpoint_1")
-    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5}, blocking=True)
+    await hass.services.async_call("number", "set_value", {"entity_id": room, "value": 21.5},
+                                   blocking=True)
     outdoor = _entity_id(hass, "sensor", "outdoor_temp")
     for wrong in (outdoor, "number.not_there", "light.kitchen"):
         with pytest.raises(ServiceValidationError) as refused:
@@ -235,7 +240,10 @@ async def test_reread_menu_that_misses_writes_nothing_and_says_so(hass):
     interrupted = MenuReading(pages=VSH[:1], complete=False, home_found=True,
                               tile_found=True, root_entered=True)
     for reading in (interrupted, MenuReading(home_found=False)):
-        with patch(DISCOVER, AsyncMock(return_value=reading)), pytest.raises(HomeAssistantError) as failed:
+        with (
+            patch(DISCOVER, AsyncMock(return_value=reading)),
+            pytest.raises(HomeAssistantError) as failed,
+        ):
             await _call(hass, "reread_menu", {"config_entry_id": entry.entry_id})
         assert failed.value.translation_key == "menu_not_read"
         assert dict(entry.options) == before
@@ -548,7 +556,8 @@ async def test_cop_sample_takes_the_fresh_counters_once_and_answers_with_them(
     # The stored pair at start-up is a sample at its own moment.
     assert stamps() == [read.isoformat()]
     # The pair standing from the store is that same reading: nothing new to take.
-    answer = await _call(hass, "cop_sample", {"config_entry_id": entry.entry_id}, return_response=True)
+    answer = await _call(hass, "cop_sample", {"config_entry_id": entry.entry_id},
+                         return_response=True)
     assert answer[entry.entry_id]["recorded"] is False
     assert stamps() == [read.isoformat()]
 
@@ -570,7 +579,8 @@ async def test_cop_sample_takes_the_fresh_counters_once_and_answers_with_them(
     }
     assert stamps() == [read.isoformat(), read_again.isoformat()]
     # Asked again before the page is read again: the same reading, kept once.
-    answer = await _call(hass, "cop_sample", {"config_entry_id": entry.entry_id}, return_response=True)
+    answer = await _call(hass, "cop_sample", {"config_entry_id": entry.entry_id},
+                         return_response=True)
     assert answer[entry.entry_id]["recorded"] is False
     assert stamps() == [read.isoformat(), read_again.isoformat()]
     # Called without asking for the answer, it still takes the sample.

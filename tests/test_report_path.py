@@ -10,8 +10,8 @@ The unit tests for each half passed; only the join between them was wrong.
 from __future__ import annotations
 
 import asyncio
-import inspect
 from datetime import date, timedelta
+import inspect
 from types import SimpleNamespace
 
 

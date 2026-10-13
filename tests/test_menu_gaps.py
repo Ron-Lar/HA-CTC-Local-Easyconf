@@ -113,7 +113,9 @@ def test_a_caption_that_did_not_answer_renames_the_row_and_the_reading_says_so(
     # The key follows the row's place since L2, so it stays; the name does not.
     assert keys == [value.key for value in whole.values], "nyckeln följer platsen, inte namnet"
     counter = next(value for value in reading.values if value.key == COUNTER)
-    assert counter.label.startswith("Värde "), "utan bildtext döps raden Värde N, efter värdets eget index"
+    assert counter.label.startswith("Värde "), (
+        "utan bildtext döps raden Värde N, efter värdets eget index"
+    )
     assert len(keys) == len(whole.values), "lika många rader: inget i listan säger att en saknas"
     assert not reading.whole
     assert reading.text_misses == 1 and reading.skipped == []
@@ -190,7 +192,8 @@ class GappyMenu(FakeMenu):
 
 
 def _sweep(catalogue, web_api, history, **trouble):
-    return run(catalogue.async_discover_pages(GappyMenu(web_api, history, **trouble), require_root=True))
+    return run(catalogue.async_discover_pages(GappyMenu(web_api, history, **trouble),
+                                              require_root=True))
 
 
 def test_a_whole_sweep_has_the_history_page_and_no_gaps(catalogue, web_api, history):
@@ -248,9 +251,9 @@ def test_the_heat_counter_survives_a_reading_where_its_screen_timed_out(
     menu, fresh = catalogue.menu_after_rescan(stored, stored, reading.pages, reading.complete)
     assert not fresh, "ingen version stämplas"
     assert [p.page for p in menu] == [p.page for p in stored]
-    assert next(p for p in menu if p.page == HISTORY) is next(p for p in stored if p.page == HISTORY), (
-        "historiksidan är den lagrade, orörd"
-    )
+    assert next(p for p in menu if p.page == HISTORY) is next(
+        p for p in stored if p.page == HISTORY
+    ), "historiksidan är den lagrade, orörd"
     assert rows.vanished_display_keys(menu, registry) == set(), "ingen registerpost pekas ut"
     heat, _consumed = cop.find_energy_totals(menu)
     assert heat is not None and heat.key == SWEPT

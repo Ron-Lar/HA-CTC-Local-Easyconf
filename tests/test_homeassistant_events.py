@@ -22,17 +22,17 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.const import EVENT_STATE_CHANGED
+from homeassistant.core import callback
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _advance,
     _entity_id,
     _needs_auto_asyncio_mode,
     _set_up,
     stubs,
 )
-from test_homeassistant_transitions import HEATING, READY, _controller, _status  # noqa: E402
-
-from homeassistant.const import EVENT_STATE_CHANGED  # noqa: E402
-from homeassistant.core import callback  # noqa: E402
+from test_homeassistant_transitions import HEATING, READY, _controller, _status
 
 
 async def test_the_events_stand_through_a_lost_round_and_do_not_fire_again(hass, stubs):

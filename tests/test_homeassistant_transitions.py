@@ -20,7 +20,11 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.const import EVENT_STATE_CHANGED
+from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     FakeModbus,
     _advance,
@@ -30,12 +34,8 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 
-from homeassistant.const import EVENT_STATE_CHANGED  # noqa: E402
-from homeassistant.core import callback  # noqa: E402
-from homeassistant.helpers import entity_registry as er  # noqa: E402
-
-from custom_components.ctc_ecozenith.const import DOMAIN  # noqa: E402
-from custom_components.ctc_ecozenith.transitions import EVENT_TYPES  # noqa: E402
+from custom_components.ctc_ecozenith.const import DOMAIN
+from custom_components.ctc_ecozenith.transitions import EVENT_TYPES
 
 #: The heat pump's status register and the codes the test drives it through,
 #: and the two other registers the watch follows.

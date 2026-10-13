@@ -20,9 +20,10 @@ Home Assistant imports: the store is handed in, as for cop.CopTracker.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping
 import logging
 import re
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -144,7 +145,9 @@ class SeenValues:
         display rows get an entity.
         """
         new_keys = {str(key) for key in valued} - self.keys
-        new_numeric = ({str(key) for key in numbers} | {k for k in new_keys if is_display_key(k)}) - self.numeric
+        new_numeric = (
+            {str(key) for key in numbers} | {k for k in new_keys if is_display_key(k)}
+        ) - self.numeric
         if not new_keys and not new_numeric:
             return 0, 0
         self.keys |= new_keys
@@ -181,7 +184,7 @@ class SeenValues:
             await self._store.async_save(
                 {"keys": sorted(self.keys), "numeric": sorted(self.numeric)}
             )
-        except Exception as err:  # noqa: BLE001 - the delayed save writes it later anyway
+        except Exception as err:  # the delayed save writes it later anyway
             _LOGGER.debug("Could not write the seen values down: %s", err)
 
     def _save(self) -> None:
@@ -190,7 +193,7 @@ class SeenValues:
                 lambda: {"keys": sorted(self.keys), "numeric": sorted(self.numeric)},
                 SAVE_DELAY_SECONDS,
             )
-        except Exception as err:  # noqa: BLE001 - a lost save only means a later rediscovery
+        except Exception as err:  # a lost save only means a later rediscovery
             _LOGGER.debug("Could not schedule saving the seen values: %s", err)
 
     def unused(self, values: Mapping[str, Any]) -> set[str]:

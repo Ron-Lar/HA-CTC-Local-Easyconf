@@ -14,13 +14,14 @@ rather than guessing.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import re
-from typing import Any, Mapping
+from typing import Any
 
 from .const import (
-    COP_WINDOW_DAYS,
     CONTROL_NUMBERS,
     CONTROL_SELECTS,
+    COP_WINDOW_DAYS,
     DEFAULT_FAST_INTERVAL,
     DEFAULT_SLOW_INTERVAL,
     HARVEST_SKIP_LIMIT,

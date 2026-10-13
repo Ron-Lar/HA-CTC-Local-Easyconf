@@ -11,9 +11,9 @@ mirrors how the panel itself is laid out.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import logging
 import re
-from dataclasses import dataclass, field
 from typing import Any
 
 from .const import PERIOD_MARKERS, SENTINELS, SlowPage, SlowValue
@@ -237,9 +237,7 @@ def _usable_label(widget: Widget) -> bool:
         return False
     # Alarm and info catalogue entries are rendered into status fields; they are
     # never the name of a neighbouring reading.
-    if text.startswith("[E") or text.startswith("[I") or text == "* Demo *":
-        return False
-    return True
+    return not (text.startswith("[E") or text.startswith("[I") or text == "* Demo *")
 
 
 def has_conversion(fmt: str) -> bool:
@@ -483,7 +481,7 @@ async def async_read_page_values(
                 continue
             raw_label = (pairing.get(widget.index) or f"Värde {widget.index}").strip().rstrip(":")
             readings.append((raw_label, widget.value_fmt, list(widget.value_vars), widget.index))
-        for raw_label, fmt, indices, index in _join_clock_rows(readings):
+        for raw_label, fmt, indices, _index in _join_clock_rows(readings):
             unit = _unit(fmt, raw_label)
             label = _clean_label(raw_label)
             # The key from where the row stands, never from its name: the name
@@ -905,7 +903,7 @@ async def _async_tap_pages(
         if landed == page or landed in visited:
             continue
         await _async_collect(
-            client, page_map, landed, into, visited, list(prefix or []) + [(x, y)], gaps
+            client, page_map, landed, into, visited, [*(prefix or []), (x, y)], gaps
         )
     return taps, True, True
 
@@ -1144,9 +1142,11 @@ async def _async_restore(
             here = await client.async_current_page()
         if here == home and origin != root:
             return
-        if await client.async_goto_operation_root():
-            if await client.async_current_page() == origin:
-                return
+        if (
+            await client.async_goto_operation_root()
+            and await client.async_current_page() == origin
+        ):
+            return
         await client.async_goto_home()
     except CtcWebError:
         _LOGGER.debug("Could not restore the panel to page %s", origin)

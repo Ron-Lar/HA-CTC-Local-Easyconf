@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ------------------------------------------------------------------- Modbus
 
 
@@ -116,9 +115,11 @@ def test_rows_break_on_the_left_hand_column(catalogue, web_api):
     widgets = [
         widget(index=0, kind=3, x=5, y=100, width=190, height=28, visible=True, label="Laddpump"),
         widget(index=1, kind=3, x=195, y=100, width=60, height=28, visible=True, label="Till"),
-        widget(index=2, kind=3, x=255, y=100, width=40, height=28, visible=True, value_fmt="%.-1f%%", value_vars=[3]),
+        widget(index=2, kind=3, x=255, y=100, width=40, height=28, visible=True,
+               value_fmt="%.-1f%%", value_vars=[3]),
         widget(index=3, kind=3, x=5, y=128, width=190, height=28, visible=True, label="Brinepump"),
-        widget(index=4, kind=3, x=195, y=128, width=60, height=28, visible=True, value_fmt="%.-1f%%", value_vars=[4]),
+        widget(index=4, kind=3, x=195, y=128, width=60, height=28, visible=True,
+               value_fmt="%.-1f%%", value_vars=[4]),
     ]
     pairing = catalogue._pair_labels(widgets)
     assert pairing[2] == "Laddpump"
@@ -131,9 +132,12 @@ def test_flow_layout_widgets_stay_on_their_row(catalogue, web_api):
     widget = web_api.Widget
     widgets = [
         widget(index=0, kind=3, x=5, y=50, width=190, height=28, visible=True, label="VP in/ut"),
-        widget(index=1, kind=3, x=195, y=50, width=50, height=28, visible=True, value_fmt="%.1f", value_vars=[1]),
-        widget(index=2, kind=3, x=-20000, y=50, width=10, height=28, visible=True, value_fmt=" / ", value_vars=[]),
-        widget(index=3, kind=3, x=-20000, y=50, width=40, height=28, visible=True, value_fmt="%.1f", value_vars=[2]),
+        widget(index=1, kind=3, x=195, y=50, width=50, height=28, visible=True, value_fmt="%.1f",
+               value_vars=[1]),
+        widget(index=2, kind=3, x=-20000, y=50, width=10, height=28, visible=True, value_fmt=" / ",
+               value_vars=[]),
+        widget(index=3, kind=3, x=-20000, y=50, width=40, height=28, visible=True, value_fmt="%.1f",
+               value_vars=[2]),
     ]
     pairing = catalogue._pair_labels(widgets)
     assert pairing[1] == "VP in/ut 1"
@@ -196,7 +200,8 @@ def test_readings_without_a_caption_are_left_unnamed(catalogue, web_api):
     widget = web_api.Widget
     widgets = [
         widget(index=0, kind=1, x=365, y=55, width=39, height=31, visible=True, label="Suomi"),
-        widget(index=1, kind=3, x=420, y=55, width=55, height=33, visible=True, value_fmt="%.1f", value_vars=[16]),
+        widget(index=1, kind=3, x=420, y=55, width=55, height=33, visible=True, value_fmt="%.1f",
+               value_vars=[16]),
     ]
     pairing = catalogue._pair_labels(widgets)
     assert 1 not in pairing
@@ -260,10 +265,14 @@ def test_a_rule_at_the_left_edge_does_not_become_the_column(catalogue, web_api):
     widget = web_api.Widget
     widgets = [
         widget(index=0, kind=4, x=0, y=228, width=480, height=1, visible=True),
-        widget(index=1, kind=3, x=5, y=55, width=190, height=28, visible=True, label="Total drifttid"),
-        widget(index=2, kind=3, x=195, y=55, width=50, height=28, visible=True, value_fmt="%d", value_vars=[1]),
-        widget(index=3, kind=3, x=5, y=83, width=190, height=28, visible=True, label="Avgiven värme totalt"),
-        widget(index=4, kind=3, x=195, y=83, width=50, height=28, visible=True, value_fmt="%d", value_vars=[2]),
+        widget(index=1, kind=3, x=5, y=55, width=190, height=28, visible=True,
+               label="Total drifttid"),
+        widget(index=2, kind=3, x=195, y=55, width=50, height=28, visible=True, value_fmt="%d",
+               value_vars=[1]),
+        widget(index=3, kind=3, x=5, y=83, width=190, height=28, visible=True,
+               label="Avgiven värme totalt"),
+        widget(index=4, kind=3, x=195, y=83, width=50, height=28, visible=True, value_fmt="%d",
+               value_vars=[2]),
     ]
     pairing = catalogue._pair_labels(widgets)
     assert pairing[2] == "Total drifttid"
@@ -275,14 +284,22 @@ def test_a_caption_block_is_matched_off_in_order(catalogue, web_api):
     # must not end up naming six unrelated numbers.
     widget = web_api.Widget
     widgets = [
-        widget(index=0, kind=3, x=5, y=55, width=190, height=28, visible=True, label="Total drifttid"),
-        widget(index=1, kind=3, x=5, y=-28, width=190, height=28, visible=True, label="Energi el total"),
-        widget(index=2, kind=3, x=5, y=-28, width=190, height=28, visible=True, label="Avgiven värme totalt"),
-        widget(index=3, kind=3, x=195, y=-28, width=50, height=28, visible=True, value_fmt="%d", value_vars=[1]),
-        widget(index=4, kind=3, x=195, y=-28, width=50, height=28, visible=True, value_fmt="%d", value_vars=[2]),
-        widget(index=5, kind=3, x=195, y=-28, width=50, height=28, visible=True, value_fmt="%d", value_vars=[3]),
-        widget(index=6, kind=3, x=195, y=-28, width=50, height=28, visible=True, value_fmt="%d", value_vars=[4]),
-        widget(index=7, kind=3, x=195, y=-28, width=50, height=28, visible=True, value_fmt="%d", value_vars=[5]),
+        widget(index=0, kind=3, x=5, y=55, width=190, height=28, visible=True,
+               label="Total drifttid"),
+        widget(index=1, kind=3, x=5, y=-28, width=190, height=28, visible=True,
+               label="Energi el total"),
+        widget(index=2, kind=3, x=5, y=-28, width=190, height=28, visible=True,
+               label="Avgiven värme totalt"),
+        widget(index=3, kind=3, x=195, y=-28, width=50, height=28, visible=True, value_fmt="%d",
+               value_vars=[1]),
+        widget(index=4, kind=3, x=195, y=-28, width=50, height=28, visible=True, value_fmt="%d",
+               value_vars=[2]),
+        widget(index=5, kind=3, x=195, y=-28, width=50, height=28, visible=True, value_fmt="%d",
+               value_vars=[3]),
+        widget(index=6, kind=3, x=195, y=-28, width=50, height=28, visible=True, value_fmt="%d",
+               value_vars=[4]),
+        widget(index=7, kind=3, x=195, y=-28, width=50, height=28, visible=True, value_fmt="%d",
+               value_vars=[5]),
     ]
     pairing = catalogue._pair_labels(widgets)
     named = sorted(set(pairing.values()))
@@ -294,10 +311,14 @@ def test_the_page_heading_is_not_part_of_the_caption_block(catalogue, web_api):
     # Counting the heading in shifted every name one step down the list.
     widget = web_api.Widget
     widgets = [
-        widget(index=0, kind=3, x=60, y=4, width=290, height=38, visible=True, label="Historisk driftinfo"),
-        widget(index=1, kind=3, x=5, y=-28, width=190, height=28, visible=True, label="Total drifttid"),
-        widget(index=2, kind=3, x=5, y=-28, width=190, height=28, visible=True, label="Energi el total"),
-        widget(index=3, kind=3, x=5, y=-28, width=190, height=28, visible=True, label="Avgiven värme totalt"),
+        widget(index=0, kind=3, x=60, y=4, width=290, height=38, visible=True,
+               label="Historisk driftinfo"),
+        widget(index=1, kind=3, x=5, y=-28, width=190, height=28, visible=True,
+               label="Total drifttid"),
+        widget(index=2, kind=3, x=5, y=-28, width=190, height=28, visible=True,
+               label="Energi el total"),
+        widget(index=3, kind=3, x=5, y=-28, width=190, height=28, visible=True,
+               label="Avgiven värme totalt"),
     ] + [
         widget(index=4 + n, kind=3, x=195, y=-28, width=50, height=28, visible=True,
                value_fmt="%d", value_vars=[n + 1])

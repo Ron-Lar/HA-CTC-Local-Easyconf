@@ -34,7 +34,11 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.loader import async_get_integration
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     IDENTITY,
     FakeModbus,
     _advance,
@@ -43,15 +47,11 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     _set_up,
     stubs,
 )
-from test_homeassistant_menu import VSH, VSH_PAGES, _pages_in  # noqa: E402
+from test_homeassistant_menu import VSH, VSH_PAGES, _pages_in
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.exceptions import HomeAssistantError  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-
-import custom_components.ctc_ecozenith as integration  # noqa: E402
-from custom_components.ctc_ecozenith.catalogue import MenuReading  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+import custom_components.ctc_ecozenith as integration
+from custom_components.ctc_ecozenith.catalogue import MenuReading
+from custom_components.ctc_ecozenith.const import (
     CONF_IDENTITY,
     CONF_IDENTITY_SCREENS,
     CONF_MENU,
@@ -60,7 +60,7 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_VISIT_SYSTEM_INFO,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
+from custom_components.ctc_ecozenith.identity import Identity
 
 READ_IDENTITY = f"custom_components.{DOMAIN}.async_read_identity"
 
@@ -78,8 +78,11 @@ def _incomplete() -> dict:
     return {key: value for key, value in IDENTITY.items() if not key.startswith("heatpump")}
 
 
-async def _finding_the_screen(client, screens=None, sweep=True, need_system=True, need_heatpump=True):
-    """The sweep finds the heat pump screen, but the display has not written anything into it yet."""
+async def _finding_the_screen(
+    client, screens=None, sweep=True, need_system=True, need_heatpump=True
+):
+    """The sweep finds the heat pump screen, but the display has not written anything
+    into it yet."""
     if screens is not None and need_heatpump and screens.heatpump is None:
         screens.heatpump = HEATPUMP_SCREEN
     return Identity()
@@ -101,7 +104,8 @@ async def _set_up_owing_the_menu(hass, identity: dict, **options):
 # ------------------------------------------------ the tries survive the write
 
 
-@pytest.mark.parametrize("complete", [True, False], ids=["complete identity", "incomplete identity"])
+@pytest.mark.parametrize("complete", [True, False],
+                         ids=["complete identity", "incomplete identity"])
 async def test_a_missed_menu_reading_keeps_its_tries_when_a_screen_is_found_beside_it(
     hass, stubs, caplog, complete
 ):
@@ -127,7 +131,9 @@ async def test_a_missed_menu_reading_keeps_its_tries_when_a_screen_is_found_besi
             assert stubs.discover.await_count == tries, f"försök {tries} uteblev"
             assert integration._MENU_TRIES[entry.entry_id] == tries
             assert len(FakeModbus.instances) == 1
-        assert entry.options[CONF_MENU_VERSION] == "0.9.0", "en missad läsning stämplar ingen version"
+        assert entry.options[CONF_MENU_VERSION] == "0.9.0", (
+            "en missad läsning stämplar ingen version"
+        )
         assert "in 3 attempts" in caplog.text, "och de förbrukade försöken sägs högt"
 
         # And not a fourth: the panel is a physical thing.
@@ -159,7 +165,9 @@ async def test_the_retry_after_the_screen_was_written_still_writes_the_menu_and_
     assert entry.options[CONF_MENU_VERSION] == version
     assert _pages_in(entry, CONF_MENU) == VSH_PAGES
     assert _pages_in(entry, CONF_SLOW_PAGES) == VSH_PAGES, "första läsningen kryssar i allt"
-    assert entry.options[CONF_IDENTITY_SCREENS] == {"heatpump": HEATPUMP_SCREEN}, "skärmen står kvar"
+    assert entry.options[CONF_IDENTITY_SCREENS] == {"heatpump": HEATPUMP_SCREEN}, (
+        "skärmen står kvar"
+    )
     assert len(FakeModbus.instances) == 2, "menyn laddar om, en gång"
     assert entry.state is ConfigEntryState.LOADED
 
@@ -253,11 +261,13 @@ async def test_a_catch_up_whose_pause_ends_after_the_action_read_waits_a_pause_f
     # its reading counts as the last attempt.
     interrupted = MenuReading(pages=VSH[:1], complete=False, home_found=True,
                               tile_found=True, root_entered=True)
-    with patch(ACTION_WALK, return_value=interrupted) as action_walk:
-        with pytest.raises(HomeAssistantError) as failed:
-            await hass.services.async_call(
-                DOMAIN, "reread_menu", {"config_entry_id": entry.entry_id}, blocking=True
-            )
+    with (
+        patch(ACTION_WALK, return_value=interrupted) as action_walk,
+        pytest.raises(HomeAssistantError) as failed,
+    ):
+        await hass.services.async_call(
+            DOMAIN, "reread_menu", {"config_entry_id": entry.entry_id}, blocking=True
+        )
     assert failed.value.translation_key == "menu_not_read"
     assert action_walk.await_count == 1
 

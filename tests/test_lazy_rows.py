@@ -17,8 +17,8 @@ import asyncio
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 from test_seen import FakeStore
 
 seen = load("seen")
@@ -67,7 +67,9 @@ def test_what_read_as_a_number_is_remembered_true_zeros_included():
 def test_a_display_row_added_from_the_recorded_statistics_counts_as_numeric():
     tracker = seen.SeenValues(FakeStore())
     assert tracker.add(["p30_total_drifttid", "hp1_rps", "system_status"]) == 3
-    assert tracker.numeric == {"p30_total_drifttid"}, "displayrader är tal, Modbus-nycklar kan vara etiketter"
+    assert tracker.numeric == {"p30_total_drifttid"}, (
+        "displayrader är tal, Modbus-nycklar kan vara etiketter"
+    )
 
 
 def test_minor_one_is_carried_over_with_the_display_rows_as_numeric():
@@ -100,7 +102,8 @@ def test_loading_reads_the_old_shape_and_the_new_alike():
     assert old.keys == {"p22_utetemperatur", "hp1_fan"}
     assert old.numeric == {"p22_utetemperatur"}
     assert not old.fresh
-    new = seen.SeenValues(FakeStore({"keys": ["hp1_fan"], "numeric": ["hp1_fan", "p22_kompressor"]}))
+    new = seen.SeenValues(FakeStore({"keys": ["hp1_fan"],
+                                     "numeric": ["hp1_fan", "p22_kompressor"]}))
     run(new.async_load())
     assert new.numeric == {"hp1_fan", "p22_kompressor"}
     # The zero rule is untouched by all this.

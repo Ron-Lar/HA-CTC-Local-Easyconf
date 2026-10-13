@@ -38,6 +38,7 @@ Home Assistant, so the suite can drive it against a server on loopback.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import struct
 import time
@@ -115,7 +116,7 @@ async def _async_read_answer(reader: asyncio.StreamReader, timeout: float) -> by
             break
         try:
             more = await asyncio.wait_for(reader.read(260 - len(answer)), left)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             break
         if not more:
             break
@@ -134,7 +135,7 @@ async def _async_knock(host: str, port: int, unit: int, timeout: float) -> str:
         # The controller saw a connection, so it is owed its settle time.
         note_close(host, port, time.monotonic())
         return BUSY
-    except (OSError, asyncio.TimeoutError):
+    except (TimeoutError, OSError):
         return CLOSED
     try:
         writer.write(read_request(1, unit))
@@ -142,16 +143,14 @@ async def _async_knock(host: str, port: int, unit: int, timeout: float) -> str:
         answer = await _async_read_answer(reader, timeout)
     except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
         return BUSY
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return SILENT
     except OSError:
         return SILENT
     finally:
         writer.close()
-        try:
+        with contextlib.suppress(TimeoutError, OSError):
             await asyncio.wait_for(writer.wait_closed(), 1.0)
-        except (OSError, asyncio.TimeoutError):
-            pass
         # A connection was made, so the controller is owed its settle time
         # before the integration's own client knocks again.
         note_close(host, port, time.monotonic())

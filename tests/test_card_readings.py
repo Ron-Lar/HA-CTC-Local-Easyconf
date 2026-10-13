@@ -98,7 +98,8 @@ def test_only_an_unavailable_sensor_takes_the_coefficient_off_the_page(card, fie
     back = _drawn(
         card, field,
         {COP: _state("unavailable"), OUTDOOR: _state("unavailable")},
-        then={COP: _state("unknown", underlag="senaste dygnet", skäl=WAITING), OUTDOOR: _state("7.5")},
+        then={COP: _state("unknown", underlag="senaste dygnet", skäl=WAITING),
+              OUTDOOR: _state("7.5")},
     )
     assert back == [
         {"hidden": False, "value": "unknown", "sub": WAITING},
@@ -113,7 +114,8 @@ def test_the_english_attribute_names_are_found_too_and_nothing_is_drawn_without_
     assert renamed[0] == {"hidden": False, "value": "unknown", "sub": "waiting for a sample"}
     # Unknown without a reason falls back on what it rests on; no attributes at
     # all leave the line empty, and the tile is drawn as before.
-    assert _drawn("ctc-ecozenith-readings", "items", {COP: _state("unknown", underlag="senaste dygnet")})[0] == {
+    assert _drawn("ctc-ecozenith-readings", "items",
+                  {COP: _state("unknown", underlag="senaste dygnet")})[0] == {
         "hidden": False, "value": "unknown", "sub": "senaste dygnet",
     }
     assert _drawn("ctc-ecozenith-readings", "items", {COP: _state("3.1")})[0] == {

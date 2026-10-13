@@ -75,13 +75,17 @@ def test_a_dead_host_ends_the_round_at_the_first_block(quick, library, modbus_ap
     assert library.alive == []
 
 
-def test_a_line_found_gone_in_the_middle_ends_the_round_there(quick, library, modbus_api, poll, host):
+def test_a_line_found_gone_in_the_middle_ends_the_round_there(
+    quick, library, modbus_api, poll, host
+):
     library.controller.gone_before.add(62167)
     client = modbus_api.CtcModbusClient(host)
     with pytest.raises(modbus_api.CtcModbusTransportError) as caught:
         run(poll.read_round(client, BLOCKS))
     assert caught.value.address == 62167
-    assert [a for _, a, _, _ in library.requests] == [62000, 62107], "nothing after the fault is tried"
+    assert [a for _, a, _, _ in library.requests] == [62000, 62107], (
+        "nothing after the fault is tried"
+    )
     assert library.alive == []
 
 

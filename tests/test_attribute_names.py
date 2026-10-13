@@ -14,18 +14,17 @@ README's table held to the names in code.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import json
 import re
 import shutil
 import subprocess
-from datetime import datetime, timezone
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-import ha_stub
 from conftest import ROOT, load
+import ha_stub
 
 #: The twins as R22 names them.
 EXPECTED = {
@@ -50,7 +49,7 @@ EXPECTED = {
     "styrningar": "overrides",
 }
 
-READ =datetime(2026, 10, 9, 11, 40, tzinfo=timezone.utc)
+READ =datetime(2026, 10, 9, 11, 40, tzinfo=UTC)
 
 
 @pytest.fixture(scope="module")
@@ -93,9 +92,11 @@ def test_nothing_stays_nothing(names):
 
 
 def test_an_episode_in_english(names):
-    episode = {"kod": "E017", "text": "Givare solpaneler ut", "start": "s", "slut": None, "utetemperatur": 7.2}
+    episode = {"kod": "E017", "text": "Givare solpaneler ut", "start": "s", "slut": None,
+               "utetemperatur": 7.2}
     assert names.episode_in_english(episode) == {
-        "code": "E017", "text": "Givare solpaneler ut", "start": "s", "end": None, "outdoor_temperature": 7.2,
+        "code": "E017", "text": "Givare solpaneler ut", "start": "s", "end": None,
+        "outdoor_temperature": 7.2,
     }
 
 
@@ -105,7 +106,8 @@ def test_an_episode_in_english(names):
 def test_an_unlabelled_code_is_given_under_both_names(stubbed, const):
     sensor = load("sensor")
     description = next(d for d in const.MODBUS_SENSORS if d.key == "system_status")
-    coordinator = SimpleNamespace(data={"system_status": "Okänd"}, unknown_codes={"system_status": 12})
+    coordinator = SimpleNamespace(data={"system_status": "Okänd"},
+                                  unknown_codes={"system_status": 12})
     entity = sensor.CtcModbusSensor.__new__(sensor.CtcModbusSensor)
     entity.coordinator = coordinator
     entity._description = description
@@ -116,7 +118,8 @@ def test_an_unlabelled_code_is_given_under_both_names(stubbed, const):
 
 def test_a_display_row_says_where_and_when_under_both_names(stubbed, const):
     sensor = load("sensor")
-    value = const.SlowValue(key="p22_utetemperatur", label="Utetemperatur", page=22, screen=220, fmt="%.1f")
+    value = const.SlowValue(key="p22_utetemperatur", label="Utetemperatur", page=22, screen=220,
+                            fmt="%.1f")
     web = SimpleNamespace(
         data={"p22_utetemperatur": 7.2},
         last_update_success=True,
@@ -125,7 +128,8 @@ def test_a_display_row_says_where_and_when_under_both_names(stubbed, const):
     )
     runtime = SimpleNamespace(web=web, device={"identifiers": {("ctc_ecozenith", "pump")}})
     attributes = sensor.CtcDisplaySensor(runtime, "Värmepump", value).extra_state_attributes
-    for swedish, english in (("källa", "source"), ("sida", "page"), ("skärm", "screen"), ("senast läst", "read_at")):
+    for swedish, english in (("källa", "source"), ("sida", "page"), ("skärm", "screen"),
+                             ("senast läst", "read_at")):
         assert attributes[english] == attributes[swedish], swedish
     assert attributes["read_at"] == READ.isoformat(timespec="seconds")
     assert attributes["page"] == "22" and attributes["screen"] == "220"
@@ -133,7 +137,8 @@ def test_a_display_row_says_where_and_when_under_both_names(stubbed, const):
 
 def test_the_latest_alarm_gives_its_code_under_both_names(stubbed):
     sensor = load("sensor")
-    latest = {"code": "E017", "text": "Givare solpaneler ut", "shown": "[E017] Givare solpaneler ut",
+    latest = {"code": "E017", "text": "Givare solpaneler ut",
+              "shown": "[E017] Givare solpaneler ut",
               "start": "2026-10-09T06:00:00+00:00", "end": None, "outdoor": 7.2}
     runtime = SimpleNamespace(
         web=SimpleNamespace(data={}, last_update_success=True),
@@ -188,7 +193,8 @@ class _Control:
     def written_attributes(self, address):
         if address not in self.active:
             return {}
-        return {"senast skriven": "2026-10-09T11:40:00+00:00", "gäller till": "2026-10-09T11:45:00+00:00"}
+        return {"senast skriven": "2026-10-09T11:40:00+00:00",
+                "gäller till": "2026-10-09T11:45:00+00:00"}
 
     def async_add_listener(self, listener):
         return lambda: None
@@ -223,7 +229,9 @@ def test_a_number_says_whether_control_is_in_force_as_a_boolean(const):
 def test_a_select_gives_the_two_moments_under_both_names(const):
     select = load("select")
     register = _control(const, "ctl_dhw_mode")
-    busy = select.CtcControlSelect(_control_runtime(const, {register.address: 2}), register).extra_state_attributes
+    busy = select.CtcControlSelect(
+        _control_runtime(const, {register.address: 2}), register
+    ).extra_state_attributes
     assert busy["last_written"] == busy["senast skriven"]
     assert busy["valid_until"] == busy["gäller till"]
     idle = select.CtcControlSelect(_control_runtime(const, {}), register).extra_state_attributes
@@ -234,7 +242,8 @@ def test_the_alarm_binary_carries_the_episodes_in_english_too(stubbed):
     binary_sensor = load("binary_sensor")
     alarms = load("alarms")
     log = alarms.AlarmLog.__new__(alarms.AlarmLog)
-    log.episodes = [{"code": "E017", "text": "Givare solpaneler ut", "shown": "[E017] Givare solpaneler ut",
+    log.episodes = [{"code": "E017", "text": "Givare solpaneler ut",
+                     "shown": "[E017] Givare solpaneler ut",
                      "start": "2026-10-09T06:00:00+00:00", "end": None, "outdoor": 7.2}]
     item = next(i for i in binary_sensor.DERIVED if i.episodes)
     runtime = SimpleNamespace(
@@ -245,9 +254,11 @@ def test_the_alarm_binary_carries_the_episodes_in_english_too(stubbed):
     attributes = binary_sensor.CtcDerivedBinary(runtime, item).extra_state_attributes
     (swedish,) = attributes["episoder"]
     (english,) = attributes["episodes"]
-    assert swedish == {"kod": "E017", "text": "Givare solpaneler ut", "start": "2026-10-09T06:00:00+00:00",
+    assert swedish == {"kod": "E017", "text": "Givare solpaneler ut",
+                       "start": "2026-10-09T06:00:00+00:00",
                        "slut": None, "utetemperatur": 7.2}
-    assert english == {"code": "E017", "text": "Givare solpaneler ut", "start": "2026-10-09T06:00:00+00:00",
+    assert english == {"code": "E017", "text": "Givare solpaneler ut",
+                       "start": "2026-10-09T06:00:00+00:00",
                        "end": None, "outdoor_temperature": 7.2}
 
 
@@ -268,12 +279,15 @@ def test_the_readme_has_the_table_and_says_when_the_swedish_names_go(names):
 
 
 def test_an_override_says_when_it_was_set_under_both_names(names):
-    """F6.2: satt and set_at, which the keepalive's rewrites do not move, in place of the last write."""
+    """F6.2: satt and set_at, which the keepalive's rewrites do not move, in place of
+    the last write."""
     assert names.OVERRIDE_KEYS["satt"] == "set_at"
     assert "senast skriven" not in names.OVERRIDE_KEYS
-    item = {"namn": "Styr rumsbörvärde", "register": "1010", "värde": 21.5, "satt": "2026-10-13T09:12:00+00:00"}
+    item = {"namn": "Styr rumsbörvärde", "register": "1010", "värde": 21.5,
+            "satt": "2026-10-13T09:12:00+00:00"}
     assert names.override_in_english(item) == {
-        "name": "Styr rumsbörvärde", "register": "1010", "value": 21.5, "set_at": "2026-10-13T09:12:00+00:00",
+        "name": "Styr rumsbörvärde", "register": "1010", "value": 21.5,
+        "set_at": "2026-10-13T09:12:00+00:00",
     }
 
 
@@ -302,7 +316,8 @@ def test_the_card_reads_an_override_in_force_under_either_name():
     program = (
         f"const c = require({json.dumps(str(CARD))});\n"
         f"const cases = {json.dumps(cases)};\n"
-        f"console.log(JSON.stringify(cases.map((s) => c.ownWord('number.a', s, {json.dumps(states)}, 'no_limit') ?? null)));\n"
+        "console.log(JSON.stringify(cases.map((s) => "
+        f"c.ownWord('number.a', s, {json.dumps(states)}, 'no_limit') ?? null)));\n"
     )
     done = subprocess.run(["node", "-e", program], capture_output=True, text=True, timeout=30)
     assert done.returncode == 0, done.stderr

@@ -115,8 +115,10 @@ class FakeMenu:
         page = screen // 10
         widget = self.web_api.Widget
         out = [
-            widget(index=0, kind=3, x=10, y=5, width=200, height=30, visible=True, label=f"Sida {page}"),
-            widget(index=1, kind=3, x=10, y=60, width=120, height=20, visible=True, label="Utetemperatur"),
+            widget(index=0, kind=3, x=10, y=5, width=200, height=30, visible=True,
+                   label=f"Sida {page}"),
+            widget(index=1, kind=3, x=10, y=60, width=120, height=20, visible=True,
+                   label="Utetemperatur"),
             widget(index=2, kind=3, x=200, y=60, width=60, height=20, visible=True,
                    value_fmt="%.1f°C", value_vars=[0]),
         ]

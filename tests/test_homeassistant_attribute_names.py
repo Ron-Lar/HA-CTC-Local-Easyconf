@@ -20,21 +20,21 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _advance,
     _entity_id,
     _needs_auto_asyncio_mode,
     _set_up,
     stubs,
 )
-from test_homeassistant_rows_alarms import (  # noqa: E402
+from test_homeassistant_rows_alarms import (
     E017,
     ServingPanel,
     _row_entity,
     _set_up_with_the_page,
 )
 
-from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
 
 
 async def test_a_control_says_it_is_in_force_under_both_names(hass):
@@ -67,7 +67,8 @@ async def test_a_display_row_and_the_alarm_carry_the_english_names(hass, stubs):
     await _advance(hass, MIN_FIRST_DELAY + 1)
 
     row = hass.states.get(_row_entity(hass, "utetemperatur")).attributes
-    for swedish, english in (("källa", "source"), ("sida", "page"), ("skärm", "screen"), ("senast läst", "read_at")):
+    for swedish, english in (("källa", "source"), ("sida", "page"), ("skärm", "screen"),
+                             ("senast läst", "read_at")):
         assert row[english] == row[swedish], swedish
 
     last = hass.states.get(_entity_id(hass, "sensor", "last_alarm")).attributes

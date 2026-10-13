@@ -250,7 +250,8 @@ def test_the_service_menu_is_never_opened(identity, web_api):
         1: [("Advanced", "Avancerat", 61)],
         61: [("Service", "Service", 50), ("Display", "Display", 40)],
         40: [("Display setup", "Displayinställning", 45)],
-        50: [("System information", "Systeminformation", 60), ("Function test", "Funktionstest", 70)],
+        50: [("System information", "Systeminformation", 60),
+             ("Function test", "Funktionstest", 70)],
     }
     panel = FakePanel(web_api, tree, {60: SYSTEM_ROWS}, start=1)
     found = run(identity.async_read_identity_via_panel(panel))

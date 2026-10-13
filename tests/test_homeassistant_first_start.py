@@ -28,7 +28,16 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.loader import async_get_integration
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     MODEL,
@@ -36,26 +45,17 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     _needs_auto_asyncio_mode,
     stubs,
 )
-from test_homeassistant_harvest import (  # noqa: E402,F401  (live_panel is autouse)
+from test_homeassistant_harvest import (  # noqa: F401  (live_panel is autouse)
     INTERVAL,
     LivePanel,
     _display_key,
     _fire,
     live_panel,
 )
-from test_homeassistant_menu import VSH, VSH_PAGES, _pages_in, menu_page  # noqa: E402
+from test_homeassistant_menu import VSH, VSH_PAGES, _pages_in, menu_page
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from homeassistant.util import dt as dt_util  # noqa: E402
-from pytest_homeassistant_custom_component.common import (  # noqa: E402
-    MockConfigEntry,
-    async_fire_time_changed,
-)
-
-from custom_components.ctc_ecozenith.catalogue import MenuReading, pages_to_storage  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.catalogue import MenuReading, pages_to_storage
+from custom_components.ctc_ecozenith.const import (
     CONF_IDENTITY,
     CONF_MENU,
     CONF_MENU_VERSION,
@@ -66,7 +66,7 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_WEB_PORT,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
 
 #: The page the newer parser makes sense of, found by the re-read.
 NEW_PAGE = menu_page(27, "Kompressor")
@@ -79,7 +79,8 @@ def _entry_owing_the_menu() -> MockConfigEntry:
         domain=DOMAIN,
         unique_id=f"{DOMAIN}_{HOST}",
         title=f"{MODEL} ({HOST})",
-        data={CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1, "model": MODEL},
+        data={CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1,
+              "model": MODEL},
         options={
             CONF_MENU_VERSION: "0.9.0",
             CONF_IDENTITY: IDENTITY,
@@ -112,7 +113,7 @@ async def test_the_first_start_after_an_update_walks_the_menu_and_the_pages_once
     async def read_the_menu(client, require_root=True) -> MenuReading:
         reading.set()
         await finish.wait()
-        return MenuReading(pages=VSH + [NEW_PAGE], complete=True)
+        return MenuReading(pages=[*VSH, NEW_PAGE], complete=True)
 
     stubs.discover.side_effect = read_the_menu
     entry = _entry_owing_the_menu()
@@ -136,10 +137,12 @@ async def test_the_first_start_after_an_update_walks_the_menu_and_the_pages_once
     finish.set()
     await _settle(hass)
 
-    assert panel.walked == VSH_PAGES, "skörden gick klart före omladdningen, en gång, de gamla sidorna"
+    assert panel.walked == VSH_PAGES, (
+        "skörden gick klart före omladdningen, en gång, de gamla sidorna"
+    )
     assert entry.state is ConfigEntryState.LOADED
     assert entry.options[CONF_MENU_VERSION] == version
-    assert _pages_in(entry, CONF_SLOW_PAGES) == VSH_PAGES + [27], "den nya sidan kryssas i"
+    assert _pages_in(entry, CONF_SLOW_PAGES) == [*VSH_PAGES, 27], "den nya sidan kryssas i"
     assert len(LivePanel.instances) == 2, "menyn laddade om"
     old, new = LivePanel.instances
     assert old is panel
@@ -160,4 +163,4 @@ async def test_the_first_start_after_an_update_walks_the_menu_and_the_pages_once
 
     # When the next harvest is owed it walks, the new page included.
     await _fire(hass, INTERVAL + 60)
-    assert new.walked == VSH_PAGES + [27]
+    assert new.walked == [*VSH_PAGES, 27]

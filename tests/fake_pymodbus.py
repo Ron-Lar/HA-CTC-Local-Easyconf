@@ -15,10 +15,11 @@ while the first is still open raises on the spot.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import sys
 import time
 import types
-from typing import Any, Callable
+from typing import Any
 
 
 class ModbusIOException(Exception):
@@ -34,7 +35,7 @@ class Result:
         self.registers = registers or []
         self._error = error
 
-    def isError(self) -> bool:  # noqa: N802 - pymodbus spelling
+    def isError(self) -> bool:  # pymodbus spelling
         return self._error
 
 
@@ -123,7 +124,9 @@ class FakeClient:
         if address in controller.silent:
             if controller.closes_after_silence:
                 self.connected = False
-            raise ModbusIOException("No response received after 0 retries, continue with next request")
+            raise ModbusIOException(
+                "No response received after 0 retries, continue with next request"
+            )
         if address in controller.rejected:
             return Result(error=True)
         if kind == "read":
@@ -131,10 +134,14 @@ class FakeClient:
         controller.written.append((address, list(payload)))
         return Result()
 
-    async def read_holding_registers(self, address: int, *, count: int = 1, device_id: int = 1) -> Result:
+    async def read_holding_registers(
+        self, address: int, *, count: int = 1, device_id: int = 1
+    ) -> Result:
         return self._request("read", address, count, {"device_id": device_id})
 
-    async def write_registers(self, address: int, values: list[int], *, device_id: int = 1) -> Result:
+    async def write_registers(
+        self, address: int, values: list[int], *, device_id: int = 1
+    ) -> Result:
         return self._request("write", address, values, {"device_id": device_id})
 
 
@@ -172,7 +179,7 @@ class FakeLibrary:
         """Every request on every client, in order."""
         return [request for client in self.clients for request in client.requests]
 
-    def install(self, monkeypatch) -> "FakeLibrary":
+    def install(self, monkeypatch) -> FakeLibrary:
         """Put the stand-in where ``import pymodbus`` will find it."""
         library = self
 

@@ -8,28 +8,27 @@ myUplink or any other cloud.
 from __future__ import annotations
 
 import asyncio
-import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers import (
     config_validation as cv,
     device_registry as dr,
     issue_registry as ir,
 )
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
-
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from . import dashboard
@@ -46,6 +45,40 @@ from .catalogue import (
     pages_to_storage,
     warned_of_no_menu,
 )
+from .const import (
+    CONF_CHECK_UPDATES,
+    CONF_ENABLE_CONTROL,
+    CONF_FAST_INTERVAL,
+    CONF_IDENTITY,
+    CONF_IDENTITY_SCREENS,
+    CONF_LANGUAGE,
+    CONF_MENU,
+    CONF_MENU_ROOT,
+    CONF_MENU_VERSION,
+    CONF_MODBUS_PORT,
+    CONF_RESTORE_PAGE,
+    CONF_SLAVE,
+    CONF_SLOW_INTERVAL,
+    CONF_SLOW_PAGES,
+    CONF_TRY_QUICK_MENU,
+    CONF_VISIT_SYSTEM_INFO,
+    CONF_WEB_PORT,
+    DEFAULT_FAST_INTERVAL,
+    DEFAULT_MODBUS_PORT,
+    DEFAULT_SLAVE,
+    DEFAULT_SLOW_INTERVAL,
+    DEFAULT_WEB_PORT,
+    DOMAIN,
+    LANG_SWEDISH,
+    PLATFORMS,
+    RELEASES_API,
+    RELEASES_PAGE,
+    SlowPage,
+    has_display,
+    identity_signal,
+    web_interface_url,
+)
+from .coordinator import CtcControlManager, CtcModbusCoordinator, CtcWebCoordinator
 from .cop import (
     MIN_CONSUMPTION_KWH,
     ConsumptionSnapshot,
@@ -59,40 +92,6 @@ from .cop import (
     modbus_consumption_answered,
     powered_on_hours,
 )
-from .const import (
-    CONF_CHECK_UPDATES,
-    CONF_ENABLE_CONTROL,
-    CONF_FAST_INTERVAL,
-    CONF_IDENTITY,
-    CONF_IDENTITY_SCREENS,
-    CONF_MENU,
-    CONF_MENU_ROOT,
-    CONF_MENU_VERSION,
-    CONF_LANGUAGE,
-    CONF_MODBUS_PORT,
-    CONF_RESTORE_PAGE,
-    CONF_SLAVE,
-    CONF_SLOW_INTERVAL,
-    CONF_SLOW_PAGES,
-    RELEASES_API,
-    RELEASES_PAGE,
-    CONF_TRY_QUICK_MENU,
-    CONF_VISIT_SYSTEM_INFO,
-    CONF_WEB_PORT,
-    DEFAULT_FAST_INTERVAL,
-    DEFAULT_MODBUS_PORT,
-    DEFAULT_SLAVE,
-    DEFAULT_SLOW_INTERVAL,
-    DEFAULT_WEB_PORT,
-    DOMAIN,
-    LANG_SWEDISH,
-    PLATFORMS,
-    SlowPage,
-    has_display,
-    identity_signal,
-    web_interface_url,
-)
-from .coordinator import CtcControlManager, CtcModbusCoordinator, CtcWebCoordinator
 from .harvest import STORAGE_VERSION as HARVEST_STORAGE_VERSION, HarvestMemory
 from .identity import (
     Identity,
@@ -112,7 +111,6 @@ from .keys import (
 )
 from .modbus_api import CtcModbusClient, hold_library_quiet
 from .modbus_probe import BUSY, CLOSED, async_classify_cached
-from .updates import async_latest_release, check_is_due, newer
 from .seen import (
     STORAGE_MINOR_VERSION as SEEN_MINOR_VERSION,
     STORAGE_VERSION as SEEN_STORAGE_VERSION,
@@ -124,6 +122,7 @@ from .services import async_register_services
 from .stats import async_setup_stats, async_stop_stats
 from .stats_extra import ErrorCounter, build_extra, entry_stem
 from .transitions import TransitionWatch, find_starts_per_day, sample_of
+from .updates import async_latest_release, check_is_due, newer
 from .web_api import CtcWebClient, CtcWebError
 from .websocket import async_register_websocket
 
@@ -318,7 +317,7 @@ _RELEASE_CHECKED: dict[str, float] = {}
 
 
 async def _async_check_release(
-    hass: HomeAssistant, entry: "CtcConfigEntry", version: str
+    hass: HomeAssistant, entry: CtcConfigEntry, version: str
 ) -> None:
     """Say in the repairs view when a newer release is out.
 
@@ -364,7 +363,7 @@ async def _async_check_release(
 
 
 def _async_review_issues(
-    hass: HomeAssistant, entry: "CtcConfigEntry", runtime: "CtcRuntime"
+    hass: HomeAssistant, entry: CtcConfigEntry, runtime: CtcRuntime
 ) -> None:
     """Say in the repairs view what only the owner can settle.
 
@@ -413,7 +412,7 @@ def _async_review_issues(
     review(ISSUE_IDENTITY, not runtime.identity.serial)
 
 
-def _display_notices_apply(hass: HomeAssistant, entry: "CtcConfigEntry") -> bool:
+def _display_notices_apply(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     """Whether the repairs view's notices about the display concern this entry at all.
 
     An entry set up on Modbus alone, because the display's web interface did
@@ -430,7 +429,7 @@ def _display_notices_apply(hass: HomeAssistant, entry: "CtcConfigEntry") -> bool
 
 @callback
 def _async_adopt_identity(
-    hass: HomeAssistant, entry: "CtcConfigEntry", runtime: "CtcRuntime", found: Identity
+    hass: HomeAssistant, entry: CtcConfigEntry, runtime: CtcRuntime, found: Identity
 ) -> bool:
     """Take what a later reading of the identity found, without a reload.
 
@@ -479,7 +478,7 @@ def _async_adopt_identity(
                 # already has; the card goes without it then, nothing else.
                 try:
                     registry.async_update_device(device.id, merge_connections=connections)
-                except Exception as err:  # noqa: BLE001 - the MAC is a convenience
+                except Exception as err:  # the MAC is a convenience
                     _LOGGER.debug("Could not put the MAC on the device: %s", err)
     async_dispatcher_send(hass, identity_signal(entry.entry_id))
     _async_review_issues(hass, entry, runtime)
@@ -491,8 +490,8 @@ def _async_adopt_identity(
 
 async def _async_catch_up(
     hass: HomeAssistant,
-    entry: "CtcConfigEntry",
-    runtime: "CtcRuntime",
+    entry: CtcConfigEntry,
+    runtime: CtcRuntime,
     client: CtcWebClient,
     version: str,
 ) -> None:
@@ -607,7 +606,7 @@ async def _async_catch_up(
                 _async_adopt_identity(hass, entry, runtime, identity)
             if screens.as_dict() != known_screens:
                 changed[CONF_IDENTITY_SCREENS] = screens.as_dict()
-        except Exception as err:  # noqa: BLE001 - catching up must never break the entry
+        except Exception as err:  # catching up must never break the entry
             _LOGGER.debug("Could not catch up with the display: %s", err)
 
         if changed:
@@ -644,7 +643,7 @@ async def _async_catch_up(
             return
 
 
-def _menu_is_due(entry: "CtcConfigEntry", version: str) -> bool:
+def _menu_is_due(entry: CtcConfigEntry, version: str) -> bool:
     """Whether this run still owes the entry a fresh reading of the menu."""
     return menu_is_due(
         entry.options.get(CONF_MENU_VERSION),
@@ -655,7 +654,7 @@ def _menu_is_due(entry: "CtcConfigEntry", version: str) -> bool:
 
 
 async def _async_reread_menu(
-    client: CtcWebClient, entry: "CtcConfigEntry", version: str
+    client: CtcWebClient, entry: CtcConfigEntry, version: str
 ) -> dict[str, Any]:
     """The whole menu again, or nothing at all when the display would not give it.
 
@@ -707,10 +706,10 @@ async def _async_reread_menu(
     if not reading.pages or not reading.complete:
         spent = _MENU_TRIES.get(entry.entry_id, 0)
         if reading.gaps:
+            gaps = ", ".join(str(page) for page in reading.gaps)
             what = (
-                "Page(s) %s of the display's menu were read with a gap, a screen or a "
+                f"Page(s) {gaps} of the display's menu were read with a gap, a screen or a "
                 "caption that did not answer, so the reading is not the whole menu"
-                % ", ".join(str(page) for page in reading.gaps)
             )
         elif reading.pages:
             what = "Only part of the display's menu could be read"
@@ -783,7 +782,7 @@ def _menu_changes(
     return changed
 
 
-def _still_loaded_with(entry: "CtcConfigEntry", runtime: "CtcRuntime") -> bool:
+def _still_loaded_with(entry: CtcConfigEntry, runtime: CtcRuntime) -> bool:
     """Whether the entry is loaded, and with the runtime a walk was started on."""
     return (
         entry.state is ConfigEntryState.LOADED
@@ -792,7 +791,7 @@ def _still_loaded_with(entry: "CtcConfigEntry", runtime: "CtcRuntime") -> bool:
 
 
 async def async_reread_menu_now(
-    hass: HomeAssistant, entry: "CtcConfigEntry", version: str
+    hass: HomeAssistant, entry: CtcConfigEntry, version: str
 ) -> bool:
     """Read the display's whole menu now, for the reread_menu action (roadmap R76).
 
@@ -866,7 +865,7 @@ async def async_reread_menu_now(
 
 
 async def _async_name_the_failure(
-    hass: HomeAssistant, entry: "CtcConfigEntry", host: str, port: int, slave: int
+    hass: HomeAssistant, entry: CtcConfigEntry, host: str, port: int, slave: int
 ) -> ConfigEntryNotReady | None:
     """Say what kept Modbus away from a set-up that could not read a register (roadmap L12).
 
@@ -888,7 +887,7 @@ async def _async_name_the_failure(
     issue_id = f"{entry.entry_id}_{ISSUE_MODBUS_BUSY}"
     try:
         verdict = await async_classify_cached(host, port, slave)
-    except Exception:  # noqa: BLE001 - naming the failure must never hide it
+    except Exception:  # naming the failure must never hide it
         _LOGGER.debug("Could not probe the Modbus port after a failed set-up", exc_info=True)
         return None
     if verdict != BUSY:
@@ -1008,13 +1007,13 @@ async def _async_arm_statistics(hass: HomeAssistant, entry: CtcConfigEntry) -> N
             hass, entry, DOMAIN, str(integration.version),
             extra=lambda: _stats_extra_for(hass, entry),
         )
-    except Exception:  # noqa: BLE001 - statistics must never break a set-up
+    except Exception:  # statistics must never break a set-up
         _LOGGER.debug("Could not arm the statistics reporter", exc_info=True)
 
 
 @callback
 def _async_move_row_keys(
-    hass: HomeAssistant, entry: "CtcConfigEntry", prefix: str, moves: dict[str, str]
+    hass: HomeAssistant, entry: CtcConfigEntry, prefix: str, moves: dict[str, str]
 ) -> None:
     """Carry each moved display row's entity over to the key of its place (roadmap L2).
 
@@ -1061,7 +1060,7 @@ def _async_move_row_keys(
         )
 
 
-def commissioning_date(runtime: "CtcRuntime"):
+def commissioning_date(runtime: CtcRuntime):
     """Work out when the lifetime counters started, from the powered-on hours.
 
     CTC counts the hours the unit has been switched on. Taken back from today
@@ -1159,7 +1158,7 @@ class CtcRuntime:
                 await tracker.async_set_anchor(commissioned)
             if read_at is not None:
                 await tracker.async_record(out, consumed, now=read_at)
-        except Exception as err:  # noqa: BLE001 - a missed sample is not fatal
+        except Exception as err:  # a missed sample is not fatal
             _LOGGER.debug("Could not write down the energy counters: %s", err)
             return False
         return tracker.last_sample_at != before
@@ -1183,7 +1182,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     try:
         integration = await async_get_integration(hass, DOMAIN)
         await dashboard.async_register(hass, str(integration.version))
-    except Exception:  # noqa: BLE001 - the page must never break a set-up
+    except Exception:  # the page must never break a set-up
         _LOGGER.warning("Could not add the CTC page", exc_info=True)
 
     # pymodbus writes an error line of its own for every register nobody
@@ -1306,7 +1305,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     # where it came from for as long as it stays in the menu, so this is done
     # at every set-up and is a no-op once done.
     moves = previous_keys(
-        pages_from_storage(options.get(CONF_MENU)) + pages_from_storage(options.get(CONF_SLOW_PAGES))
+        pages_from_storage(options.get(CONF_MENU))
+        + pages_from_storage(options.get(CONF_SLOW_PAGES))
     )
     _async_move_row_keys(hass, entry, unique_prefix(key), moves)
 
@@ -1397,7 +1397,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
             read_any, shown = web.alarms.fresh()
             if read_any:
                 alarms.note(
-                    shown, datetime.now(timezone.utc), (modbus.data or {}).get("outdoor_temp")
+                    shown, datetime.now(UTC), (modbus.data or {}).get("outdoor_temp")
                 )
 
         _conclude_alarms()

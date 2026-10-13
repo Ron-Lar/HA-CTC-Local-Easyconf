@@ -31,10 +31,10 @@ exactly when an object may be missing a field.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime, timedelta
+import re
 from typing import Any
 
 from .const import (
@@ -95,7 +95,9 @@ class Secrets:
         if mac:
             hexes = re.sub(r"[^0-9A-Fa-f]", "", str(mac))
             if len(hexes) == 12:
-                self.patterns.append(re.compile(r"(?<![0-9A-Fa-f])" + hexes + r"(?![0-9A-Fa-f])", re.I))
+                self.patterns.append(
+                    re.compile(r"(?<![0-9A-Fa-f])" + hexes + r"(?![0-9A-Fa-f])", re.I)
+                )
         digits = "".join(ch for ch in str(serial or "") if ch.isdigit())
         self.sequence = digits[8:12] if len(digits) >= 12 else None
 
@@ -111,7 +113,9 @@ class Secrets:
         return text
 
 
-def secrets_for(data: Mapping[str, Any], options: Mapping[str, Any], runtime: Any = None) -> Secrets:
+def secrets_for(
+    data: Mapping[str, Any], options: Mapping[str, Any], runtime: Any = None
+) -> Secrets:
     """What names this installation: its host and device key, its serial number and its MAC address.
 
     From the running identity where there is one, since it may hold what the
@@ -157,7 +161,7 @@ def _section(build: Callable[[], Any]) -> Any:
     """One section, or what went wrong building it instead of the whole download."""
     try:
         return build()
-    except Exception as err:  # noqa: BLE001 - a diagnostics download must never fail
+    except Exception as err:  # a diagnostics download must never fail
         return {"unavailable": f"{type(err).__name__}: {err}"}
 
 
@@ -421,7 +425,9 @@ def build(
     """
     identity = getattr(runtime, "identity", None)
     if identity is None:
-        identity = options.get(CONF_IDENTITY) if isinstance(options.get(CONF_IDENTITY), Mapping) else {}
+        identity = (
+            options.get(CONF_IDENTITY) if isinstance(options.get(CONF_IDENTITY), Mapping) else {}
+        )
     return {
         "entry": {
             "data": dict(data),

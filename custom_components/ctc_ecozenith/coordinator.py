@@ -12,31 +12,31 @@ and it puts the panel back when it is done.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 import logging
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .alarms import AlarmWatch
 from .catalogue import numeric_value
-from .harvest import StoredHarvest, first_harvest_delay, is_fresh, stale_after, utcnow
 from .const import (
-    HARVEST_PATIENCE,
-    HARVEST_SKIP_LIMIT,
-    RETRY_INTERVAL,
     CONTROL_EXPIRY_SECONDS,
     CONTROL_KEEPALIVE_SECONDS,
     DOMAIN,
+    HARVEST_PATIENCE,
+    HARVEST_SKIP_LIMIT,
     MODBUS_SENSORS,
     MODBUS_SETTINGS,
+    RETRY_INTERVAL,
     ModbusSensor,
     SlowPage,
 )
+from .harvest import StoredHarvest, first_harvest_delay, is_fresh, stale_after, utcnow
 from .keepalive import Keepalive
-from .patience import Patience
 from .modbus_api import (
     PROBE_REGISTER,
     REQUEST_TIMEOUT,
@@ -46,6 +46,7 @@ from .modbus_api import (
     decode_reading,
     plan_blocks,
 )
+from .patience import Patience
 from .poll import MissingBlocks, SlowRounds, lead_with, read_round
 from .web_api import CtcWebClient, CtcWebError
 
@@ -531,10 +532,11 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         setup; replaying it is the only reliable way in, since the menu layout
         differs between models and cannot be derived at poll time.
         """
-        if await self.client.async_current_page() != page.page:
-            if not await self.client.async_goto_page(page.page, page.route):
-                _LOGGER.debug("Could not reach page %s", page.page)
-                return False
+        if await self.client.async_current_page() != page.page and not (
+            await self.client.async_goto_page(page.page, page.route)
+        ):
+            _LOGGER.debug("Could not reach page %s", page.page)
+            return False
         values_by_screen: dict[int, list[Any]] = {}
         for screen in page.screens:
             try:
@@ -698,7 +700,7 @@ class CtcControlManager:
     def _moment(seconds: float | None) -> datetime | None:
         if seconds is None:
             return None
-        return datetime.fromtimestamp(seconds, tz=timezone.utc)
+        return datetime.fromtimestamp(seconds, tz=UTC)
 
     def written_attributes(self, address: int) -> dict[str, str]:
         """The two moments as entity attributes, for the numbers and the selects.

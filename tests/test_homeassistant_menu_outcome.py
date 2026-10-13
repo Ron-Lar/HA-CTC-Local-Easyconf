@@ -25,7 +25,9 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.data_entry_flow import FlowResultType
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     IDENTITY,
     _advance,
     _let_the_background_run,
@@ -33,18 +35,16 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     _set_up,
     stubs,
 )
-from test_homeassistant_menu import VSH  # noqa: E402
-from test_menu_root import FakeMenu  # noqa: E402
+from test_homeassistant_menu import VSH
+from test_menu_root import FakeMenu
 
-from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
-
-import custom_components.ctc_ecozenith as integration  # noqa: E402
-from custom_components.ctc_ecozenith import catalogue, web_api  # noqa: E402
-from custom_components.ctc_ecozenith.catalogue import (  # noqa: E402
+import custom_components.ctc_ecozenith as integration
+from custom_components.ctc_ecozenith import catalogue, web_api
+from custom_components.ctc_ecozenith.catalogue import (
     MenuReading,
     pages_to_storage,
 )
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.const import (
     CONF_IDENTITY,
     CONF_MENU,
     CONF_MENU_VERSION,
@@ -52,7 +52,7 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_VISIT_SYSTEM_INFO,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
+from custom_components.ctc_ecozenith.identity import Identity
 
 READ_IDENTITY = f"custom_components.{DOMAIN}.async_read_identity"
 RESCAN = f"custom_components.{DOMAIN}.config_flow.async_rescan_pages"

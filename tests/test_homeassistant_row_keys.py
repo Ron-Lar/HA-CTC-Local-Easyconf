@@ -21,15 +21,20 @@ pytest-homeassistant-custom-component installed:
 
 from __future__ import annotations
 
-import logging
 from dataclasses import replace
+import logging
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     FakeModbus,
     _advance,
@@ -38,27 +43,22 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     _set_up,
     stubs,
 )
-from test_homeassistant_rows_alarms import HEATPUMP, PAGE, SCREEN, ServingPanel  # noqa: E402
+from test_homeassistant_rows_alarms import HEATPUMP, PAGE, SCREEN, ServingPanel
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
-from homeassistant.helpers import entity_registry as er  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
-
-from custom_components.ctc_ecozenith.catalogue import (  # noqa: E402
+from custom_components.ctc_ecozenith.catalogue import (
     MenuReading,
     pages_from_storage,
     pages_to_storage,
 )
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.const import (
     CONF_MENU,
     CONF_MENU_VERSION,
     CONF_SLOW_PAGES,
     DOMAIN,
     SlowPage,
 )
-from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
-from custom_components.ctc_ecozenith.keys import row_key  # noqa: E402
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
+from custom_components.ctc_ecozenith.keys import row_key
 
 PREFIX = f"{DOMAIN}_{HOST}_"
 RESCAN = f"custom_components.{DOMAIN}.config_flow.async_rescan_pages"
@@ -75,7 +75,9 @@ POSITIONED = SlowPage(
     ],
 )
 #: Name key to place key, as the migration has to carry them.
-EXPECTED = {old.key: new.key for old, new in zip(HEATPUMP.values, POSITIONED.values)}
+EXPECTED = {
+    old.key: new.key for old, new in zip(HEATPUMP.values, POSITIONED.values, strict=True)
+}
 
 
 def _rows(hass, entry) -> dict[str, str]:
@@ -100,7 +102,8 @@ def _seed_the_seen_record(hass_storage, entry_id: str) -> None:
         "version": 1,
         "minor_version": 2,
         "key": key,
-        "data": {"keys": sorted([*EXPECTED, "outdoor_temp"]), "numeric": sorted([*EXPECTED, "outdoor_temp"])},
+        "data": {"keys": sorted([*EXPECTED, "outdoor_temp"]),
+                 "numeric": sorted([*EXPECTED, "outdoor_temp"])},
     }
 
 
@@ -172,7 +175,9 @@ async def test_the_reading_after_an_update_moves_every_row_and_keeps_the_entity_
     assert entry.state is ConfigEntryState.LOADED
 
     menu = pages_from_storage(entry.options[CONF_MENU])
-    assert {v.key: v.previous_key for v in menu[0].values} == {new: old for old, new in EXPECTED.items()}
+    assert {v.key: v.previous_key for v in menu[0].values} == (
+        {new: old for old, new in EXPECTED.items()}
+    )
     _assert_moved(hass, hass_storage, entry, names)
 
     # A second start finds nothing left to move, and removes nothing.
@@ -187,7 +192,9 @@ async def test_read_again_from_the_options_moves_the_rows_the_same_way(hass, has
     whole = MenuReading(pages=[POSITIONED], complete=True)
     with patch(RESCAN, AsyncMock(return_value=whole)), patch(CLIENT, ServingPanel):
         flow = await hass.config_entries.options.async_init(entry.entry_id)
-        result = await hass.config_entries.options.async_configure(flow["flow_id"], {"rescan": True})
+        result = await hass.config_entries.options.async_configure(
+            flow["flow_id"], {"rescan": True}
+        )
         assert result["step_id"] == "rescan"
         result = await hass.config_entries.options.async_configure(
             flow["flow_id"], {CONF_SLOW_PAGES: [str(PAGE)]}
@@ -203,7 +210,8 @@ async def test_a_name_read_better_renames_the_entity_and_keeps_it(hass, hass_sto
     outdoor = next(e for e, key in names.items() if key == f"p{PAGE}_utetemperatur")
     better = replace(
         POSITIONED,
-        values=[replace(POSITIONED.values[0], label="Utetemperatur givare")] + POSITIONED.values[1:],
+        values=[replace(POSITIONED.values[0], label="Utetemperatur givare"),
+                *POSITIONED.values[1:]],
     )
     stubs.discover.return_value = MenuReading(pages=[better], complete=True)
     with patch(CLIENT, ServingPanel):
@@ -223,7 +231,10 @@ async def test_an_entry_already_at_the_new_key_is_left_beside_the_old_one(hass, 
     """Not a state any release leaves behind, so the owner says which one goes."""
     marked = replace(
         POSITIONED,
-        values=[replace(v, previous_key=old) for v, old in zip(POSITIONED.values, EXPECTED)],
+        values=[
+            replace(v, previous_key=old)
+            for v, old in zip(POSITIONED.values, EXPECTED, strict=False)
+        ],
     )
     stored = pages_to_storage([marked])
     ServingPanel.vars = [72, 215, 35, 0]

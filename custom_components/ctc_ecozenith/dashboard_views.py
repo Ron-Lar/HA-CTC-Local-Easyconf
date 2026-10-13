@@ -52,8 +52,9 @@ that explains the value, see explanations.py.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 import re
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from .explanations import display_explanation, explain, source
 
@@ -91,7 +92,9 @@ def _hidden_states(key: str) -> list[str]:
     return [UNAVAILABLE] if key.startswith(_COP_PREFIX) else list(HIDDEN_STATES)
 
 #: For an entity this layout does not know yet, from a newer integration.
-UNKNOWN_EXPLANATION = "Ett värde från integrationen som sidan ännu inte har någon egen förklaring för."
+UNKNOWN_EXPLANATION = (
+    "Ett värde från integrationen som sidan ännu inte har någon egen förklaring för."
+)
 UNKNOWN_SOURCE = "CTC Local Easyconf"
 
 CHIPS_CARD = "custom:ctc-ecozenith-chips"
@@ -250,7 +253,9 @@ _GRAPHS = (
 #: a day of what the pump did; performance what the overview does not already
 #: show, so the tab adds something rather than opening with the same picture.
 _OVERVIEW_GRAPHS = ("graph_temps", "graph_pump")
-_PERFORMANCE_GRAPHS = ("graph_flow", "graph_compressor", "graph_energy", "graph_runtime", "graph_cop")
+_PERFORMANCE_GRAPHS = (
+    "graph_flow", "graph_compressor", "graph_energy", "graph_runtime", "graph_cop"
+)
 #: The line a graph's heading promises, where it has one: without it, because
 #: the installation lacks the entity or has only ever read it as zero, the
 #: graph is left out rather than drawn under a heading that promises more. The
@@ -745,7 +750,9 @@ class _Builder:
             card["press"] = self.text["press"]
         return card
 
-    def rows(self, keys: Iterable[str], hideable: bool, learnt: bool = False) -> dict[str, Any] | None:
+    def rows(
+        self, keys: Iterable[str], hideable: bool, learnt: bool = False
+    ) -> dict[str, Any] | None:
         """A dense list, name on the left and value on the right."""
         items = self._items(keys, hideable=hideable, learnt=learnt)
         card = self._card(ROWS_CARD, "rows", items)

@@ -20,10 +20,11 @@ tested on their own and the store is handed in.
 
 from __future__ import annotations
 
-import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping
+from datetime import UTC, datetime, timedelta
+import logging
+from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ def is_fresh(read_at: datetime | None, now: datetime, limit: timedelta) -> bool:
 
 def utcnow() -> datetime:
     """The moment, timezone aware, as the readings are stamped."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def parse_moment(text: Any) -> datetime | None:
@@ -71,7 +72,7 @@ def parse_moment(text: Any) -> datetime | None:
         value = datetime.fromisoformat(text)
     except ValueError:
         return None
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
 @dataclass
@@ -95,7 +96,7 @@ class StoredHarvest:
             moments.append(self.harvested_at)
         return max(moments) if moments else None
 
-    def renamed(self, moves: Mapping[str, str]) -> "StoredHarvest":
+    def renamed(self, moves: Mapping[str, str]) -> StoredHarvest:
         """The same harvest with each display row under the key it has now (roadmap L2).
 
         A row's key follows its place on the page, and the first reading of
@@ -132,7 +133,7 @@ class StoredHarvest:
         }
 
     @classmethod
-    def from_dict(cls, stored: Any) -> "StoredHarvest | None":
+    def from_dict(cls, stored: Any) -> StoredHarvest | None:
         """Rebuild what was written, or None when nothing usable was.
 
         A value without a number, or a moment that does not parse, is left
@@ -199,7 +200,7 @@ class HarvestMemory:
     async def async_load(self) -> StoredHarvest | None:
         try:
             stored = StoredHarvest.from_dict(await self._store.async_load())
-        except Exception as err:  # noqa: BLE001 - a store that cannot be read is an empty one
+        except Exception as err:  # a store that cannot be read is an empty one
             _LOGGER.debug("Could not read the stored harvest: %s", err)
             return None
         if stored is not None:
@@ -242,7 +243,7 @@ class HarvestMemory:
         self._pending = payload
         try:
             self._store.async_delay_save(_payload, SAVE_DELAY_SECONDS)
-        except Exception as err:  # noqa: BLE001 - a lost save only costs one walk at the next start
+        except Exception as err:  # a lost save only costs one walk at the next start
             _LOGGER.debug("Could not schedule saving the harvest: %s", err)
             self._pending = None
             return False
@@ -253,7 +254,7 @@ class HarvestMemory:
         """Write a harvest down now, as it is: what set-up does after moving its keys."""
         try:
             await self._store.async_save(stored.as_dict())
-        except Exception as err:  # noqa: BLE001 - the next harvest writes it anyway
+        except Exception as err:  # the next harvest writes it anyway
             _LOGGER.debug("Could not write the harvest down: %s", err)
             return False
         return True
@@ -273,7 +274,7 @@ class HarvestMemory:
         self._pending = None
         try:
             await self._store.async_save(payload)
-        except Exception as err:  # noqa: BLE001 - the delayed write is lost with it, nothing else
+        except Exception as err:  # the delayed write is lost with it, nothing else
             _LOGGER.debug("Could not write the harvest down: %s", err)
             return False
         return True

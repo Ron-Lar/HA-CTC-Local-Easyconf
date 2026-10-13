@@ -17,13 +17,13 @@ test_text_cache.py, which counts every request.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 import pathlib
-from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import ha_stub
 from conftest import FIXTURES, load
+import ha_stub
 from test_seen import FakeStore
 from test_text_cache import SCREEN, FakeSession
 
@@ -47,7 +47,7 @@ def run(coro):
 
 
 def now() -> datetime:
-    return datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc)
+    return datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 
 
 # ------------------------------------------------------------------ parsing

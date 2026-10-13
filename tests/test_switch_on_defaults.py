@@ -22,8 +22,8 @@ from types import SimpleNamespace
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 COMPONENT = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "ctc_ecozenith"
 PLATFORMS = ("sensor", "binary_sensor", "number", "select", "button", "event")
@@ -135,7 +135,8 @@ def test_an_entity_this_version_does_not_add_stays_switched_off(switch):
 def test_an_entity_whose_default_is_still_off_is_left_off(switch):
     d = switch.disabler
     items = [_item("sensor.ctc_quiet", "ctc_ecozenith_pump_quiet", d.INTEGRATION)]
-    count, registry = switch(items, "sensor", [_entity("ctc_ecozenith_pump_quiet", enabled_default=False)])
+    count, registry = switch(items, "sensor",
+                             [_entity("ctc_ecozenith_pump_quiet", enabled_default=False)])
     assert count == 0
     assert registry.updates == []
 
@@ -146,7 +147,8 @@ def test_each_platform_switches_on_its_own_and_nothing_else(switch):
         _item("number.ctc_room", "ctc_ecozenith_pump_ctl_room_setpoint_1", d.INTEGRATION),
         _item("select.ctc_dhw", "ctc_ecozenith_pump_ctl_dhw_mode", d.INTEGRATION),
     ]
-    entities = [_entity("ctc_ecozenith_pump_ctl_room_setpoint_1"), _entity("ctc_ecozenith_pump_ctl_dhw_mode")]
+    entities = [_entity("ctc_ecozenith_pump_ctl_room_setpoint_1"),
+                _entity("ctc_ecozenith_pump_ctl_dhw_mode")]
     count, registry = switch(items, "number", entities)
     assert count == 1
     assert registry.updates == [("number.ctc_room", None)]
@@ -155,7 +157,8 @@ def test_each_platform_switches_on_its_own_and_nothing_else(switch):
 
 def test_another_entrys_entities_are_not_looked_at(switch):
     d = switch.disabler
-    items = [_item("sensor.other_pump", "ctc_ecozenith_pump_hp1_fan", d.INTEGRATION, entry_id="other")]
+    items = [_item("sensor.other_pump", "ctc_ecozenith_pump_hp1_fan", d.INTEGRATION,
+                   entry_id="other")]
     count, registry = switch(items, "sensor", [_entity("ctc_ecozenith_pump_hp1_fan")])
     assert count == 0
     assert registry.updates == []

@@ -25,7 +25,13 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.helpers.storage import Store
+from homeassistant.loader import async_get_integration
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     MODEL,
@@ -33,14 +39,8 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.helpers.storage import Store  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
-
-import custom_components.ctc_ecozenith as integration  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+import custom_components.ctc_ecozenith as integration
+from custom_components.ctc_ecozenith.const import (
     CONF_IDENTITY,
     CONF_MENU_VERSION,
     CONF_MODBUS_PORT,
@@ -126,7 +126,8 @@ async def test_the_entry_comes_up_on_the_file_the_release_before_left(hass, hass
         domain=DOMAIN,
         unique_id=f"{DOMAIN}_{HOST}",
         title=f"{MODEL} ({HOST})",
-        data={CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1, "model": MODEL},
+        data={CONF_HOST: HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1,
+              "model": MODEL},
         options={CONF_MENU_VERSION: version, CONF_IDENTITY: IDENTITY},
     )
     entry.add_to_hass(hass)

@@ -208,7 +208,9 @@ def test_the_set_up_builds_the_route_without_waiting_for_the_register():
     # sites are checked as source: the snapshot and the tracker hang on the
     # display alone, and the report flag reads the raw answers live.
     source = (ROOT / "__init__.py").read_text(encoding="utf-8")
-    pairing = source[source.index("find_energy_totals(pages)") : source.index("ConsumptionSnapshot()")]
+    pairing = source[
+        source.index("find_energy_totals(pages)") : source.index("ConsumptionSnapshot()")
+    ]
     assert "modbus_consumption" not in pairing, (
         "uppsättningen får inte vänta på att registret svarat: ett tyst block i "
         "första varvet låste förr sensorerna tills någon laddade om"

@@ -100,9 +100,9 @@ def test_an_interrupted_sweep_still_offers_its_pages_where_nothing_was_stored(
 
 def test_a_whole_rereading_replaces_the_menu_and_is_fresh(catalogue, const):
     stored = [page(const, n) for n in VSH_PAGES]
-    discovered = [page(const, n) for n in VSH_PAGES + [27]]
+    discovered = [page(const, n) for n in [*VSH_PAGES, 27]]
     menu, fresh = catalogue.menu_after_rescan(stored, stored, discovered, True)
-    assert [p.page for p in menu] == VSH_PAGES + [27]
+    assert [p.page for p in menu] == [*VSH_PAGES, 27]
     assert fresh
 
 
@@ -137,7 +137,9 @@ def test_the_first_set_up_stamps_the_version_only_for_a_whole_menu():
     assert "self._complete = reading.complete" in first
     stamped = first.split("if self._complete:")[1].split("return self.async_create_entry")[0]
     assert "CONF_MENU_VERSION" in stamped
-    assert first.count("CONF_MENU_VERSION") == 1, "stämpeln sätts på ett enda ställe, bakom villkoret"
+    assert first.count("CONF_MENU_VERSION") == 1, (
+        "stämpeln sätts på ett enda ställe, bakom villkoret"
+    )
 
 
 # -------------------------------------------- the home screen is not a page

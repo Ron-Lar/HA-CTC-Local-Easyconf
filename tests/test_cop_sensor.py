@@ -10,13 +10,13 @@ is. Nothing here needs a running core, since the properties read the runtime.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 
 @pytest.fixture(scope="module")
@@ -40,7 +40,7 @@ def run(coro):
     return asyncio.run(coro)
 
 
-NOW = datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 
 #: The sensors ask the tracker for today, so the samples are laid out against
 #: the real date: commissioned 500 days ago, the tracker's own samples from
@@ -89,7 +89,15 @@ def _runtime(cop, *, hours_row=True, anchor=COMMISSIONED, data=None, success=Tru
 
 def _sensors(sensor, runtime):
     added = []
-    run(sensor.async_setup_entry(None, SimpleNamespace(runtime_data=runtime, entry_id="test", options={}, async_on_unload=lambda f: None), added.extend))
+    run(
+        sensor.async_setup_entry(
+            None,
+            SimpleNamespace(
+                runtime_data=runtime, entry_id="test", options={}, async_on_unload=lambda f: None
+            ),
+            added.extend,
+        )
+    )
     return {s._span: s for s in added if isinstance(s, sensor.CtcCopSensor)}
 
 
@@ -113,7 +121,9 @@ def test_each_sensor_answers_under_its_own_span(sensor, cop):
     day = sensors["day"]
     assert day.native_value is None
     assert day.extra_state_attributes["underlag"] == "senaste dygnet"
-    assert day.extra_state_attributes["skäl"] == "väntar på ett prov som är 20 till 30 timmar gammalt"
+    assert day.extra_state_attributes["skäl"] == (
+        "väntar på ett prov som är 20 till 30 timmar gammalt"
+    )
     year = sensors["year"]
     assert year.native_value is None
     assert year.extra_state_attributes["underlag"] == "rullande år"

@@ -80,7 +80,7 @@ async def async_latest_release(session: Any, url: str, timeout: int = 10) -> str
                     _LOGGER.debug("Release check answered HTTP %s", response.status)
                     return None
                 data = await response.json()
-    except Exception as err:  # noqa: BLE001 - never break anything over this
+    except Exception as err:  # never break anything over this
         _LOGGER.debug("Could not ask for the newest release: %s", err)
         return None
     tag = data.get("tag_name") if isinstance(data, dict) else None

@@ -28,7 +28,18 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from unittest.mock import patch
+
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.loader import async_get_integration
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     MODEL,
@@ -38,21 +49,10 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     _needs_auto_asyncio_mode,
     stubs,
 )
-from test_homeassistant_menu import VSH  # noqa: E402
+from test_homeassistant_menu import VSH
 
-from unittest.mock import patch  # noqa: E402
-
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from homeassistant.util import dt as dt_util  # noqa: E402
-from pytest_homeassistant_custom_component.common import (  # noqa: E402
-    MockConfigEntry,
-    async_fire_time_changed,
-)
-
-from custom_components.ctc_ecozenith.catalogue import pages_to_storage  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.catalogue import pages_to_storage
+from custom_components.ctc_ecozenith.const import (
     CONF_IDENTITY,
     CONF_MENU,
     CONF_MENU_VERSION,
@@ -63,7 +63,7 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_WEB_PORT,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.harvest import (  # noqa: E402
+from custom_components.ctc_ecozenith.harvest import (
     MIN_FIRST_DELAY,
     SAVE_DELAY_SECONDS,
 )
@@ -81,7 +81,7 @@ class LivePanel(FakePanel):
     made none.
     """
 
-    instances: list["LivePanel"] = []
+    instances: list[LivePanel] = []
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -194,13 +194,18 @@ def _state(hass, key: str):
 def _registered(hass, key: str) -> bool:
     from homeassistant.helpers import entity_registry as er
 
-    return er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{HOST}_{key}") is not None
+    return (
+        er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{HOST}_{key}")
+        is not None
+    )
 
 
 # ----------------------------------------------------------- no store
 
 
-async def test_a_start_without_a_store_walks_nothing_and_harvests_soon_after(hass, hass_storage, stubs):
+async def test_a_start_without_a_store_walks_nothing_and_harvests_soon_after(
+    hass, hass_storage, stubs
+):
     entry = await _vsh_entry(hass)
     panel = await _set_up(hass, entry)
     assert panel.visits == [], "uppsättningen rör inte panelen"

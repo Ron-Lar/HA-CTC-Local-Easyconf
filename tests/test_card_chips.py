@@ -84,7 +84,8 @@ def test_a_boolean_chip_comes_and_goes_with_its_state_and_keeps_its_colour():
         ("Värmepump status", False), ("Kompressor i drift", False), ("Larm", True),
     ]
     # The alarm is raised: red on the line. The compressor stops: its chip goes.
-    later = _chips(on, then={STATUS: _state("Av, larm"), RUNNING: _state("off"), ALARM: _state("on")})
+    later = _chips(on,
+                   then={STATUS: _state("Av, larm"), RUNNING: _state("off"), ALARM: _state("on")})
     assert [(c["name"], c["hidden"], c["color"]) for c in later] == [
         ("Värmepump status", False, None),
         ("Kompressor i drift", True, "success"),

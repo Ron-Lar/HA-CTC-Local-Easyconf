@@ -24,11 +24,12 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from conftest import COMPONENT
 import homeassistant
 from homeassistant.util.yaml import load_yaml_dict
-from test_quality_scale import RULES, SCALE
 import voluptuous as vol
+
+from conftest import COMPONENT
+from test_quality_scale import RULES, SCALE
 
 CORE = pathlib.Path(homeassistant.__file__).resolve().parent / "components"
 

@@ -21,10 +21,11 @@ the next time a unit alarms.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
+from datetime import datetime
 import logging
 import re
-from datetime import datetime
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from .attribute_names import episode_in_english
 from .const import ALARM_EPISODES, ALARM_TEXT_PREFIX, SlowPage
@@ -166,10 +167,16 @@ class AlarmLog:
                 {
                     "code": str(item["code"]),
                     "text": str(item.get("text") or ""),
-                    "shown": str(item.get("shown") or f"[{item['code']}] {item.get('text') or ''}".strip()),
+                    "shown": str(
+                        item.get("shown") or f"[{item['code']}] {item.get('text') or ''}".strip()
+                    ),
                     "start": str(item["start"]),
                     "end": str(item["end"]) if item.get("end") else None,
-                    "outdoor": float(outdoor) if isinstance(outdoor, (int, float)) and not isinstance(outdoor, bool) else None,
+                    "outdoor": (
+                        float(outdoor)
+                        if isinstance(outdoor, (int, float)) and not isinstance(outdoor, bool)
+                        else None
+                    ),
                 }
             )
         self.episodes = episodes[:ALARM_EPISODES]
@@ -224,7 +231,7 @@ class AlarmLog:
             self._store.async_delay_save(
                 lambda: {"episodes": [dict(e) for e in self.episodes]}, SAVE_DELAY_SECONDS
             )
-        except Exception as err:  # noqa: BLE001 - a lost save costs the log, not the alarm
+        except Exception as err:  # a lost save costs the log, not the alarm
             _LOGGER.debug("Could not schedule saving the alarm log: %s", err)
 
     def attributes(self, english: bool = False) -> list[dict[str, Any]]:

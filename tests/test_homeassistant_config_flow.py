@@ -25,26 +25,28 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+from homeassistant.loader import async_get_integration
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     DeadModbus,
     FakeModbus,
     _let_the_background_run,
     _needs_auto_asyncio_mode,
     stubs,
 )
-from test_homeassistant_menu import VSH  # noqa: E402
+from test_homeassistant_menu import VSH
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
-from homeassistant.helpers import device_registry as dr, issue_registry as ir  # noqa: E402
-from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
-
-from custom_components.ctc_ecozenith.catalogue import MenuReading  # noqa: E402
-from custom_components.ctc_ecozenith.catalogue import pages_from_storage  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith.catalogue import (
+    MenuReading,
+    pages_from_storage,
+)
+from custom_components.ctc_ecozenith.const import (
     CONF_DEVICE_KEY,
     CONF_DISPLAY,
     CONF_MENU,
@@ -59,8 +61,8 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     DEFAULT_SLOW_INTERVAL,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.discovery import DiscoveredDisplay, WebProbe  # noqa: E402
-from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
+from custom_components.ctc_ecozenith.discovery import DiscoveredDisplay, WebProbe
+from custom_components.ctc_ecozenith.identity import Identity
 
 FLOW = f"custom_components.{DOMAIN}.config_flow"
 

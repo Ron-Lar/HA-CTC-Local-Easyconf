@@ -65,7 +65,9 @@ def test_a_moved_entry_keeps_every_unique_id():
 
 
 def test_the_title_follows_the_address_only_where_set_up_wrote_it():
-    assert keys.moved_title(f"EcoZenith i255 ({HOST})", HOST, MOVED_TO) == f"EcoZenith i255 ({MOVED_TO})"
+    assert keys.moved_title(f"EcoZenith i255 ({HOST})", HOST, MOVED_TO) == (
+        f"EcoZenith i255 ({MOVED_TO})"
+    )
     assert keys.moved_title("Pannrummet", HOST, MOVED_TO) == "Pannrummet"
     assert keys.moved_title(f"EcoZenith i255 ({HOST}) gamla", HOST, MOVED_TO) == (
         f"EcoZenith i255 ({HOST}) gamla"
@@ -78,7 +80,8 @@ def test_the_title_follows_the_address_only_where_set_up_wrote_it():
 
 @pytest.mark.parametrize(
     "text",
-    ["02:00:00:00:00:01", "02-00-00-00-00-01", "020000000001", "0200.0000.0001", "02:00:00:00:00:01".upper()],
+    ["02:00:00:00:00:01", "02-00-00-00-00-01", "020000000001", "0200.0000.0001",
+     "02:00:00:00:00:01".upper()],
 )
 def test_every_spelling_of_a_mac_is_the_same_mac(text):
     assert keys.mac_hex(text) == "020000000001"
@@ -120,7 +123,8 @@ def test_an_unknown_mac_at_an_unknown_address_is_new():
 
 def test_the_mac_decides_where_the_address_is_free():
     # The unit left its address and turned up at one no entry has.
-    known = [keys.Known("a", HOST, "02:00:00:00:00:01"), keys.Known("b", "192.0.2.10", "02:00:00:00:00:02")]
+    known = [keys.Known("a", HOST, "02:00:00:00:00:01"),
+             keys.Known("b", "192.0.2.10", "02:00:00:00:00:02")]
     assert keys.match_discovery(known, MOVED_TO, "020000000002") == (keys.MOVED, "b")
     assert keys.held_back(known, MOVED_TO, "020000000002") is None
 
@@ -129,7 +133,8 @@ def test_no_entry_is_moved_to_an_address_another_entry_has():
     # Another unit's entry stands at the address the moved unit turned up at:
     # moving there would leave two entries on one address, two Modbus clients
     # against the controller's one place. The entry stays, and is named.
-    known = [keys.Known("a", HOST, "02:00:00:00:00:01"), keys.Known("b", MOVED_TO, "02:00:00:00:00:02")]
+    known = [keys.Known("a", HOST, "02:00:00:00:00:01"),
+             keys.Known("b", MOVED_TO, "02:00:00:00:00:02")]
     assert keys.match_discovery(known, HOST, "020000000002") == (keys.KNOWN, "a")
     assert keys.held_back(known, HOST, "020000000002") == "b"
 
@@ -258,7 +263,10 @@ def test_a_known_unit_wakes_an_entry_waiting_to_be_set_up_again():
     """
     flow = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
     dhcp = flow.split("async def async_step_dhcp(")[1].split("\n    async def ")[0]
-    assert "elif verdict == KNOWN and entry_id is not None:\n            self._async_wake_entry(entry_id)" in dhcp
+    assert (
+        "elif verdict == KNOWN and entry_id is not None:\n"
+        "            self._async_wake_entry(entry_id)"
+    ) in dhcp
     assert dhcp.index("self._async_wake_entry(entry_id)") < dhcp.index("if verdict != NEW:")
     move = flow.split("def _async_move_entry(")[1].split("\n    @callback")[0]
     assert "self._async_wake_entry(entry.entry_id)" in move

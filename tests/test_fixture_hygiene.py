@@ -65,7 +65,9 @@ LOCAL_PATH = re.compile(r"/Users/|/home/")
 #: what it is looking for.
 SCANNED = sorted(
     p for p in TESTS.rglob("*")
-    if p.is_file() and p.suffix in (".py", ".json", ".txt", ".js") and p.name != pathlib.Path(__file__).name
+    if p.is_file()
+    and p.suffix in (".py", ".json", ".txt", ".js")
+    and p.name != pathlib.Path(__file__).name
 )
 
 
@@ -74,5 +76,7 @@ def test_nothing_under_tests_names_a_house(path):
     text = path.read_text(encoding="utf-8", errors="replace")
     assert not HOUSE_ADDRESS.search(text), f"{path.name} carries an address from the houses"
     assert not SSH_NOISE.search(text), f"{path.name} carries the ssh session's closing line"
-    assert not REAL_SERIAL.search(text), f"{path.name} carries a serial number that is not the made-up one"
+    assert not REAL_SERIAL.search(text), (
+        f"{path.name} carries a serial number that is not the made-up one"
+    )
     assert not LOCAL_PATH.search(text), f"{path.name} carries a path from somebody's own computer"

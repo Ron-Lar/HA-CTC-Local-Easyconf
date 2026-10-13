@@ -34,8 +34,9 @@ an installation.
 
 from __future__ import annotations
 
+from collections.abc import Collection, Iterable, Mapping
 import re
-from typing import Any, Collection, Iterable, Mapping
+from typing import Any
 
 from .const import SlowPage, SlowValue
 

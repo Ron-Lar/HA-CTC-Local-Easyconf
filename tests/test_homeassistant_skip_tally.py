@@ -23,13 +23,15 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant.config_entries import ConfigEntryState
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _advance,
     _entity_id,
     _needs_auto_asyncio_mode,
     stubs,
 )
-from test_homeassistant_skips import (  # noqa: E402
+from test_homeassistant_skips import (
     HISTORY,
     HOME,
     INTERVAL,
@@ -38,10 +40,8 @@ from test_homeassistant_skips import (  # noqa: E402
     _set_up_with_one_page,
 )
 
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-
-from custom_components.ctc_ecozenith.const import DOMAIN, HARVEST_SKIP_LIMIT  # noqa: E402
-from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY  # noqa: E402
+from custom_components.ctc_ecozenith.const import DOMAIN, HARVEST_SKIP_LIMIT
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
 
 
 async def test_each_skipped_round_shows_on_the_diagnostic_sensor(hass, stubs):

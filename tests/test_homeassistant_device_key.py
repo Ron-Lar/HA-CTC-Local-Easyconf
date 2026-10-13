@@ -26,7 +26,16 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+from homeassistant import config_entries
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+from homeassistant.loader import async_get_integration
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     HOST,
     IDENTITY,
     MODEL,
@@ -41,19 +50,9 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
     stubs,
 )
 
-from homeassistant import config_entries  # noqa: E402
-from homeassistant.config_entries import ConfigEntryState  # noqa: E402
-from homeassistant.const import CONF_HOST  # noqa: E402
-from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
-from homeassistant.helpers import device_registry as dr, entity_registry as er  # noqa: E402
-from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo  # noqa: E402
-from homeassistant.loader import async_get_integration  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
-
-from custom_components.ctc_ecozenith import modbus_api  # noqa: E402
-
-from custom_components.ctc_ecozenith.catalogue import MenuReading  # noqa: E402
-from custom_components.ctc_ecozenith.const import (  # noqa: E402
+from custom_components.ctc_ecozenith import modbus_api
+from custom_components.ctc_ecozenith.catalogue import MenuReading
+from custom_components.ctc_ecozenith.const import (
     CONF_DEVICE_KEY,
     CONF_IDENTITY,
     CONF_MENU_VERSION,
@@ -62,8 +61,8 @@ from custom_components.ctc_ecozenith.const import (  # noqa: E402
     CONF_WEB_PORT,
     DOMAIN,
 )
-from custom_components.ctc_ecozenith.discovery import DiscoveredDisplay, WebProbe  # noqa: E402
-from custom_components.ctc_ecozenith.identity import Identity  # noqa: E402
+from custom_components.ctc_ecozenith.discovery import DiscoveredDisplay, WebProbe
+from custom_components.ctc_ecozenith.identity import Identity
 
 #: Where the unit turns up after a new lease, a documentation address too.
 MOVED_TO = "192.0.2.77"
@@ -262,7 +261,9 @@ def _own_key_holds(hass, first, second) -> None:
     assert _the_device(hass, first).identifiers == {(DOMAIN, HOST)}
     registry = er.async_get(hass)
     ours = [item.unique_id for item in er.async_entries_for_config_entry(registry, second.entry_id)]
-    theirs = [item.unique_id for item in er.async_entries_for_config_entry(registry, first.entry_id)]
+    theirs = [
+        item.unique_id for item in er.async_entries_for_config_entry(registry, first.entry_id)
+    ]
     assert ours and theirs
     assert all(unique.startswith(f"{DOMAIN}_{key}_") for unique in ours)
     assert all(unique.startswith(f"{DOMAIN}_{HOST}_") for unique in theirs)

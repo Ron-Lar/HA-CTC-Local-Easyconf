@@ -33,11 +33,13 @@ Two properties matter for anything built on this:
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
+import contextlib
+from dataclasses import dataclass
 import gzip
 import json
 import logging
-from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 import aiohttp
 
@@ -100,7 +102,7 @@ class Widget:
     def centre(self) -> tuple[int, int]:
         return self.x + self.width // 2, self.y + self.height // 2
 
-    def overlaps_horizontally(self, other: "Widget") -> bool:
+    def overlaps_horizontally(self, other: Widget) -> bool:
         return self.x < other.x + other.width and other.x < self.x + self.width
 
 
@@ -176,7 +178,7 @@ def parse_vars(payload: str) -> list[Any]:
     return out
 
 
-def tap_target(widgets: list["Widget"], label_widget: "Widget") -> tuple[int, int]:
+def tap_target(widgets: list[Widget], label_widget: Widget) -> tuple[int, int]:
     """Return a point that actually presses the tile a caption belongs to.
 
     Home screen tiles are an icon with the caption drawn underneath it as a
@@ -335,15 +337,11 @@ def parse_screen_map(payload: str) -> dict[int, list[int]]:
                 continue
             pages[current] = []
             if first:
-                try:
+                with contextlib.suppress(ValueError):
                     pages[current].append(int(first))
-                except ValueError:
-                    pass
         elif current is not None:
-            try:
+            with contextlib.suppress(ValueError):
                 pages[current].append(int(token))
-            except ValueError:
-                pass
     return pages
 
 
@@ -437,7 +435,7 @@ class CtcWebClient:
                             raise CtcWebError(f"{path} answered HTTP {response.status}")
                         raw = await response.read()
                     break
-                except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                except (TimeoutError, aiohttp.ClientError) as err:
                     if attempt < len(timeouts):
                         _LOGGER.debug("%s was slow, asking once more: %s", path, err)
                         continue
@@ -763,9 +761,11 @@ class CtcWebClient:
             return True
 
         if route:
-            if not await self._async_back_to_root():
-                if not await self.async_goto_operation_root():
-                    return False
+            if (
+                not await self._async_back_to_root()
+                and not await self.async_goto_operation_root()
+            ):
+                return False
             for x, y in route:
                 here = await self.async_current_page()
                 await self.async_click(page_map.get(here, []), x, y)

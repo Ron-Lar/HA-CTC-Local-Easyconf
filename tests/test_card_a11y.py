@@ -46,8 +46,10 @@ STATES = {
 }
 ROWS = [
     {"heading": "Temperaturer"},
-    {"entity": "sensor.outdoor", "name": "Utetemperatur", "explanation": "Ute.", "source": "Modbus-register 62000"},
-    {"entity": "sensor.flow", "name": "Framledning", "explanation": "Fram.", "source": "Modbus-register 62004"},
+    {"entity": "sensor.outdoor", "name": "Utetemperatur", "explanation": "Ute.",
+     "source": "Modbus-register 62000"},
+    {"entity": "sensor.flow", "name": "Framledning", "explanation": "Fram.",
+     "source": "Modbus-register 62004"},
 ]
 CHIPS = [
     {"entity": "sensor.status", "name": "Systemstatus", "explanation": "Hela systemet."},
@@ -86,7 +88,8 @@ def test_the_row_is_no_button_and_its_i_is_the_one_toggle():
       rows[0].fire("click");
       const closed = {{aria: aria(whys[0]), hidden: notes[0].hidden}};
       console.log(JSON.stringify({{
-        row: rows.map((r) => ({{role: r.getAttribute("role"), tab: r.tabIndex === undefined ? null : r.tabIndex,
+        row: rows.map((r) => ({{role: r.getAttribute("role"),
+                               tab: r.tabIndex === undefined ? null : r.tabIndex,
                                expanded: r.getAttribute("aria-expanded")}})),
         ids: notes.map((n) => n.id),
         before, opened, closed,
@@ -113,9 +116,12 @@ def test_the_row_is_no_button_and_its_i_is_the_one_toggle():
     ("ctc-ecozenith-controls", "items", ROWS[1:]),
     ("ctc-ecozenith-rows", "rows", ROWS),
 ])
-def test_no_name_repeats_its_explanation_as_hover_text_and_every_i_names_its_note(name, field, items):
+def test_no_name_repeats_its_explanation_as_hover_text_and_every_i_names_its_note(
+    name, field, items
+):
     found = _node(f"""
-      const card = page.mountCard(CARD, {json.dumps(name)}, {{{json.dumps(field)}: {json.dumps(items)}}}, STATES);
+      const card = page.mountCard(CARD, {json.dumps(name)},
+        {{{json.dumps(field)}: {json.dumps(items)}}}, STATES);
       const notes = new Set(by(card, "note").map((n) => n.id));
       console.log(JSON.stringify({{
         titles: by(card, "label").map((l) => l.title || null),
@@ -133,7 +139,8 @@ def test_no_name_repeats_its_explanation_as_hover_text_and_every_i_names_its_not
 
 def test_every_chip_has_a_note_of_its_own_led_by_its_name():
     found = _node(f"""
-      const card = page.mountCard(CARD, "ctc-ecozenith-chips", {{items: {json.dumps(CHIPS)}}}, STATES);
+      const card = page.mountCard(CARD, "ctc-ecozenith-chips",
+        {{items: {json.dumps(CHIPS)}}}, STATES);
       const whys = by(card, "why");
       const notes = by(card, "note");
       whys[0].fire("click");
@@ -211,7 +218,8 @@ def test_a_row_the_search_hides_closes_its_note_and_opens_with_one_click_when_ba
 @pytest.mark.parametrize("name, field, items", [
     ("ctc-ecozenith-chips", "items", CHIPS),
     ("ctc-ecozenith-readings", "items", ROWS[1:]),
-    ("ctc-ecozenith-controls", "items", ROWS[1:] + [
+    ("ctc-ecozenith-controls", "items", [
+        *ROWS[1:],
         {"entity": "number.dhw", "name": "Varmvattenbörvärde", "explanation": "Börvärdet."},
     ]),
     ("ctc-ecozenith-rows", "rows", ROWS),
@@ -223,7 +231,8 @@ def test_every_i_is_named_after_its_value(name, field, items):
     found = _node(f"""
       const card = page.mountCard(CARD, {json.dumps(name)},
         {{{json.dumps(field)}: {json.dumps(items)}, explain: "Förklaring"}}, STATES);
-      const plain = page.mountCard(CARD, {json.dumps(name)}, {{{json.dumps(field)}: {json.dumps(items)}}}, STATES);
+      const plain = page.mountCard(CARD, {json.dumps(name)},
+        {{{json.dumps(field)}: {json.dumps(items)}}}, STATES);
       console.log(JSON.stringify({{
         labels: by(card, "why").map((w) => w.getAttribute("aria-label")),
         plain: by(plain, "why").map((w) => w.getAttribute("aria-label")),
@@ -284,9 +293,11 @@ def test_a_note_left_open_before_a_new_configuration_opens_with_the_first_click(
       by(card, "why")[0].fire("click");
       const before = !by(card, "note")[0].hidden;
       card.setConfig(config);
-      const drawn = {{open: !by(card, "note")[0].hidden, expanded: aria(by(card, "why")[0]).expanded}};
+      const drawn = {{open: !by(card, "note")[0].hidden,
+                     expanded: aria(by(card, "why")[0]).expanded}};
       by(card, "why")[0].fire("click");
-      const first = {{open: !by(card, "note")[0].hidden, expanded: aria(by(card, "why")[0]).expanded}};
+      const first = {{open: !by(card, "note")[0].hidden,
+                     expanded: aria(by(card, "why")[0]).expanded}};
       by(card, "why")[0].fire("click");
       const second = !by(card, "note")[0].hidden;
       console.log(JSON.stringify({{before, drawn, first, second}}));

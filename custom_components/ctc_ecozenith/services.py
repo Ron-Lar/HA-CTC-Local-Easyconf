@@ -27,8 +27,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import (
@@ -41,6 +39,7 @@ from homeassistant.core import (
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.loader import async_get_integration
+import voluptuous as vol
 
 from .catalogue import PanelBusy
 from .const import CONTROL_BY_KEY, DOMAIN, ControlRegister, has_display
@@ -206,7 +205,9 @@ def async_register_services(hass: HomeAssistant) -> None:
                 raise _refuse("no_counters", entry=entry.title)
             entries = [entry]
         else:
-            entries = [entry for entry in _loaded_entries(hass) if entry.runtime_data.cop is not None]
+            entries = [
+                entry for entry in _loaded_entries(hass) if entry.runtime_data.cop is not None
+            ]
             if not entries:
                 raise _refuse("no_counters_loaded")
         answer: dict[str, Any] = {}

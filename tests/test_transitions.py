@@ -100,7 +100,9 @@ def test_a_defrost_in_the_middle_of_a_run_is_neither_a_stop_nor_a_start(transiti
     kinds = feed(
         transitions, watch, (at(9), 1), (at(10), 3), (at(10, 40), 4), (at(10, 48), 3), (at(11), 1)
     )
-    assert kinds == ["kompressor_start", "avfrostning_start", "avfrostning_slut", "kompressor_stopp"]
+    assert kinds == (
+        ["kompressor_start", "avfrostning_start", "avfrostning_slut", "kompressor_stopp"]
+    )
     assert watch.starts_today == 1
     assert watch.last_run.minutes == 60.0
 
@@ -204,7 +206,7 @@ def test_a_defrost_end_seen_after_a_silence_has_no_length_either(transitions):
 
 
 def test_the_gap_is_ten_minutes_and_the_edge_still_measures(transitions):
-    assert transitions.GAP_UNKNOWN == timedelta(minutes=10)
+    assert timedelta(minutes=10) == transitions.GAP_UNKNOWN
     # Exactly the gap after the last known sample: measured, as the five
     # minute silences above are.
     watch = transitions.TransitionWatch()
@@ -245,11 +247,11 @@ def test_a_silent_baseline_is_no_baseline(transitions, watch):
 def test_the_known_codes_are_the_table_without_the_silent_ones(transitions, const):
     known = {code for code in const.STATUS_HEATPUMP if transitions.hp_code_known(code)}
     assert known == set(const.STATUS_HEATPUMP) - transitions.HP_SILENT_CODES
-    assert transitions.HP_SILENT_CODES == {8, 30, 31, 32}
+    assert {8, 30, 31, 32} == transitions.HP_SILENT_CODES
     assert {const.STATUS_HEATPUMP[code] for code in transitions.HP_SILENT_CODES} == {
         "Funktionstest", "Ej definierad", "Ej tillgänglig", "Kommunikationsfel",
     }
-    assert transitions.HP_RUN_CODES == const.HP_RUNNING_CODES | {const.HP_DEFROST_CODE}
+    assert const.HP_RUNNING_CODES | {const.HP_DEFROST_CODE} == transitions.HP_RUN_CODES
     assert not transitions.hp_code_known(None)
     assert not transitions.hp_code_known(99)
 
@@ -402,7 +404,9 @@ def test_system_status_and_smartgrid_changes_carry_codes_and_labels(transitions,
     # A register that did not answer changes nothing, and the next answer is
     # compared with the last one that did.
     assert watch.observe(transitions.Sample(at(9, 3), hp_status=1)) == []
-    assert watch.observe(transitions.Sample(at(9, 4), hp_status=1, system_status=12, sg_mode=2)) == []
+    assert watch.observe(
+        transitions.Sample(at(9, 4), hp_status=1, system_status=12, sg_mode=2)
+    ) == []
 
 
 # ------------------------------------------------- the log and its cursor (L9)
@@ -427,7 +431,8 @@ def test_the_log_numbers_the_transitions_and_a_cursor_reads_what_came_after(tran
 
 def test_the_log_is_bounded_and_a_reader_that_starts_late_gets_nothing_old(transitions):
     short = transitions.TransitionWatch(keep=3)
-    feed(transitions, short, (at(9), 1), (at(9, 10), 3), (at(9, 20), 1), (at(9, 30), 3), (at(9, 40), 1))
+    feed(transitions, short, (at(9), 1), (at(9, 10), 3), (at(9, 20), 1), (at(9, 30), 3),
+         (at(9, 40), 1))
     assert short.seq == 4
     assert [t.seq for t in short.since(0)] == [2, 3, 4]
     # The event entity starts its cursor at the watch's number when it is made.
@@ -525,7 +530,9 @@ def test_a_sample_trusts_a_code_only_for_a_reading_in_the_data(transitions):
         ),
         at(10),
     )
-    assert sample == transitions.Sample(at(10), hp_status=3, system_status=4, sg_mode=None, outdoor=7.2)
+    assert sample == (
+        transitions.Sample(at(10), hp_status=3, system_status=4, sg_mode=None, outdoor=7.2)
+    )
     empty = transitions.sample_of(FakeCoordinator(None, None), at(10))
     assert empty == transitions.Sample(at(10))
     # The outdoor temperature is a number or nothing.
@@ -562,7 +569,8 @@ def test_the_sensor_table_reads_the_watch_before_and_after_a_start(transitions, 
     feed(transitions, watch, (at(10), 33), system_status=5, outdoor=2.0)
     assert last_start.value(watch) == at(10)
     assert last_start.attributes(watch) == {
-        "systemstatus vid starten": "Varmvatten", "utetemperatur vid starten": 2.0, "körning pågår": True,
+        "systemstatus vid starten": "Varmvatten", "utetemperatur vid starten": 2.0,
+        "körning pågår": True,
     }
     assert starts.value(watch) == 1
     feed(transitions, watch, (at(10, 30), 1))
@@ -612,7 +620,9 @@ def _harvested(catalogue, data, page_number):
 
 
 @pytest.mark.parametrize("name, key", [("i255_128", "p30_s128_v23"), ("i550_136", "p30_s136_v26")])
-def test_the_starts_per_day_row_is_found_on_both_history_pages(transitions, catalogue, page, name, key):
+def test_the_starts_per_day_row_is_found_on_both_history_pages(
+    transitions, catalogue, page, name, key
+):
     found = transitions.find_starts_per_day([_harvested(catalogue, page(name), 30)])
     assert found is not None
     assert found.key == key

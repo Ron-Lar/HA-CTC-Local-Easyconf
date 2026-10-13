@@ -10,8 +10,8 @@ and minimum of each over the past year settle it at once, the first time.
 
 from __future__ import annotations
 
-import logging
 from datetime import timedelta
+import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -63,6 +63,6 @@ async def async_seed_from_statistics(
         added = seen.add(found)
         _LOGGER.debug("Took %d readings with a value from the recorded statistics", added)
         return added
-    except Exception:  # noqa: BLE001 - history is a bonus, never a condition
+    except Exception:  # history is a bonus, never a condition
         _LOGGER.debug("Could not look up the recorded statistics", exc_info=True)
         return 0

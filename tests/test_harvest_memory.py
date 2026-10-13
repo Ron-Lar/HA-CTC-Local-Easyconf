@@ -13,18 +13,18 @@ rules themselves and the coordinator's start.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 import pathlib
-from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import ha_stub
 from conftest import load
+import ha_stub
 
 COMPONENT = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "ctc_ecozenith"
 
 INTERVAL = 1800
-NOW = datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 
 
 def run(coro):
@@ -88,7 +88,7 @@ def test_what_cannot_be_judged_is_left_out_of_the_seed(harvest):
     stored = harvest.StoredHarvest.from_dict(payload)
     # b is no number, c is a bool, d has no moment to age by.
     assert stored.values == {"a": 1.0}
-    assert stored.read_at == {"a": datetime(2026, 10, 9, 11, 50, tzinfo=timezone.utc)}
+    assert stored.read_at == {"a": datetime(2026, 10, 9, 11, 50, tzinfo=UTC)}
     assert stored.consumption is None, "en text är inget tal"
     assert harvest.StoredHarvest.from_dict(None) is None
     assert harvest.StoredHarvest.from_dict("junk") is None
@@ -99,7 +99,7 @@ def test_what_cannot_be_judged_is_left_out_of_the_seed(harvest):
 
 def test_a_moment_without_a_zone_is_taken_as_utc(harvest):
     assert harvest.parse_moment("2026-10-09T11:50:00") == datetime(
-        2026, 10, 9, 11, 50, tzinfo=timezone.utc
+        2026, 10, 9, 11, 50, tzinfo=UTC
     )
     assert harvest.parse_moment("") is None and harvest.parse_moment(5) is None
 
@@ -214,12 +214,13 @@ def _page(const, number):
         page=number,
         title=f"Sida {number}",
         screens=[number * 10],
-        values=[const.SlowValue(key=f"p{number}_v", label="V", page=number, screen=number * 10, fmt="%d", var_indices=[0])],
+        values=[const.SlowValue(key=f"p{number}_v", label="V", page=number, screen=number * 10,
+                                fmt="%d", var_indices=[0])],
     )
 
 
 def test_the_coordinator_comes_up_with_the_stored_harvest(coordinator, harvest, const):
-    read = datetime.now(timezone.utc) - timedelta(minutes=10)
+    read = datetime.now(UTC) - timedelta(minutes=10)
     stored = harvest.StoredHarvest(
         values={"p21_v": 21.0}, read_at={"p21_v": read}, harvested_at=read
     )
@@ -239,10 +240,12 @@ def test_the_coordinator_comes_up_with_the_stored_harvest(coordinator, harvest, 
 
 
 def test_an_old_store_seeds_stale_values_and_an_early_harvest(coordinator, harvest, const):
-    read = datetime.now(timezone.utc) - timedelta(days=2)
-    stored = harvest.StoredHarvest(values={"p21_v": 21.0}, read_at={"p21_v": read}, harvested_at=read)
+    read = datetime.now(UTC) - timedelta(days=2)
+    stored = harvest.StoredHarvest(values={"p21_v": 21.0}, read_at={"p21_v": read},
+                                   harvested_at=read)
     web = coordinator.CtcWebCoordinator(
-        hass=object(), client=IdlePanel(), pages=[_page(const, 21)], interval=INTERVAL, stored=stored
+        hass=object(), client=IdlePanel(), pages=[_page(const, 21)], interval=INTERVAL,
+        stored=stored
     )
     assert web.data == {"p21_v": 21.0}
     assert not web.is_fresh("p21_v"), "två dygn gammalt visas inte som nu"
