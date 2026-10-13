@@ -140,6 +140,50 @@
     return x !== null && y !== null ? x === y : String(a) === String(b);
   }
 
+  /** Whether an entity says if Home Assistant holds it at all: the
+   *  integration's controls do, under either name, and a list of anything
+   *  else does not. */
+  function saysHeld(attributes) {
+    return ["control_active", "styrning aktiv"].some(
+      (name) => attributes[name] !== undefined && attributes[name] !== null
+    );
+  }
+
+  /** What a mode list shows for a state (R49). While Home Assistant holds a
+   *  mode it is the state; at rest it is the list's first option, Släpp
+   *  styrningen, whatever the state says. The hot water program's state at
+   *  rest is the pump's own mode out of 61500, and a list standing on it
+   *  could not pick it: choosing the option a list already shows fires no
+   *  change, so the mode the pump runs could never be held from the card,
+   *  and after Släpp styrningen the state was a mode the list did not show,
+   *  so the row stayed busy for six seconds. The pump's own mode is said
+   *  under the row instead (pumpen själv). A state of unknown, the mirror
+   *  unread, is at rest too. A list of another integration's, which says
+   *  nothing about being held, shows its state as any list does. */
+  function listValue(stateObj) {
+    if (!stateObj) return "";
+    const attributes = stateObj.attributes || {};
+    const options = attributes.options || [];
+    if (!options.length || !saysHeld(attributes) || controlActive(attributes)) {
+      return stateObj.state;
+    }
+    return String(options[0]);
+  }
+
+  /** Whether a list or a slider stopped where it already stands at rest, so
+   *  that sending would ask for nothing new and only start a hold: down and
+   *  up again within the wait. A list then stands on what listValue shows at
+   *  rest, a slider on the state's own number. Nothing held is ever passed
+   *  over here: a held value is sent as it always was. */
+  function unchangedAtRest(entityId, value, stateObj) {
+    if (!stateObj) return false;
+    const attributes = stateObj.attributes || {};
+    if (controlActive(attributes)) return false;
+    if (String(entityId).split(".")[0] === "select") return String(value) === listValue(stateObj);
+    const number = parseFieldValue(value);
+    return number !== null && number === parseFieldValue(stateObj.state);
+  }
+
   if (typeof customElements === "undefined") {
     // Node, for tests/test_card*.py: hand over the helpers and stop here, before
     // anything below reaches for HTMLElement or document. A browser never takes
@@ -431,14 +475,18 @@
     /** R49: show the mark while Home Assistant holds the control
      *  (control_active, or "styrning aktiv" from an older integration), and
      *  the pump's own value where the integration gives it, while held or
-     *  wherever it is not what the control shows. Answers whether it is held. */
-    _showHeld(parts, item, stateObj) {
+     *  wherever it is not what the control shows. `shows` is what the control
+     *  shows, the state unless given: a mode list at rest shows Släpp
+     *  styrningen, and the pump's own mode goes under it. Answers whether it
+     *  is held. */
+    _showHeld(parts, item, stateObj, shows) {
       if (!parts) return false;
       const attributes = (stateObj && stateObj.attributes) || {};
       const held = Boolean(stateObj) && controlActive(attributes);
       parts.mark.hidden = !held;
       const own = stateObj ? pumpValue(attributes) : undefined;
-      const shown = own !== undefined && (held || !sameValue(own, stateObj.state));
+      const value = shows === undefined && stateObj ? stateObj.state : shows;
+      const shown = own !== undefined && (held || !sameValue(own, value));
       const states = this._config.states || {};
       parts.pump.textContent = shown
         ? `${states.pump_value || "pump's own"}: ${this._ownText(item, own, attributes)}`
@@ -726,7 +774,11 @@
           }
         }
         row.update();
-        const held = this._showHeld(row.held, row.item, this._state(row.item.entity));
+        const stateObj = this._state(row.item.entity);
+        // A mode list shows Släpp styrningen at rest, so the pump's own mode
+        // is said under it; a number shows its state.
+        const shows = String(row.item.entity).startsWith("select.") ? listValue(stateObj) : undefined;
+        const held = this._showHeld(row.held, row.item, stateObj, shows);
         if (row.release) {
           row.release.hidden = !held;
           // Let go of: the button is ready again for the next override.
@@ -785,6 +837,11 @@
       // waiting to go out: the row is busy from the change on.
       let waiting = null;
       let sent = 0;
+      // How many of those writes Home Assistant has not answered yet. Down
+      // and up again within the wait sends nothing at rest, but not while an
+      // earlier write is on its way: the state does not say it yet, and the
+      // later value is what must win.
+      let flying = 0;
       /** Send a value and answer whether it was taken. A refused write is a
        *  rejected promise, and the reason is already on the screen as Home
        *  Assistant's toast. The row only has to stop looking busy, now rather
@@ -796,14 +853,19 @@
        *  nothing to undo, a slider or a list, need not catch anything. */
       const send = (value) => {
         const mine = ++sent;
+        flying += 1;
         container.dataset.pending = "1";
         const settle = () => {
           if (mine === sent && waiting === null) container.dataset.pending = "0";
         };
         const timer = setTimeout(settle, 6000);
         return new Promise((resolve) => resolve(this._call(entityId, value))).then(
-          () => true,
           () => {
+            flying -= 1;
+            return true;
+          },
+          () => {
+            flying -= 1;
             clearTimeout(timer);
             settle();
             return false;
@@ -816,12 +878,19 @@
        *  busy from the first change, which also keeps an unset slider's knob
        *  where the user put it while the write waits. `after` hears whether
        *  the write was taken, unless a newer change or write has come since:
-       *  then that one's answer is the one that counts. */
+       *  then that one's answer is the one that counts. A value that is what
+       *  the control shows at rest anyway, down and up again within the wait,
+       *  is not sent at all: it would ask for nothing new and only make Home
+       *  Assistant hold the register, Styrd and keepalive with it. */
       const sendLast = (value, after) => {
         container.dataset.pending = "1";
         clearTimeout(waiting);
         waiting = setTimeout(() => {
           waiting = null;
+          if (flying === 0 && unchangedAtRest(entityId, value, this._state(entityId))) {
+            container.dataset.pending = "0";
+            return;
+          }
           const answer = send(value);
           const mine = sent;
           answer.then((taken) => {
@@ -845,7 +914,14 @@
       if (domain === "select") {
         const select = document.createElement("select");
         // Every arrow key in a closed list is a change; only the last is sent.
-        select.addEventListener("change", () => sendLast(select.value));
+        // A refused write puts back what the list should show, whether or not
+        // it still has the focus, as a refused slider does: the keyboard
+        // leaves it focused, and the incoming states would pass it by.
+        select.addEventListener("change", () => sendLast(select.value, (taken) => {
+          if (taken) return;
+          const stateObj = this._state(entityId);
+          if (stateObj) select.value = listValue(stateObj);
+        }));
         container.appendChild(select);
         return () => {
           const stateObj = this._state(entityId);
@@ -860,12 +936,20 @@
               select.appendChild(choice);
             }
           }
-          if (!holding(select) && stateObj) select.value = stateObj.state;
-          // The pump reports what the list shows: the write has landed, and
-          // the row stops looking busy now rather than when the timer runs
-          // out. Asked whoever is holding the list, since the keyboard leaves
-          // it focused, but not while a change still waits to be sent (R47).
-          if (stateObj && waiting === null && select.value === stateObj.state) {
+          // What the list should show: the mode held, or Släpp styrningen at
+          // rest (listValue). Put in only while no change waits to be sent
+          // and nobody holds the list: a list that lost the focus before its
+          // wait ran out, a picker on a phone closed with Done, would
+          // otherwise get the old mode back while the new one waits.
+          const shows = listValue(stateObj);
+          if (waiting === null && !holding(select) && stateObj) select.value = shows;
+          // The list shows what the state says it should: the write has
+          // landed, and the row stops looking busy now rather than when the
+          // timer runs out. Asked whoever is holding the list, since the
+          // keyboard leaves it focused, but not while a change still waits to
+          // be sent (R47). After Släpp styrningen that is at once, since the
+          // list at rest stands on it whatever mode the pump runs.
+          if (stateObj && waiting === null && select.value === shows) {
             container.dataset.pending = "0";
           }
           select.disabled = !stateObj || stateObj.state === "unavailable";
@@ -916,7 +1000,10 @@
           // A write on its way from an unset slider: the knob stays where the
           // user put it until the pump's value arrives or the refusal lets go.
           if (unset && container.dataset.pending === "1") return;
-          if (force || !holding(slider)) {
+          // Neither while the user holds the slider nor while a change waits
+          // to be sent: a slider a tap or a click does not give the focus
+          // (Safari, iOS) would get the pump's old value back meanwhile.
+          if (force || (waiting === null && !holding(slider))) {
             // Unset, the knob is parked at the bottom of the range, hidden by
             // the style, rather than left in the middle by the browser.
             slider.value = unset
