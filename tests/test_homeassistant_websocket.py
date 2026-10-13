@@ -4,7 +4,8 @@ ctc_ecozenith/items answers the section card with one section of the CTC page.
 Here the command runs through Home Assistant's own websocket server, asked by a
 user who is not an administrator, since anyone signed in may open the page:
 the answer has to be the very cards the page has in that section, built from
-the same description of the pump, and nothing else; a device that is no heat
+the same description of the pump and in the page's language, also for a second
+pump whose panel speaks another, and nothing else; a device that is no heat
 pump of this integration, a heat pump whose entry is not running and a section
 the card does not know are refused, each in its own words.
 
@@ -24,6 +25,7 @@ import pytest
 pytest.importorskip("pytest_homeassistant_custom_component")
 
 from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by import)
+    IDENTITY,
     _entity_id,
     _needs_auto_asyncio_mode,
     _set_up,
@@ -31,13 +33,30 @@ from test_homeassistant import (  # noqa: E402,F401  (the fixtures travel by imp
 )
 
 from homeassistant.config_entries import ConfigEntryState  # noqa: E402
+from homeassistant.const import CONF_HOST  # noqa: E402
 from homeassistant.helpers import device_registry as dr  # noqa: E402
+from homeassistant.loader import async_get_integration  # noqa: E402
 from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
 
 from custom_components.ctc_ecozenith import dashboard  # noqa: E402
-from custom_components.ctc_ecozenith.const import DOMAIN  # noqa: E402
+from custom_components.ctc_ecozenith.const import (  # noqa: E402
+    CONF_IDENTITY,
+    CONF_LANGUAGE,
+    CONF_MENU_VERSION,
+    CONF_MODBUS_PORT,
+    CONF_SLAVE,
+    CONF_WEB_PORT,
+    DOMAIN,
+    LANG_ENGLISH,
+)
 
 COMMAND = f"{DOMAIN}/items"
+
+#: A second heat pump, on another documentation address (RFC 5737), with a
+#: panel read in English and an identity of its own, so that it is a device of
+#: its own and its name sorts after the first one's.
+OTHER_HOST = "192.0.2.56"
+OTHER_MODEL = "EcoZenith i550 Pro"
 
 
 @pytest.fixture
@@ -65,6 +84,32 @@ def _device_id(hass, entry) -> str:
 async def _ask(client, device_id: str, section: str) -> dict:
     await client.send_json_auto_id({"type": COMMAND, "device_id": device_id, "section": section})
     return await client.receive_json()
+
+
+async def _set_up_a_second_pump_in_english(hass) -> MockConfigEntry:
+    """An i550 Pro beside the first pump, its panel read in English."""
+    version = str((await async_get_integration(hass, DOMAIN)).version)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=f"{DOMAIN}_{OTHER_HOST}",
+        title=f"{OTHER_MODEL} ({OTHER_HOST})",
+        data={
+            CONF_HOST: OTHER_HOST,
+            CONF_MODBUS_PORT: 502,
+            CONF_WEB_PORT: 80,
+            CONF_SLAVE: 1,
+            "model": OTHER_MODEL,
+        },
+        options={
+            CONF_MENU_VERSION: version,
+            CONF_LANGUAGE: LANG_ENGLISH,
+            CONF_IDENTITY: {**IDENTITY, "serial": "720825400001", "mac": "02:00:00:00:00:02"},
+        },
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
 
 
 def _page_cards(hass, tab: str, heading: str) -> list[dict]:
@@ -103,6 +148,41 @@ async def test_the_status_and_a_control_section_are_the_pages_too(hass, client):
     assert heating["result"]["cards"] == _page_cards(hass, "controls", "Värme")
     room = _entity_id(hass, "number", "ctl_room_setpoint_1")
     assert room in [item["entity"] for item in heating["result"]["cards"][0]["items"]]
+
+
+async def test_a_second_pump_with_an_english_panel_reads_in_the_pages_words(hass, client):
+    # The page builds every pump in the first one's language, by name: the
+    # i255's Swedish. The section of the i550 Pro, whose panel is read in
+    # English, has to be the page's to the letter, not built in its own.
+    other = await _set_up_a_second_pump_in_english(hass)
+    assert other.state is ConfigEntryState.LOADED
+    first_id, other_id = _device_id(hass, client.entry), _device_id(hass, other)
+    assert first_id != other_id
+    devices = dr.async_get(hass)
+    first_name, other_name = (devices.async_get(i).name.casefold() for i in (first_id, other_id))
+    assert first_name < other_name
+    assert [pump["language"] for pump in dashboard._collect(hass, other.entry_id)] == ["en"]
+
+    reply = await _ask(client, other_id, "temperatures")
+    assert reply["success"], reply
+    page = _page_cards(hass, "performance-2", "Temperaturer")
+    assert page, "sidan har sektionen för den andra pumpen"
+    assert reply["result"]["cards"] == page
+    (rows,) = reply["result"]["cards"]
+    assert rows["more_info"] == "Mer info"
+    assert rows["explain"] == "Förklaring"
+
+    values = await _ask(client, other_id, "values")
+    assert values["success"], values
+    page = _page_cards(hass, "values-2", "Alla värden")
+    assert page, "sidan har alla värden för den andra pumpen"
+    assert values["result"]["cards"] == page
+    assert values["result"]["cards"][0]["filter"] == "Sök bland värdena"
+
+    # The first pump's section is the page's as before.
+    first = await _ask(client, first_id, "temperatures")
+    assert first["success"], first
+    assert first["result"]["cards"] == _page_cards(hass, "performance-1", "Temperaturer")
 
 
 async def test_a_device_that_is_not_one_of_ours_is_refused(hass, client):
