@@ -36,7 +36,7 @@ from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     IDENTITY,
     MODEL,
     _needs_auto_asyncio_mode,
-    stubs,
+    stubs_fixture,
 )
 
 import custom_components.ctc_ecozenith as integration

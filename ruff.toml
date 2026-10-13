@@ -55,11 +55,6 @@ section-order = [
 # for.
 "custom_components/*/explanations.py" = ["E501"]
 "custom_components/*/const.py" = ["E501"]
-# The tests under a real Home Assistant share the fixtures of
-# test_homeassistant.py by importing them, and pytest hands each one to a test
-# as the parameter of the same name. To pyflakes that parameter redefines the
-# import; to pytest it is how the fixture is reached.
-"tests/test_homeassistant_*.py" = ["F811"]
 # The tests spell out the dash (U+2013) they look for in the Swedish texts so as
 # to keep it out of them, and only that is let through here: the package itself
 # stays under RUF001, RUF002 and RUF003. RUF001 does not catch an em dash

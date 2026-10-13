@@ -25,7 +25,7 @@ pytest.importorskip("pytest_homeassistant_custom_component")
 from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _entity_id,
     _needs_auto_asyncio_mode,
-    stubs,
+    stubs_fixture,
 )
 from test_homeassistant_harvest import (  # noqa: F401  (live_panel is autouse)
     _fire,

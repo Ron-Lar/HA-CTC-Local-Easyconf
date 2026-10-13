@@ -41,7 +41,7 @@ from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _let_the_background_run,
     _needs_auto_asyncio_mode,
     _set_up,
-    stubs,
+    stubs_fixture,
 )
 from test_homeassistant_rows_alarms import HEATPUMP, PAGE, SCREEN, ServingPanel
 

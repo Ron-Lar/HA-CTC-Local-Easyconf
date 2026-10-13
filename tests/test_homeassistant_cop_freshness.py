@@ -42,7 +42,7 @@ from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     READINGS,
     _entity_id,
     _needs_auto_asyncio_mode,
-    stubs,
+    stubs_fixture,
 )
 from test_homeassistant_harvest import INTERVAL, LivePanel, _fire, _prefill
 

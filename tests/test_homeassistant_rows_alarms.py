@@ -38,7 +38,7 @@ from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
     _entity_id,
     _needs_auto_asyncio_mode,
     _set_up,
-    stubs,
+    stubs_fixture,
 )
 
 from custom_components.ctc_ecozenith.catalogue import pages_to_storage
