@@ -121,6 +121,25 @@
     return attributes["styrning aktiv"] === "ja";
   }
 
+  /** R49: the pump's own value beside an override, where the integration
+   *  gives it: under the English `pump_value`, or the Swedish `pumpens värde`
+   *  an older integration may send. undefined where there is none. */
+  function pumpValue(attributes) {
+    for (const name of ["pump_value", "pumpens värde"]) {
+      const value = attributes[name];
+      if (value !== undefined && value !== null && String(value) !== "") return value;
+    }
+    return undefined;
+  }
+
+  /** Whether two values say the same: as numbers where both are numbers, so
+   *  the 50 an attribute carries is the "50.0" of a state, else as text. */
+  function sameValue(a, b) {
+    const x = parseFieldValue(a);
+    const y = parseFieldValue(b);
+    return x !== null && y !== null ? x === y : String(a) === String(b);
+  }
+
   if (typeof customElements === "undefined") {
     // Node, for tests/test_card*.py: hand over the helpers and stop here, before
     // anything below reaches for HTMLElement or document. A browser never takes
@@ -154,6 +173,17 @@
     .note a { color: var(--primary-color); cursor: pointer; text-decoration: underline; }
     .note a:focus-visible {
       outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 2px; border-radius: 2px;
+    }
+    /* R49: a control Home Assistant holds right now, in the theme's primary
+       colour, with what holding means as its hover text, and the pump's own
+       value in small text under the row. */
+    .held {
+      display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px;
+      border: 1px solid var(--primary-color, #03a9f4); color: var(--primary-color, #03a9f4);
+      font-size: .7em; font-weight: 500; line-height: 1.5; vertical-align: middle; cursor: help;
+    }
+    .pump {
+      grid-column: 1 / -1; color: var(--secondary-text-color); font-size: .75em; line-height: 1.3;
     }
   `;
 
@@ -378,6 +408,53 @@
       };
       if (HIDDEN_STATES.has(stateObj.state)) return first(item.reason) || first(item.sub);
       return first(item.sub);
+    }
+
+    /** R49: the mark that says Home Assistant holds this control, and the
+     *  line for the pump's own value, for a number or a list; null for
+     *  anything else, which nothing can hold. Both start hidden. */
+    _heldParts(item) {
+      if (!CONTROL_DOMAINS.has(String(item.entity).split(".")[0])) return null;
+      const states = this._config.states || {};
+      const mark = document.createElement("span");
+      mark.className = "held";
+      mark.textContent = states.controlled || "Overridden";
+      // The keepalive in one sentence: what holding means, and how it ends.
+      if (states.controlled_note) mark.title = states.controlled_note;
+      mark.hidden = true;
+      const pump = document.createElement("div");
+      pump.className = "pump";
+      pump.hidden = true;
+      return { mark, pump };
+    }
+
+    /** R49: show the mark while Home Assistant holds the control
+     *  (control_active, or "styrning aktiv" from an older integration), and
+     *  the pump's own value where the integration gives it, while held or
+     *  wherever it is not what the control shows. Answers whether it is held. */
+    _showHeld(parts, item, stateObj) {
+      if (!parts) return false;
+      const attributes = (stateObj && stateObj.attributes) || {};
+      const held = Boolean(stateObj) && controlActive(attributes);
+      parts.mark.hidden = !held;
+      const own = stateObj ? pumpValue(attributes) : undefined;
+      const shown = own !== undefined && (held || !sameValue(own, stateObj.state));
+      const states = this._config.states || {};
+      parts.pump.textContent = shown
+        ? `${states.pump_value || "pump's own"}: ${this._ownText(item, own, attributes)}`
+        : "";
+      parts.pump.hidden = !shown;
+      return held;
+    }
+
+    /** The pump's own value as the row would word it: its 0 that means no
+     *  limit as the word for that, a number with the control's unit, a mode
+     *  as it is. */
+    _ownText(item, value, attributes) {
+      const states = this._config.states || {};
+      const number = parseFieldValue(value);
+      if (item.zero_means && number === 0 && states[item.zero_means]) return states[item.zero_means];
+      return number !== null ? withUnit(value, attributes.unit_of_measurement) : String(value);
     }
 
     /** The service call for a control, returned so the caller can see it
@@ -605,6 +682,7 @@
       background: transparent; color: var(--primary-color, #03a9f4);
     }
     .note { grid-column: 1 / -1; }
+    .widget button.release { padding: 4px 10px; font-size: .85em; }
   `;
 
   class CtcEcoZenithControls extends CtcCard {
@@ -623,9 +701,15 @@
         const widget = document.createElement("span");
         widget.className = "widget";
         widget.dataset.pending = "0";
-        row.append(this._named(item, note), widget, note);
+        const label = this._named(item, note);
+        // R49: "Styrd" after the name, the pump's own value under the row.
+        const held = this._heldParts(item);
+        if (held) label.appendChild(held.mark);
+        row.append(label, widget);
+        if (held) row.appendChild(held.pump);
+        row.appendChild(note);
         card.appendChild(row);
-        return { item, row, widget, note, update: null };
+        return { item, row, widget, note, held, release: null, update: null };
       });
     }
 
@@ -637,9 +721,44 @@
           // waits for the first state rather than guessing at an empty one.
           if (!this._state(row.item.entity)) continue;
           row.update = this._widget(row.widget, row.item, row.note);
+          if (String(row.item.entity).startsWith("number.")) {
+            row.release = this._releaseButton(row.widget, row.item);
+          }
         }
         row.update();
+        const held = this._showHeld(row.held, row.item, this._state(row.item.entity));
+        if (row.release) {
+          row.release.hidden = !held;
+          // Let go of: the button is ready again for the next override.
+          if (!held) row.release.disabled = false;
+        }
       }
+    }
+
+    /** R49: a number Home Assistant holds gets a button that lets go of that
+     *  one alone, through the integration's service release: nothing is
+     *  written, Home Assistant stops writing, and the pump goes back to its own
+     *  value within about five minutes. A list lets go by its own option,
+     *  Släpp styrningen, and gets no button. The button waits for the state
+     *  that says the number is no longer held; a refusal, which Home
+     *  Assistant shows as a toast, makes it ready again at once. */
+    _releaseButton(container, item) {
+      const states = this._config.states || {};
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "release";
+      button.textContent = states.release || "Release";
+      button.setAttribute("aria-label", `${button.textContent}: ${item.name || item.entity}`);
+      button.hidden = true;
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        const again = () => { button.disabled = false; };
+        new Promise((resolve) => resolve(
+          this._hass.callService("ctc_ecozenith", "release", { entity_id: item.entity })
+        )).then(() => setTimeout(again, 6000), again);
+      });
+      container.appendChild(button);
+      return button;
     }
 
     /** A control without a value says why in its note: the pump does not give
@@ -1066,7 +1185,12 @@
       note.hidden = true;
       const value = document.createElement("span");
       value.className = "value";
-      element.append(this._named(item, note), value);
+      const label = this._named(item, note);
+      // R49: "Styrd" after the name, the pump's own value under the row.
+      const held = this._heldParts(item);
+      if (held) label.appendChild(held.mark);
+      element.append(label, value);
+      if (held) element.appendChild(held.pump);
       let sub = null;
       if (item.sub || item.reason) {
         // R35: the line under the row, drawn from the entity's attributes.
@@ -1084,7 +1208,7 @@
         const why = (TOGGLES.get(note) || [])[0];
         if (why) why.click();
       });
-      return { item, element, note, value, sub, seen: undefined, gone: false, blank: false };
+      return { item, element, note, value, sub, held, seen: undefined, gone: false, blank: false };
     }
 
     _update() {
@@ -1095,8 +1219,10 @@
         row.blank = this._blank(row.item, stateObj);
         // Only when the state itself changed: every update of any entity in
         // Home Assistant sets hass again.
-        if (!stateObj || row.seen === stateObj) continue;
+        if (row.seen === stateObj) continue;
         row.seen = stateObj;
+        this._showHeld(row.held, row.item, stateObj);
+        if (!stateObj) continue;
         row.value.textContent = this._text(row.item, stateObj);
         if (row.sub) row.sub.textContent = this._below(row.item, stateObj);
       }
@@ -1144,13 +1270,17 @@
     }
 
     /** A row is searched by everything it says: its name, its explanation, where
-     *  the value comes from, and the value itself. */
+     *  the value comes from, and the value itself, and while Home Assistant
+     *  holds it, the mark and the pump's own value (R49), so "styrd" finds
+     *  what is held right now. */
     _matches(row) {
       if (!this._query) return true;
       const item = row.item;
+      const held = row.held && !row.held.mark.hidden ? row.held.mark.textContent : "";
+      const own = row.held && !row.held.pump.hidden ? row.held.pump.textContent : "";
       const haystack = [
         item.name, item.explanation, item.source, item.entity, row.value.textContent,
-        row.sub ? row.sub.textContent : "",
+        row.sub ? row.sub.textContent : "", held, own,
       ].join(" ").toLowerCase();
       return this._query.split(/\s+/).every((word) => haystack.includes(word));
     }

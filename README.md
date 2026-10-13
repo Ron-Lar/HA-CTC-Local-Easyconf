@@ -406,6 +406,16 @@ it is never out of date. Each heat pump gets four tabs.
   two rows by one name can be told apart. The search and the box are kept for
   as long as the browser tab is open.
 
+A control Home Assistant holds right now is marked **Styrd** after its name,
+among the controls and in All values, and the mark's hover text says what
+holding means: Home Assistant writes the value again every minute, and the pump
+forgets it about five minutes after the last write. Where the integration gives
+the pump's own value under the override, it stands under the row as *pumpen
+själv*. A held number has a **Släpp** button that lets go of that one alone,
+through the integration's release service, without writing anything; a mode is
+let go of with its own option, *Släpp styrningen*. Searching All values for
+*styrd* lists everything held.
+
 The coefficient of performance says under its figure what it rests on, the
 last day, the last seven or thirty days, a rolling year, the first year or the
 whole life, and while it has no figure it says why instead: no sample old
