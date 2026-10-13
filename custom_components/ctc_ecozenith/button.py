@@ -36,7 +36,8 @@ class CtcReleaseControl(ButtonEntity):
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:hand-back-left-outline"
-    _attr_name = "Släpp all styrning"
+    #: Släpp all styrning in Swedish, Release all control in English (R23).
+    _attr_translation_key = "release_control"
 
     def __init__(self, runtime) -> None:
         self._runtime = runtime

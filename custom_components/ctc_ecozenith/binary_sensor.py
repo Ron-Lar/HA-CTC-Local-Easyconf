@@ -4,7 +4,8 @@ An enum register is judged by its code, never by its label. The label is a
 Swedish string that may be reworded or translated one day, and a binary that
 compared against it would then go quietly off for good; the code is what the
 controller actually said. The coordinator keeps the codes beside the labels for
-exactly this.
+exactly this, so the binaries work whatever language Home Assistant speaks and
+their names follow it.
 """
 
 from __future__ import annotations
@@ -41,6 +42,11 @@ class DerivedBinary:
     With ``by_code`` the test is given the code behind the first source, an
     integer; otherwise it is given the readings of every source in order, with
     None for one that is absent.
+
+    The key is the entity's translation key as well: the entity takes its name
+    from the translations in Home Assistant's language (roadmap R23), and
+    ``name`` is the Swedish one, which translations/sv.json carries word for
+    word.
     """
 
     key: str
@@ -165,7 +171,7 @@ class CtcDerivedBinary(CoordinatorEntity, BinarySensorEntity):
         self._item = item
         self._runtime = runtime
         self._attr_unique_id = unique_id(runtime.device, item.key)
-        self._attr_name = item.name
+        self._attr_translation_key = item.key
         self._attr_device_info = runtime.device
         if item.device_class:
             self._attr_device_class = item.device_class

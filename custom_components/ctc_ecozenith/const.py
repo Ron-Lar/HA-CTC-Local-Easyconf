@@ -225,7 +225,14 @@ def web_interface_url(host: str, port: int = DEFAULT_WEB_PORT) -> str:
 
 @dataclass(frozen=True)
 class ModbusSensor:
-    """One readable Modbus holding register."""
+    """One readable Modbus holding register.
+
+    ``key`` is the entity's key in its unique_id and its translation key: the
+    entity is named in Home Assistant's language from the translations under
+    it (roadmap R23). ``name`` is the Swedish name, which translations/sv.json
+    carries word for word; an enum's labels are the controller's Swedish words
+    and the entity's states in every language.
+    """
 
     key: str
     address: int
@@ -434,6 +441,11 @@ class ControlRegister:
     often as wanted, and the unit forgets them roughly five minutes after the
     last write. That expiry is the safety net: if Home Assistant stops, the heat
     pump returns to its own settings on its own.
+
+    ``key`` is the entity's translation key, as for a ModbusSensor, and
+    ``name`` its Swedish name, word for word in translations/sv.json; every
+    Swedish name starts with "Styr" and every English one with "Control",
+    which the CTC page leaves out under a heading that already says control.
     """
 
     key: str

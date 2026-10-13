@@ -72,7 +72,10 @@ class CtcControlNumber(CoordinatorEntity, NumberEntity):
         self._runtime = runtime
         self._register = register
         self._attr_unique_id = unique_id(runtime.device, register.key)
-        self._attr_name = register.name
+        # Named in Home Assistant's language from the translations under the
+        # register's key (roadmap R23); register.name is the Swedish name,
+        # which translations/sv.json carries word for word.
+        self._attr_translation_key = register.key
         self._attr_device_info = runtime.device
         self._attr_native_min_value = register.minimum
         self._attr_native_max_value = register.maximum

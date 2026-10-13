@@ -53,8 +53,8 @@ class CtcEvents(CoordinatorEntity, EventEntity):
     """One event per transition the watch finds, after every Modbus round."""
 
     _attr_has_entity_name = True
-    _attr_name = "Händelser"
-    #: The event types' texts live under this key in strings.json.
+    #: The name, Händelser in Swedish and Events in English (roadmap R23), and
+    #: the event types' texts live under this key in strings.json.
     _attr_translation_key = "events"
     _attr_icon = "mdi:timeline-text-outline"
     _attr_event_types = list(EVENT_TYPES)

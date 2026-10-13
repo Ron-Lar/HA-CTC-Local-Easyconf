@@ -214,8 +214,34 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "alarm": {
+        "name": "Larm"
+      },
+      "blocked": {
+        "name": "Blockerad"
+      },
+      "compressor_running": {
+        "name": "Kompressor i drift"
+      },
+      "defrosting": {
+        "name": "Avfrostning"
+      },
+      "immersion_active": {
+        "name": "Elpatron aktiv"
+      },
+      "smartgrid_active": {
+        "name": "SmartGrid aktiv"
+      }
+    },
+    "button": {
+      "release_control": {
+        "name": "Släpp all styrning"
+      }
+    },
     "event": {
       "events": {
+        "name": "Händelser",
         "state_attributes": {
           "event_type": {
             "state": {
@@ -230,6 +256,267 @@
             }
           }
         }
+      }
+    },
+    "number": {
+      "ctl_dhw_setpoint": {
+        "name": "Styr varmvattenbörvärde"
+      },
+      "ctl_extra_dhw": {
+        "name": "Styr extra varmvatten"
+      },
+      "ctl_immersion_lower": {
+        "name": "Styr max elpatron nedre"
+      },
+      "ctl_immersion_upper": {
+        "name": "Styr max elpatron övre"
+      },
+      "ctl_max_rps": {
+        "name": "Styr max varvtal"
+      },
+      "ctl_room_setpoint_1": {
+        "name": "Styr rumsbörvärde"
+      }
+    },
+    "select": {
+      "ctl_dhw_mode": {
+        "name": "Styr varmvattenläge"
+      },
+      "ctl_price_mode": {
+        "name": "Styr elprisläge"
+      },
+      "ctl_zone_mode_1": {
+        "name": "Styr driftläge VS1"
+      }
+    },
+    "sensor": {
+      "active_overrides": {
+        "name": "Aktiva överstyrningar"
+      },
+      "bootloader": {
+        "name": "Bootloaderversion"
+      },
+      "compressor_hours": {
+        "name": "Kompressordrifttid"
+      },
+      "compressor_hours_24h": {
+        "name": "Kompressordrift senaste dygnet"
+      },
+      "compressor_kwh": {
+        "name": "Kompressorenergi"
+      },
+      "control_sw": {
+        "name": "Programversion styrenhet"
+      },
+      "control_sw_year": {
+        "name": "Programversion styrenhet, år"
+      },
+      "cop_day": {
+        "name": "Dygnsvärmefaktor"
+      },
+      "cop_first_year": {
+        "name": "Värmefaktor, första året"
+      },
+      "cop_lifetime": {
+        "name": "Värmefaktor, hela livslängden"
+      },
+      "cop_month": {
+        "name": "Månadsvärmefaktor"
+      },
+      "cop_week": {
+        "name": "Veckovärmefaktor"
+      },
+      "cop_year": {
+        "name": "Årsvärmefaktor"
+      },
+      "current_l1": {
+        "name": "Ström L1"
+      },
+      "current_l2": {
+        "name": "Ström L2"
+      },
+      "current_l3": {
+        "name": "Ström L3"
+      },
+      "defrosts_today": {
+        "name": "Avfrostningar i dag"
+      },
+      "degree_minutes": {
+        "name": "Gradminuter"
+      },
+      "dhw_capacity": {
+        "name": "Varmvattenkapacitet"
+      },
+      "dhw_circulation": {
+        "name": "Varmvattencirkulation"
+      },
+      "dhw_lower_temp": {
+        "name": "Varmvatten nedre"
+      },
+      "dhw_stop_temp": {
+        "name": "Stopptemperatur varmvatten"
+      },
+      "dhw_temp": {
+        "name": "Varmvatten"
+      },
+      "dhw_temp_raw": {
+        "name": "Varmvattentemperatur (62003)"
+      },
+      "display_fw": {
+        "name": "Programversion display"
+      },
+      "display_harvest": {
+        "name": "Senaste displayskörd"
+      },
+      "hp1_brine_in": {
+        "name": "Köldbärare in"
+      },
+      "hp1_brine_out": {
+        "name": "Köldbärare ut"
+      },
+      "hp1_brine_pump": {
+        "name": "Brinepump"
+      },
+      "hp1_charge_pump": {
+        "name": "Laddpump"
+      },
+      "hp1_defrost_timer": {
+        "name": "Avfrostningstimer"
+      },
+      "hp1_discharge": {
+        "name": "Hetgas"
+      },
+      "hp1_fan": {
+        "name": "Fläkt"
+      },
+      "hp1_high_pressure": {
+        "name": "Högtryck"
+      },
+      "hp1_in": {
+        "name": "Värmepump in"
+      },
+      "hp1_low_pressure": {
+        "name": "Lågtryck"
+      },
+      "hp1_out": {
+        "name": "Värmepump ut"
+      },
+      "hp1_outdoor_temp": {
+        "name": "Utetemperatur vid värmepump"
+      },
+      "hp1_power": {
+        "name": "Tillförd effekt värmepump"
+      },
+      "hp1_rps": {
+        "name": "Kompressorvarvtal"
+      },
+      "hp1_status": {
+        "name": "Värmepump status"
+      },
+      "hp1_suction": {
+        "name": "Suggas"
+      },
+      "hp_fw": {
+        "name": "Programversion VP-styrkort"
+      },
+      "hp_model": {
+        "name": "Värmepumpsmodell"
+      },
+      "hs1_flow": {
+        "name": "Framledning VS1"
+      },
+      "hs1_flow_setpoint": {
+        "name": "Framledning börvärde VS1"
+      },
+      "hs1_status": {
+        "name": "Värmesystem status"
+      },
+      "immersion_kwh": {
+        "name": "Elpatron energi"
+      },
+      "immersion_lower_kw": {
+        "name": "Elpatron nedre"
+      },
+      "immersion_upper_kw": {
+        "name": "Elpatron övre"
+      },
+      "last_alarm": {
+        "name": "Senaste larm"
+      },
+      "last_defrost": {
+        "name": "Senaste avfrostning"
+      },
+      "last_run": {
+        "name": "Senaste körning"
+      },
+      "last_start": {
+        "name": "Senaste start"
+      },
+      "made": {
+        "name": "Tillverkad"
+      },
+      "mean_run_24h": {
+        "name": "Medelkörning senaste dygnet"
+      },
+      "outdoor_temp": {
+        "name": "Utetemperatur"
+      },
+      "radiator_temp": {
+        "name": "Radiatorvatten"
+      },
+      "return_temp": {
+        "name": "Returtemperatur"
+      },
+      "room_temp_1": {
+        "name": "Rumstemperatur"
+      },
+      "room_temp_2": {
+        "name": "Rumstemperatur 2"
+      },
+      "serial": {
+        "name": "Serienummer"
+      },
+      "set_adjust_1": {
+        "name": "Kurvjustering"
+      },
+      "set_dhw_mode": {
+        "name": "Inställt varmvattenläge"
+      },
+      "set_extra_dhw": {
+        "name": "Extra varmvatten kvar"
+      },
+      "set_heating_mode_1": {
+        "name": "Inställt värmeläge"
+      },
+      "set_hp1_blocked": {
+        "name": "Värmepump tillåten"
+      },
+      "set_max_immersion_lower": {
+        "name": "Max elpatron nedre"
+      },
+      "set_max_immersion_upper": {
+        "name": "Max elpatron övre"
+      },
+      "set_max_rps_1": {
+        "name": "Inställt max varvtal"
+      },
+      "set_room_1": {
+        "name": "Inställd rumstemperatur"
+      },
+      "set_slope_1": {
+        "name": "Kurvlutning"
+      },
+      "sg_mode": {
+        "name": "SmartGrid-läge"
+      },
+      "starts_today": {
+        "name": "Starter i dag"
+      },
+      "system_status": {
+        "name": "Systemstatus"
+      },
+      "tank_lower_setpoint": {
+        "name": "Nedre tank börvärde"
       }
     }
   }

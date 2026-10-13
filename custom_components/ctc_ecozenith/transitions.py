@@ -418,7 +418,9 @@ class TransitionSensor:
 
     ``kind`` is timestamp, count or minutes; sensor.py turns that into the
     device and state classes. The value and the attributes are functions of the
-    watch, so the table can be read without Home Assistant.
+    watch, so the table can be read without Home Assistant. The key is the
+    sensor's translation key too, and ``name`` the Swedish name that
+    translations/sv.json carries word for word (roadmap R23).
     """
 
     key: str
@@ -488,7 +490,9 @@ TRANSITION_SENSORS: tuple[TransitionSensor, ...] = (
 # ------------------------------------------------- the mean run over a day
 
 #: The key of the sensor that divides the day's compressor minutes by the
-#: display's starts per day. Only where the history page is harvested.
+#: display's starts per day, which is its translation key as well, and its
+#: Swedish name as translations/sv.json has it. Only where the history page is
+#: harvested.
 MEAN_RUN_KEY = "mean_run_24h"
 MEAN_RUN_NAME = "Medelkörning senaste dygnet"
 

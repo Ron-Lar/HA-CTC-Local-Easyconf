@@ -151,8 +151,8 @@ rules:
     status: todo
     comment: Every entity is created enabled, by the owner's choice since 0.14.0, and the CTC page leaves out what has only read zero; the rule asks for the rarely used ones to start disabled.
   entity-translations:
-    status: todo
-    comment: Entity names are Swedish, from the register tables and the display's own captions; only the event entity has a translation_key.
+    status: done
+    comment: Every entity the integration names has a translation_key and its name in strings.json, en.json and sv.json; the display rows keep the name the panel prints, which comes from the device.
   exception-translations:
     status: todo
     comment: The actions and the two Modbus reasons for a retried set-up are translated; the coordinators' UpdateFailed messages are not.
