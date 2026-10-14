@@ -287,10 +287,70 @@ def test_a_window_without_a_sample_with_the_counter_waits_and_says_why(cop):
     run(tracker.async_record(22400.0, 9100.0, today=TODAY - timedelta(days=7),
                              now=NOW - timedelta(days=7)))
     assert tracker.share_window(9121.0, 7.0, "week", today=TODAY).reason == cop.SHARE_NOT_SAMPLED
-    assert tracker.share_window(9121.0, 7.0, "month", today=TODAY).reason == (
-        f"7 av 30 dygn samlade, äldsta provet {TODAY - timedelta(days=7)}"
-    )
+    # The month's band has no sample, and the one sample there is has no
+    # counter: none of its seven days counts towards the share (F2.1).
+    month = tracker.share_window(9121.0, 7.0, "month", today=TODAY)
+    assert (month.value, month.days) == (None, 0)
+    assert month.reason == "0 av 30 dygn samlade, inget prov med elpatronens räknare sparat ännu"
     assert tracker.share_year(9121.0, 7.0, today=TODAY).value is None
+
+
+def _daily(tracker, first: date, last: date, immersion=None) -> None:
+    """A sample a day from ``first`` to ``last``, at noon, the counters rising by the day."""
+    day = first
+    while day <= last:
+        offset = (day - date(2026, 9, 1)).days
+        run(tracker.async_record(
+            20000.0 + 10 * offset, 8000.0 + 4 * offset, today=day,
+            now=datetime(day.year, day.month, day.day, 12, tzinfo=UTC), immersion=immersion,
+        ))
+        day += timedelta(days=1)
+
+
+def test_the_year_waits_for_samples_with_the_counter_not_for_the_ones_before(cop):
+    # VSH: a sample a day from 0.21.1 since 2026-09-10, none with the counter.
+    tracker = _tracker(cop)
+    since = date(2026, 9, 10)
+    _daily(tracker, since, TODAY - timedelta(days=1))
+    waiting = "0 av 365 dygn samlade, inget prov med elpatronens räknare sparat ännu"
+    year = tracker.share_year(9121.0, 7.0, today=TODAY)
+    assert (year.value, year.days, year.reason) == (None, 0, waiting)
+    # The coefficient of performance counts them all, as before.
+    assert tracker.result_year(22500.0, 9121.0, today=TODAY).reason == (
+        f"33 av 365 dygn samlade, äldsta provet {since}"
+    )
+    # Today's sample is the first with the counter, and the share counts from it.
+    _daily(tracker, TODAY, TODAY, immersion=1.0)
+    year = tracker.share_year(9121.0, 7.0, today=TODAY)
+    assert (year.days, year.reason) == (0, f"0 av 365 dygn samlade, äldsta provet {TODAY}")
+    later = TODAY + timedelta(days=40)
+    year = tracker.share_year(9121.0, 7.0, today=later)
+    assert (year.days, year.reason) == (40, f"40 av 365 dygn samlade, äldsta provet {TODAY}")
+    # Once the band reaches the samples from before, they are passed over,
+    # truly now, since newer samples have the counter.
+    reached = since + timedelta(days=365)
+    assert tracker.share_year(9121.0, 7.0, today=reached).reason == cop.SHARE_NOT_SAMPLED
+    assert tracker.share_year(9121.0, 7.0, today=TODAY + timedelta(days=365)).value == 0.6
+
+
+def test_the_week_of_a_young_installation_counts_only_samples_with_the_counter(cop):
+    # 0.21.1 has run for five days, and none of its samples has the counter.
+    tracker = _tracker(cop)
+    since = TODAY - timedelta(days=5)
+    _daily(tracker, since, TODAY - timedelta(days=1))
+    week = tracker.share_window(9121.0, 7.0, "week", today=TODAY)
+    assert (week.days, week.reason) == (
+        0, "0 av 7 dygn samlade, inget prov med elpatronens räknare sparat ännu"
+    )
+    assert tracker.result_window(22500.0, 9121.0, "week", today=TODAY).reason == (
+        f"5 av 7 dygn samlade, äldsta provet {since}"
+    )
+    _daily(tracker, TODAY, TODAY, immersion=1.0)
+    week = tracker.share_window(9121.0, 7.0, "week", today=TODAY)
+    assert (week.days, week.reason) == (0, f"0 av 7 dygn samlade, äldsta provet {TODAY}")
+    tomorrow = TODAY + timedelta(days=1)
+    week = tracker.share_window(9121.0, 7.0, "week", today=tomorrow)
+    assert (week.days, week.reason) == (1, f"1 av 7 dygn samlade, äldsta provet {TODAY}")
 
 
 # ------------------------------------------------------ the counters' faults

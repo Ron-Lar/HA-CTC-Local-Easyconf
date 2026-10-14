@@ -780,16 +780,26 @@ class CopTracker:
         collected, reason = self._progress(days, tolerance, now)
         return CopResult(None, basis, collected, reason=reason)
 
-    def _progress(self, days: int, tolerance: int, now: date) -> tuple[int, str]:
+    def _progress(
+        self,
+        days: int,
+        tolerance: int,
+        now: date,
+        sampled: Collection[str] | None = None,
+    ) -> tuple[int, str]:
         """How far the samples have come towards a window without a sample in its band.
 
         The days to report and the reason: nothing kept yet, a gap in the
         samples that covers the band, or so many days collected since the
         oldest sample. The same for every figure that reads the daily samples.
+        ``sampled`` narrows the samples counted to those days, for a figure
+        that can only stand on some of them; without it every daily sample
+        counts, as the coefficient of performance's do.
         """
-        if not self._samples:
+        kept = self._samples if sampled is None else sampled
+        if not kept:
             return 0, f"0 av {days} dygn samlade, inget prov sparat ännu"
-        oldest = min(self._samples)
+        oldest = min(kept)
         collected = (now - date.fromisoformat(oldest)).days
         if collected > days + tolerance:
             return days, f"inget sparat prov är {days} till {days + tolerance} dygn gammalt"
@@ -949,7 +959,10 @@ class CopTracker:
         same span (:meth:`_window`). A sample without the immersion heater's
         counter is passed over: the share starts a week, a month and a year
         after the counter is first sampled, never across a sample that does
-        not have it.
+        not have it. So is the waiting counted: without a sample in the band,
+        the days collected and the oldest sample are those of the samples
+        with the counter, since a year of samples from before it was sampled
+        brings the share no nearer.
         """
         window_start = (now - timedelta(days=days)).isoformat()
         earliest = (now - timedelta(days=days + tolerance)).isoformat()
@@ -971,7 +984,18 @@ class CopTracker:
                 floor,
                 base,
             )
-        collected, reason = self._progress(days, tolerance, now)
+        sampled = [d for d in self._samples if _row_immersion(self._samples[d], 2) is not None]
+        if self._samples and not sampled:
+            # Not SHARE_NOT_SAMPLED, which says that newer samples have the
+            # counter: none has yet, as on the day of the update that brought
+            # it, when every sample kept is from before.
+            return ShareResult(
+                None, basis, 0,
+                reason=(
+                    f"0 av {days} dygn samlade, inget prov med elpatronens räknare sparat ännu"
+                ),
+            )
+        collected, reason = self._progress(days, tolerance, now, sampled)
         return ShareResult(None, basis, collected, reason=reason)
 
     def share_window(
