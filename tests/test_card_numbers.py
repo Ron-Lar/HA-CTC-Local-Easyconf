@@ -1,13 +1,15 @@
-"""Figures that keep their width, and a colour scheme as a safety net (roadmap R40).
+"""Figures that keep their width, and the colour scheme left to Home Assistant (roadmap R40).
 
 The values in the dense list, the key figures and the reading beside a slider
-used proportional figures, so a number moved sideways when 9.8 became 10.2,
-and nothing in the cards said which colour scheme the browser should draw a
-list's pop-up, a number field's arrows or the search field's clear button in.
+used proportional figures, so a number moved sideways when 9.8 became 10.2.
 Each card now mounts with tabular figures on every class a number stands in
-(.value, .big, .reading, and the list's count) and with color-scheme: light
-dark on its host, which Home Assistant's own theme normally decides from the
-root. Nothing more: no dark class and no colours of the cards' own.
+(.value, .big, .reading, and the list's count). The colour scheme a list's
+pop-up, a number field's arrows and the search field's clear button are drawn
+in is Home Assistant's: its frontend sets meta[name=color-scheme] from the
+theme's mode, and the card inherits it as long as it declares none of its own.
+A color-scheme: light dark on the host, as the cards had for a while, wrote
+over it with the operating system's scheme (F4.1). Nothing more: no
+color-scheme, no dark class and no colours of the cards' own.
 
 There is no browser here, so what is pinned is the stylesheet each card puts
 in its shadow root, through the same mount a browser would do (card_page.js
@@ -93,13 +95,15 @@ def test_every_card_draws_its_numbers_in_tabular_figures(mounted):
             )
 
 
-def test_every_card_sets_a_colour_scheme_on_its_host_and_no_more(mounted):
+def test_no_card_declares_a_colour_scheme_of_its_own(mounted):
+    """F4.1: the scheme Home Assistant's meta tag gives is inherited, never written over."""
     for name, card in mounted.items():
         rules = _rules(card["style"])
-        assert "color-scheme: light dark" in rules[":host"], name
-        # The safety net and nothing else: no dark class, no scheme per element.
+        assert "display: block" in rules[":host"], name
+        assert "color-scheme" not in rules[":host"], name
+        # Not on the host, not per element, and no dark class in its place.
         declared = re.sub(r"/\*.*?\*/", "", card["style"], flags=re.S)
-        assert declared.count("color-scheme") == 1, name
+        assert "color-scheme" not in declared, name
         assert ".dark" not in declared, name
 
 

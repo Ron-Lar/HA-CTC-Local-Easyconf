@@ -201,6 +201,41 @@
     return number !== null && number === parseFieldValue(stateObj.state);
   }
 
+  /** R23, R28: the line under a figure in the page's language. What a
+   *  coefficient of performance or a share of auxiliary heat rests on, and why
+   *  it has no figure, are attributes whose values stay Swedish for automations
+   *  (underlag and skäl, beside basis and reason), so the page sends what they
+   *  say on it as `story` (dashboard_views.story_words): `words`, a whole line
+   *  to the page's words, and `patterns`, each a regular expression for a line
+   *  with a figure or a date in it and the page's words with $1, $2 for what
+   *  it caught, first match wins. A line neither knows is shown as it is, and
+   *  a Swedish page, or an older one, sends no table at all. The patterns are
+   *  read once per table, not at every state Home Assistant sends. */
+  const STORY_PATTERNS = new WeakMap();
+  function storyLine(text, story) {
+    if (!text || !story || typeof story !== "object") return text;
+    const words = story.words || {};
+    if (Object.prototype.hasOwnProperty.call(words, text)) return String(words[text]);
+    let patterns = STORY_PATTERNS.get(story);
+    if (!patterns) {
+      patterns = [];
+      for (const pattern of Array.isArray(story.patterns) ? story.patterns : []) {
+        // An empty pattern would match every line, so only a written one counts.
+        if (!pattern || typeof pattern.match !== "string" || !pattern.match) continue;
+        try {
+          patterns.push([new RegExp(pattern.match), String(pattern.text)]);
+        } catch (err) {
+          // A pattern this browser cannot read is passed over.
+        }
+      }
+      STORY_PATTERNS.set(story, patterns);
+    }
+    for (const [found, said] of patterns) {
+      if (found.test(text)) return text.replace(found, said);
+    }
+    return text;
+  }
+
   if (typeof customElements === "undefined") {
     // Node, for tests/test_card*.py: hand over the helpers and stop here, before
     // anything below reaches for HTMLElement or document. A browser never takes
@@ -217,12 +252,11 @@
     /* A display rule of a card, or ha-card's own :host rule, would otherwise beat
        the browser's [hidden] and leave closed explanations on the page. */
     [hidden] { display: none !important; }
-    /* R40: color-scheme as a safety net, so a list, a number field or the
-       search field never takes its pop-up, arrows or clear button from a
-       scheme the card did not ask for. Home Assistant's theme normally sets
-       it on the root and it is inherited here; light dark follows the
-       operating system where it is not. */
-    :host { display: block; color-scheme: light dark; }
+    /* R40: no color-scheme of the card's own. Home Assistant carries its
+       theme's mode into the card through meta[name=color-scheme], and a list's
+       pop-up, a number field's arrows and the search field's clear button
+       follow it; a value on :host would write over it. */
+    :host { display: block; }
     /* R40: tabular figures wherever a number stands, so a value in the list
        does not move sideways when 9.8 becomes 10.2: the list's values and its
        count, the key figures, and the reading beside a slider. */
@@ -474,7 +508,9 @@
     /** R35: the small line under a value: what the figure rests on, or, while
      *  there is no figure, why there is none. Both are attributes of the
      *  entity, named in the item as one name or a list of names, so an
-     *  attribute the integration renames is still found by the page. */
+     *  attribute the integration renames is still found by the page. The
+     *  attribute's Swedish words are put in the page's language (R23) where
+     *  the page sent a table for them under `story`. */
     _below(item, stateObj) {
       if (!stateObj || (!item.sub && !item.reason)) return "";
       const attributes = stateObj.attributes || {};
@@ -485,8 +521,10 @@
         }
         return "";
       };
-      if (HIDDEN_STATES.has(stateObj.state)) return first(item.reason) || first(item.sub);
-      return first(item.sub);
+      const line = HIDDEN_STATES.has(stateObj.state)
+        ? first(item.reason) || first(item.sub)
+        : first(item.sub);
+      return storyLine(line, this._config.story);
     }
 
     /** R49: the mark that says Home Assistant holds this control, and the
