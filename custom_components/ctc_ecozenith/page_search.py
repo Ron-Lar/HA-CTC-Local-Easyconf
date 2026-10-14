@@ -41,10 +41,16 @@ reading, presses only what the reading would press, and stops at the page:
 Two hints decide which page is searched first, and neither presses
 anything. Where the owner has walked the panel to the page by hand, the walk
 home from it passes the pages above it, and a page on that way is searched
-before the others, the nearer to the page asked for the sooner. And a page
-that shares at least two of its places to press with the page asked for, the
-strip a set of sibling pages draw alike, is searched before a page that does
-not. Both only order the search: what may be pressed is the same either way.
+before the others, the nearer to the page asked for the sooner, and a page
+being searched is set aside for one found below it on that way. Otherwise a
+page nearer the root is searched before one further down, and of pages as
+far from the root, one that shares at least two of its places to press with
+the page asked for, the strip a set of sibling pages draw alike, before one
+that does not. Alike only orders pages at one depth and never sets a page
+aside: the page asked for may lie a press from the page being searched, and
+a route through a sibling that looks like it would be a press more at every
+harvest. Both only order the search: what may be pressed is the same either
+way.
 
 The search runs only when the owner starts it, under the panel lock every
 walk takes, and what it found is the owner's to keep: the options flow adds
@@ -368,7 +374,10 @@ class _Search:
         root_places = await _async_controls(self.client, self.page_map, self.root)
         frontier = [self._node(self.root, [], self._rank(self.root, root_places))]
         while frontier and self.tries < self.max_taps:
-            node = max(frontier, key=lambda n: (n.rank, -len(n.route), -n.order))
+            # On the owner's way home first, the nearer to the page the
+            # sooner; then the shallowest, so a page alike only orders pages
+            # as far from the root and never wins a press of depth.
+            node = max(frontier, key=lambda n: (n.rank[0], -len(n.route), n.rank[1], -n.order))
             outcome = await self._search(node, frontier)
             if outcome in (FOUND, LOST):
                 return outcome
@@ -443,7 +452,11 @@ class _Search:
                 return child
             if child is not None:
                 frontier.append(child)
-                if child.rank > node.rank:
+                # Set aside only for a page on the owner's way home. A page
+                # merely alike waits for the rest of this one: the page asked
+                # for may lie a press from here, and a route through a
+                # sibling would be a press more at every harvest.
+                if child.rank[0] > node.rank[0]:
                     return _SET_ASIDE
 
     async def _judge(self, page: int, route: list[tuple[int, int]]) -> _Node | str | None:
