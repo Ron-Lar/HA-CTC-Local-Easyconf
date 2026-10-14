@@ -226,7 +226,7 @@ _MENU_LAST: dict[str, float] = {}
 #: that are wrong. With the lock kept here the new runtime's harvest and
 #: catch-up queue behind the walk the old one is still making. The options
 #: form borrows a loaded entry's client, and with it this lock; a client of
-#: its own while the entry is not loaded keeps a lock of its own.
+#: its own while the entry is not loaded is lent this lock as well.
 _PANEL_LOCKS: dict[str, asyncio.Lock] = {}
 
 
