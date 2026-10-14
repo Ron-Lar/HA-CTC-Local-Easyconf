@@ -21,7 +21,10 @@ reading, presses only what the reading would press, and stops at the page:
 * every press worked out from the page the panel shows, and nothing pressed
   under the heading but the panel's own button, never on the home screen,
   where that button opens the quick menu; nothing on the home screen at all
-  but the operation data tile;
+  but the operation data tile. The way to the home screen is the same walk
+  from every page the panel may stand on, and it presses nothing on a page
+  that may be the home screen with its tile unread just now: the search
+  then ends without the menu, and nothing has been pressed there;
 * a control whose caption names Avancerat, Service, Define or the language
   selection (const.NAV_FORBIDDEN) is never pressed, and a page whose heading
   names one of them is never searched: the page asked for is looked at
@@ -222,33 +225,85 @@ async def _async_controls(
     return await _async_tap_targets(client, page_map, page, exclude)
 
 
+def _misses(client: CtcWebClient) -> int:
+    """How many captions the client's text catalogue has not given up so far."""
+    return int(getattr(client, "text_misses", 0) or 0)
+
+
+async def _async_unread_in_english(
+    client: CtcWebClient, page_map: dict[int, list[int]], page: int
+) -> bool:
+    """Whether a caption on a page says something in the panel's language and nothing in English.
+
+    The home screen is known by its tile's English caption, so such a
+    caption may be that tile, unread just now, as an empty caption is one
+    the search cannot vouch for (_async_verdict). The English captions come
+    out of the text cache, which holds every answer the look for the tile
+    has just had; a screen whose widgets do not come cannot be vouched for
+    either.
+    """
+    for screen in page_map.get(page, []):
+        try:
+            widgets = await client.async_widgets(screen)
+        except CtcWebError:
+            return True
+        for widget in widgets:
+            if (
+                not widget.visible
+                or widget.width <= 0
+                or widget.text_id is None
+                or not (widget.label or "").strip()
+            ):
+                continue
+            if not (await client.async_text(widget.text_id, language=0)).strip():
+                return True
+    return False
+
+
 async def _async_walk_home(
     client: CtcWebClient, page_map: dict[int, list[int]], hops: int = 6
 ) -> tuple[list[int], bool]:
     """Step back to the home screen as the reading does, noting every page passed.
 
     The same walk async_goto_home makes, a press of the panel's own button
-    at a time and never on a page known to be the home screen, so the walk
-    costs nothing the search would not press anyway. The pages it passes on
-    the way from the page the owner walked the panel to are the pages above
-    it, which is where the search looks first. Returns them, and whether the
-    home screen was reached: a walk that was not is not made a second time.
+    at a time, from wherever the panel stands, so the walk costs nothing the
+    search would not press anyway. The pages it passes on the way from the
+    page the owner walked the panel to are the pages above it, which is
+    where the search looks first. Returns them, and whether the home screen
+    was reached: a walk that was not is not made a second time.
 
-    The client knows the home screen by its operation data tile and keeps it
-    once known, and a running entry's client knows the root from the stored
-    menu. One step up from the root is the home screen whether its tile can
-    be read just now or not, so the walk presses nothing there either, where
-    async_goto_home would press the button that opens the quick menu.
+    The button is never pressed on a page that may be the home screen, where
+    it opens the quick menu. The client knows the home screen by its
+    operation data tile and keeps it once known, and the client of an entry
+    that harvests, like the one the options build for an entry that is not
+    loaded, knows the root from the stored menu: one step up from the root
+    is the home screen whether its tile can be read just now or not, so the
+    walk presses nothing there. And a page on which the
+    tile was not found while a caption did not answer, or answered in the
+    panel's language and not in English, may be the home screen with its
+    tile unread, so the walk stops there too, the page it started on
+    included, and the search says it found no menu. Only the root, which is
+    never the home screen, is stepped back from all the same.
     """
     trail: list[int] = []
     root = getattr(client, "root", None)
     for _ in range(hops):
         here = await client.async_current_page()
+        misses = _misses(client)
         # Asked for no hop, the client says whether the panel is home without
         # pressing anything.
         if await client.async_goto_home(hops=0) is not None:
             return trail, True
         if here in trail or (root is not None and trail and trail[-1] == root):
+            return trail, False
+        if here != root and (
+            _misses(client) > misses or await _async_unread_in_english(client, page_map, here)
+        ):
+            _LOGGER.debug(
+                "Page %s may be the home screen, with its operation data tile unread just "
+                "now, so the panel's own button is not pressed there",
+                here,
+            )
             return trail, False
         trail.append(here)
         await client.async_click(page_map.get(here, []), *CHROME_BUTTON)
@@ -480,12 +535,17 @@ async def async_search_page(
     known: dict[int, list[tuple[int, int]]] = {}
     search: _Search | None = None
     try:
-        trail: list[int] = []
-        if origin == target:
-            trail, home_reached = await _async_walk_home(client, page_map)
-            if not home_reached:
-                result.reason = NO_MENU
-                return result
+        # Home first, from wherever the panel stands, by the walk that never
+        # presses the panel's own button on a page that may be the home
+        # screen (_async_walk_home). The pages it passes are a hint only on
+        # the way from the page asked for: from anywhere else they are the
+        # way from a page the owner did not name.
+        trail, home_reached = await _async_walk_home(client, page_map)
+        if not home_reached:
+            result.reason = NO_MENU
+            return result
+        if origin != target:
+            trail = []
         found = await _async_operation_root(client, page_map, origin)
         if found is None:
             result.reason = NO_MENU

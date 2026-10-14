@@ -29,6 +29,7 @@ from .catalogue import (
     async_discover_pages,
     async_rescan_pages,
     menu_after_rescan,
+    menu_root,
     pages_from_storage,
     pages_to_storage,
 )
@@ -995,18 +996,40 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         re-read and the walk to the system information page all take the same
         panel lock: two walkers on one panel record routes that are wrong, and
         those are then saved for good. A client of its own only while the entry
-        is not loaded, when nobody else is walking.
+        is not loaded, and that one takes the entry's panel lock too, the one
+        lock every set-up of the entry hands its client, so a set-up that
+        comes while this walk goes on holds its walks back. It is told the
+        root from the stored menu as a set-up tells its client: one step up
+        from the root is the home screen whether its tile can be read just
+        then or not, and the search's walk home presses nothing there
+        (page_search._async_walk_home).
         """
         runtime = getattr(self._entry, "runtime_data", None)
         client = getattr(runtime, "web_client", None)
         if client is not None:
             return client
-        return CtcWebClient(
+        options = self._entry.options
+        own = CtcWebClient(
             async_get_clientsession(self.hass),
             self._entry.data[CONF_HOST],
             self._entry.data.get(CONF_WEB_PORT, DEFAULT_WEB_PORT),
-            int(self._entry.options.get(CONF_LANGUAGE, LANG_SWEDISH)),
+            int(options.get(CONF_LANGUAGE, LANG_SWEDISH)),
         )
+        # Imported here, as menu_read_from_the_options is below: the package
+        # pulls in the rest of the integration.
+        from . import panel_lock
+
+        own.panel = panel_lock(self._entry.entry_id)
+        stored_root = options.get(CONF_MENU_ROOT)
+        own.root = (
+            int(stored_root)
+            if isinstance(stored_root, int) and not isinstance(stored_root, bool)
+            else menu_root(
+                pages_from_storage(options.get(CONF_MENU))
+                or pages_from_storage(options.get(CONF_SLOW_PAGES))
+            )
+        )
+        return own
 
     async def async_step_rescan(
         self, user_input: dict[str, Any] | None = None

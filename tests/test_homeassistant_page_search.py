@@ -41,7 +41,7 @@ from test_homeassistant import (  # noqa: F401  (the fixtures travel by import)
 from test_menu_sweep import HOME, I550_ROOT, VP1, VP_TABS, i550
 from test_page_search import MENU, VP_AT, pt_like
 
-from custom_components.ctc_ecozenith import catalogue, web_api
+from custom_components.ctc_ecozenith import catalogue, config_flow, panel_lock, web_api
 from custom_components.ctc_ecozenith.catalogue import pages_from_storage, pages_to_storage
 from custom_components.ctc_ecozenith.const import (
     CONF_DISPLAY,
@@ -261,6 +261,57 @@ async def test_the_two_walks_are_never_ticked_together(hass, stubs, display):
     assert result["reason"] == "one_walk"
     assert dict(entry.options) == options
     assert len(panel.session.calls) == calls, "ingen av dem går"
+
+
+async def test_an_entry_that_is_not_loaded_searches_with_its_lock_and_its_root(hass, stubs):
+    # Without a runtime the flow builds a client of its own. It takes the
+    # entry's one panel lock, as every set-up's client does, and is told the
+    # root from the stored menu, so the walk home knows the page one step up
+    # from it for the home screen as a running entry's client does.
+    pages, root = await _menu_of(pt_like())
+    stored = pages_to_storage(pages)
+    panel = pt_like(start=VP1)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=f"{DOMAIN}_{HOST}",
+        title=f"EcoZenith ({HOST})",
+        data={"host": HOST, CONF_MODBUS_PORT: 502, CONF_WEB_PORT: 80, CONF_SLAVE: 1},
+        options={CONF_MENU: stored, CONF_SLOW_PAGES: stored, CONF_MENU_ROOT: root},
+    )
+    entry.add_to_hass(hass)
+    assert entry.state is ConfigEntryState.NOT_LOADED
+    built: list = []
+    held: list[bool] = []
+    real = config_flow.async_search_page_locked
+
+    def client(session, host, port=80, language=1):
+        built.append(web_api.CtcWebClient(panel.session, host, port, language))
+        return built[-1]
+
+    async def noting(searching, target):
+        real_click = searching.async_click
+
+        async def click(*args, **kwargs):
+            held.append(panel_lock(entry.entry_id).locked())
+            return await real_click(*args, **kwargs)
+
+        searching.async_click = click
+        return await real(searching, target)
+
+    with (
+        patch.object(config_flow, "CtcWebClient", client),
+        patch.object(config_flow, "async_search_page_locked", noting),
+    ):
+        flow_id, result = await _tick_find_page(hass, entry)
+        assert _defaults(result["data_schema"])[PAGE] == VP1
+        result = await hass.config_entries.options.async_configure(flow_id, {PAGE: VP1})
+    assert result["step_id"] == "find_page_found"
+    assert built and all(own.root == I550_ROOT for own in built)
+    assert all(own.panel is panel_lock(entry.entry_id) for own in built)
+    assert held and all(held), "sökningen går under postens panellås"
+    assert not panel_lock(entry.entry_id).locked()
+    assert panel.page == VP1
+    _no_forbidden_press(panel)
 
 
 async def test_an_entry_on_modbus_alone_is_not_offered_the_search(hass, stubs):

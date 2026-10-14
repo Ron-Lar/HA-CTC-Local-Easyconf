@@ -360,8 +360,9 @@ class CtcWebClient:
         #: the client's own until somebody lends it another: a loaded entry
         #: puts its own in its place at every set-up, one lock for every
         #: client its reloads build, so a walk on the client of a runtime that
-        #: has since been reloaded still holds the new one's walks back. A
-        #: client the config flow builds for itself keeps its own.
+        #: has since been reloaded still holds the new one's walks back. The
+        #: client the options build for an entry that is not loaded is lent
+        #: the entry's lock as well; one the set-up flow builds keeps its own.
         self.panel = asyncio.Lock()
         self._screen_cache: dict[int, ScreenDef] = {}
         self._text_cache: dict[int, str] = {}
