@@ -559,17 +559,25 @@ CONTROL: dict[str, Text] = {
         "stops, and is therefore not shown as the heat pump's value.",
     ) + _VOLATILE,
     # R50: no pumpens värde, and no claim to show the time left. 61503 did not
-    # follow a start from here in the one test on an i255.
+    # follow a start from here in the one test on an i255. The opening sentence
+    # gives the hours only as CTC's register list has them and says the
+    # keepalive may make it last longer, since Home Assistant rewrites 1006
+    # every minute until the control is released.
     "ctl_extra_dhw": Text(
-        "Startar Extra varmvatten i så här många timmar. Reglaget visar bara det Home Assistant "
-        "håller och står tomt utan styrning. Pumpens Extra varmvatten kvar (61503) följde "
+        "Skriver Extra varmvatten (1006) med så här många timmar; enligt CTC:s registerlista "
+        "startar det Extra varmvatten så länge. Eftersom Home Assistant skriver om värdet varje "
+        "minut tills styrningen släpps kan det pågå längre, så tryck Släpp när det inte behövs. "
+        "Reglaget visar bara det Home Assistant håller och står tomt utan styrning. Pumpens Extra varmvatten kvar (61503) följde "
         "nämligen inte en start härifrån när det provades på en i255: registret stod på 0 i sju "
         "minuter medan reglaget hölls på en timme och varje skrivning nådde pumpen. Någon "
         "märkbar ändring i pumpens drift syntes inte heller, men tanken var då redan över "
         "stopptemperaturen. Om pumpen startar om sin timer vid varje omskrivning eller räknar "
         "ner från den första är inte känt.",
-        "Starts Extra hot water for this many hours. The control shows only what Home Assistant "
-        "holds and stands empty while nothing is held. The heat pump's Extra hot water left "
+        "Writes Extra hot water (1006) with this many hours; according to CTC's register list "
+        "that starts Extra hot water for that long. Since Home Assistant writes the value again "
+        "every minute until the control is released it may last longer, so press Release when "
+        "it is no longer needed. The control shows only what Home Assistant holds and stands "
+        "empty while nothing is held. The heat pump's Extra hot water left "
         "(61503) did not follow a start from here when it was tried on an i255: the register "
         "stayed at 0 for seven minutes while the control was held at one hour and every write "
         "reached the heat pump. No noticeable change in the heat pump's operation was seen "

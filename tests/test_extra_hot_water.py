@@ -149,6 +149,25 @@ def test_the_control_says_what_the_test_showed_and_claims_no_time_left(explanati
     assert "varje minut" in text and "fem minuter" in text
 
 
+def test_the_control_promises_no_start_for_so_many_hours_and_says_to_release(explanations):
+    # The opening sentence no longer states as fact that the control starts
+    # Extra hot water for the hours set: it gives that as CTC's register list
+    # has it, says the keepalive may make it last longer, and names the button
+    # that ends it, Släpp in Swedish and Release in English (F4.2, R50).
+    sv = explanations.explain("ctl_extra_dhw", "sv")
+    en = explanations.explain("ctl_extra_dhw", "en")
+    assert sv != en
+    assert "Startar Extra varmvatten i så här många timmar" not in sv
+    assert "Starts Extra hot water for this many hours" not in en
+    assert sv.startswith("Skriver Extra varmvatten (1006)")
+    assert en.startswith("Writes Extra hot water (1006)")
+    for words in ("registerlista", "Släpp", "pågå längre"):
+        assert words in sv, words
+    for words in ("register list", "Release", "last longer"):
+        assert words in en, words
+    assert "Släpp" not in en
+
+
 def test_the_stored_register_says_what_the_test_showed(explanations):
     text = explanations.explain("set_extra_dhw")
     for words in ("i255", "sju minuter", "Styr extra varmvatten", "inte känt", "inte provat"):
