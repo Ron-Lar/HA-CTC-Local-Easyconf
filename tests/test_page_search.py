@@ -192,10 +192,12 @@ def test_the_search_finds_kompressor_vp1_and_reads_it_as_the_reading_would(
     assert found.reason == page_search.FOUND and found.found
     assert described(found.page) == vp1_expected(const)
     assert found.root == I550_ROOT
-    # The heat pump's page shares its strip with Kompressor VP1, so it is
-    # searched as soon as it turns up, before the tank's twenty dead boxes:
-    # the root's 25 places but the outdoor row, then the strip's first tab.
-    assert found.tries == 23
+    # The heat pump's page shares its strip with Kompressor VP1, so of the
+    # pages one press from the root it is searched first, before the tank's
+    # twenty dead boxes: the root's 25 places, then the strip's first tab.
+    # Alike is no reason to leave the root's own places untried, since the
+    # page asked for could lie one press from the root.
+    assert found.tries == 26
     assert len(exploring(panel)) == found.tries
     assert [p for p in panel.control_presses if p.page == TANK] == []
     # The route leads there from the root, which is how the harvest goes.
@@ -290,6 +292,70 @@ def test_from_the_page_itself_the_way_home_shows_the_way_there(page_search, web_
     assert panel.page == VP1
 
 
+#: The heat pump page with two big buttons: first to Värmepump drift, which
+#: draws Kompressor VP1's strip, then to Kompressor VP1 itself.
+TO_VP_RUN = Spec(1, 40, 80, 180, 100, target=VP_RUN)
+TO_VP1 = Spec(1, 260, 80, 180, 100, target=VP1)
+
+
+def test_a_sibling_alike_does_not_lengthen_the_route(page_search, web_api):
+    # The owner types the number without walking there, so there is no
+    # trail. Värmepump drift turns up first and shares Kompressor VP1's
+    # strip, but alike is no reason to leave the heat pump page: its next
+    # button leads to the page itself, two presses from the root, where a way
+    # through the sibling would be three, a press more at every harvest and
+    # a route that breaks whenever the sibling's strip is not drawn.
+    vp_page = [heading(1105), header_icon(284, SETTINGS), TO_VP_RUN, TO_VP1]
+    panel = pt_like(dead=2, vp_page=vp_page)
+    found = search(page_search, web_api, panel)
+    assert found.found
+    assert found.page.route == [(235, 220), (350, 130)]
+    assert found.page.route == [centre(VP_AT), centre(TO_VP1)]
+    assert [p for p in panel.control_presses if p.page == VP_RUN] == []
+    assert pt_like(dead=2, vp_page=vp_page).press_at_root(found.page.route, I550_ROOT) == VP1
+
+
+def alike_below() -> FakePanel:
+    """A root with two pages under it: the first leads to a page alike, the second to the page.
+
+    Page 51 has one box, to page 53, which draws the strip page 54 draws;
+    page 52 has one box, to page 54 itself. Both lie one press from the root
+    and neither is alike, so the search takes them in the order found.
+    """
+    screens = {12: home_screen(532, 50), **OUTSIDE_SCREENS}
+    pages = {HOME: [12], **OUTSIDE_PAGES}
+    parent = {**OUTSIDE_PARENTS}
+    strip = [Spec(1, 0, 222, 150, 45, target=54), Spec(1, 150, 222, 150, 45)]
+    layout = {
+        50: [caption(949, 55), reading("%.1f", 0, y=55),
+             Spec(1, 20, 120, 100, 50, target=51), Spec(1, 200, 120, 100, 50, target=52)],
+        51: [Spec(1, 20, 120, 100, 50, target=53)],
+        52: [Spec(1, 300, 160, 100, 40, target=54)],
+        53: strip,
+        54: [caption(949, 55), reading("%.1f", 0, y=55), *strip],
+    }
+    up = {50: HOME, 51: 50, 52: 50, 53: 51, 54: 52}
+    for page, widgets in layout.items():
+        screens[page * 10] = [heading(1001), header_icon(284, SETTINGS), *widgets]
+        pages[page] = [page * 10]
+        parent[page] = up[page]
+    return FakePanel(
+        pages=pages, screens=screens, texts=PANEL_TEXTS, parent=parent,
+        home=HOME, quick=QUICK, start=HOME,
+    )
+
+
+def test_a_page_alike_further_down_waits_for_the_pages_nearer_the_root(page_search, web_api):
+    # Page 53 is alike, two presses down; page 52, one press down and not
+    # alike, is searched before it all the same, and leads to the page in
+    # two presses where the way through 53 would be three.
+    panel = alike_below()
+    found = search(page_search, web_api, panel, target=54)
+    assert found.found
+    assert found.page.route == [(250, 145), (350, 180)]
+    assert [p for p in panel.control_presses if p.page == 53] == []
+
+
 def test_from_the_page_asked_for_the_walk_home_is_the_first_thing_pressed(page_search, web_api):
     # The panel stands on the page asked for, so the search steps back from
     # it to the home screen, noting the way, and ends on it again: the walk
@@ -346,12 +412,12 @@ def test_a_page_set_aside_for_one_below_it_is_left_by_the_rest_of_the_route(
 
 
 #: Where the panel ends, by where it stood: back where it was on a page the
-#: search knows the way to, the history page not among them since the search
-#: found Kompressor VP1 before it tried the history; outside the menu, and on
-#: a page it does not know the way to, on the home screen.
+#: search knows the way to, the history page among them since the root's
+#: every place is tried before the heat pump's strip; outside the menu, and
+#: on a page it does not know the way to, on the home screen.
 ENDS = {
     HOME: HOME, SETTINGS: HOME, QUICK: HOME, I550_ROOT: I550_ROOT, VP: VP, VP1: VP1,
-    TANK: TANK, I550_HISTORY: HOME,
+    TANK: TANK, I550_HISTORY: I550_HISTORY,
 }
 
 
