@@ -55,7 +55,11 @@ and source from explanations.py, while the integration's own entity names follow
 same language through their translations. What the panel prints stays the panel's:
 a display row is named by its row on the panel, read in Swedish whatever the panel or
 Home Assistant is set to, and the controller's states and modes are its own Swedish
-words, which automations and the history rest on.
+words, which automations and the history rest on. The small line under a coefficient
+of performance or a share of auxiliary heat is the page's own text, though it is read
+from attributes that stay Swedish for automations (underlag and skäl, beside basis and
+reason): the cards are handed a table that puts it in the page's language
+(story_words), and a line the table does not know is shown as it is.
 """
 
 from __future__ import annotations
@@ -64,6 +68,13 @@ from collections.abc import Iterable, Mapping
 import re
 from typing import Any
 
+from .cop import (
+    BASIS_WORDS,
+    SHARE_BOTH_STUCK,
+    SHARE_IMMERSION_SILENT,
+    SHARE_IMMERSION_UNREAD,
+    SHARE_NOT_SAMPLED,
+)
 from .explanations import display_explanation, explain, source
 
 URL_PATH = "ctc-ecozenith"
@@ -420,6 +431,16 @@ TEXT = {
         ),
         "state_pump_value": "pumpen själv",
         "state_release": "Släpp",
+        # R23, R28: what a coefficient of performance or a share of auxiliary
+        # heat rests on, the line under the figure, by span. The same words as
+        # cop.BASIS_WORDS, which the attribute underlag carries in every
+        # language; an English page puts its own in their place (story_words).
+        "basis_year": "rullande år",
+        "basis_day": "senaste dygnet",
+        "basis_week": "senaste 7 dygnen",
+        "basis_month": "senaste 30 dygnen",
+        "basis_first_year": "första året",
+        "basis_lifetime": "hela livslängden",
         # For an entity this layout does not know yet, from a newer integration.
         "unknown_explanation": (
             "Ett värde från integrationen som sidan ännu inte har någon egen förklaring för."
@@ -508,6 +529,12 @@ TEXT = {
         ),
         "state_pump_value": "pump's own",
         "state_release": "Release",
+        "basis_year": "rolling year",
+        "basis_day": "last day",
+        "basis_week": "last 7 days",
+        "basis_month": "last 30 days",
+        "basis_first_year": "first year",
+        "basis_lifetime": "whole lifetime",
         "unknown_explanation": (
             "A value from the integration that the page has no explanation of its own for yet."
         ),
@@ -556,6 +583,141 @@ def state_words(text: Mapping[str, str]) -> dict[str, str]:
     return {
         key[len(_STATE_PREFIX):]: value
         for key, value in text.items() if key.startswith(_STATE_PREFIX)
+    }
+
+
+#: What TEXT calls the words for each span the line under a figure names.
+_BASIS_PREFIX = "basis_"
+
+#: The reasons a coefficient of performance or a share of auxiliary heat gives
+#: for an empty figure that are always the same words, as cop.py writes them
+#: in the attribute skäl, and what an English page says instead. The ones cop
+#: names are taken from it; the others are literals there and written out here
+#: word for word, which tests/test_card_readings.py holds to what cop.py's own
+#: functions give.
+_REASON_WORDS: dict[str, dict[str, str]] = {
+    "en": {
+        SHARE_NOT_SAMPLED: (
+            "the samples in the basis lack the immersion heater's counter; newer samples have "
+            "it, so the share comes when such a sample is old enough"
+        ),
+        SHARE_IMMERSION_UNREAD: (
+            "the immersion heater's counter has not been read together with the display's "
+            "counters since Home Assistant started"
+        ),
+        SHARE_IMMERSION_SILENT: (
+            "register 62191 has not answered, so the immersion heater's counter is missing"
+        ),
+        SHARE_BOTH_STUCK: (
+            "both counters stand at zero although the unit has been running; the controller "
+            "does not fill them"
+        ),
+        "räknarna har inte lästs": "the counters have not been read",
+        "första året är inte fullt ännu": "the first year is not complete yet",
+        "driftstarten är okänd": "the day the unit was commissioned is unknown",
+        "registret 62341 har inte svarat, så tillförd energi saknas": (
+            "register 62341 has not answered, so the consumed energy is missing"
+        ),
+        "väntar på ett prov som är 20 till 30 timmar gammalt": (
+            "waiting for a sample 20 to 30 hours old"
+        ),
+        "räknaren står på noll fast enheten varit igång, styrenheten fyller den inte": (
+            "the counter stands at zero although the unit has been running; the controller "
+            "does not fill it"
+        ),
+        "displayen har inte svarat sedan Home Assistant startade": (
+            "the display has not answered since Home Assistant started"
+        ),
+    },
+}
+
+#: The reasons with a figure, a date or a row name in them, as cop.py's
+#: f-strings write them: a regular expression for the Swedish line, anchored
+#: at both ends, and the page's words with $1, $2 for what it caught, the way
+#: the card's String.replace takes them. A row name stays the panel's, as on
+#: the rest of the page. A spelling that changes in cop.py without a change
+#: here is shown as it is, in Swedish, and fails tests/test_card_readings.py.
+_REASON_PATTERNS: dict[str, tuple[tuple[str, str], ...]] = {
+    "en": (
+        (
+            r"^(\d+) av (\d+) dygn samlade, äldsta provet (.+)$",
+            "$1 of $2 days collected, oldest sample $3",
+        ),
+        (
+            r"^(\d+) av (\d+) dygn samlade, inget prov med elpatronens räknare sparat ännu$",
+            "$1 of $2 days collected, no sample with the immersion heater's counter kept yet",
+        ),
+        (
+            r"^(\d+) av (\d+) dygn samlade, inget prov sparat ännu$",
+            "$1 of $2 days collected, no sample kept yet",
+        ),
+        (
+            r"^inget sparat prov är (\d+) till (\d+) dygn gammalt$",
+            "no kept sample is $1 to $2 days old",
+        ),
+        (
+            r"^väntar på ett prov som är (\d+) till (\d+) timmar gammalt$",
+            "waiting for a sample $1 to $2 hours old",
+        ),
+        (
+            r"^för lite energi ännu, (-?[\d.]+) av (-?[\d.]+) kWh$",
+            "too little energy so far, $1 of $2 kWh",
+        ),
+        (
+            r"^kvoten (\S+) är orimlig, räknarna hör inte ihop$",
+            "the quotient $1 is implausible; the counters do not belong together",
+        ),
+        (
+            r"^displayen har inte svarat sedan (.+)$",
+            "the display has not answered since $1",
+        ),
+        (
+            r"^displayens rad (.+) har inte lästs sedan (\S+)$",
+            "the display's row $1 has not been read since $2",
+        ),
+        (
+            r"^räknarna har gått bakåt sedan (.+), enheten är bytt eller nollställd$",
+            "the counters have gone backwards since $1; the unit has been replaced or reset",
+        ),
+        (
+            r"^båda räknarna har stått still sedan (.+)$",
+            "both counters have stood still since $1",
+        ),
+        (
+            r"^kompressorns räknare står på noll fast kompressorn har gått (\d+) timmar, "
+            r"styrenheten fyller den inte$",
+            "the compressor's counter stands at zero although the compressor has run for $1 "
+            "hours; the controller does not fill it",
+        ),
+    ),
+}
+
+
+def story_words(text: Mapping[str, str]) -> dict[str, Any] | None:
+    """The line under a figure in the page's language, as the cards take it under "story".
+
+    What a coefficient of performance or a share of auxiliary heat rests on,
+    and why it has no figure, are attributes whose values stay Swedish for
+    automations (roadmap R23); the card draws one of them under the figure.
+    ``words`` puts a whole line in the page's words: the six spans from
+    BASIS_WORDS, by TEXT's basis_ entries, and the reasons that are always the
+    same words. ``patterns`` does the same for the reasons with a figure or a
+    date in them, first match wins. A line neither knows is drawn as it is.
+    None on a Swedish page, whose words are the attributes' own.
+    """
+    lang = language(text.get("language"))
+    if lang == "sv":
+        return None
+    words = {
+        swedish: text[f"{_BASIS_PREFIX}{span}"]
+        for span, swedish in BASIS_WORDS.items() if f"{_BASIS_PREFIX}{span}" in text
+    }
+    words.update(_REASON_WORDS.get(lang, {}))
+    return {
+        "words": words,
+        "patterns": [
+            {"match": match, "text": said} for match, said in _REASON_PATTERNS.get(lang, ())
+        ],
     }
 
 
@@ -658,6 +820,8 @@ class _Builder:
         #: The language the explanations are given in: the language of the
         #: words the tab is built with, which is the page's.
         self.lang = language(text.get("language"))
+        #: The line under a figure in that language, or None on a Swedish page.
+        self.story = story_words(text)
 
     def explanation(self, key: str) -> dict[str, str]:
         """What a value is and where it comes from, in the page's language, for the card."""
@@ -745,7 +909,7 @@ class _Builder:
     def _card(self, kind: str, field: str, items: list[dict[str, Any]]) -> dict[str, Any] | None:
         if not items:
             return None
-        return {
+        card: dict[str, Any] = {
             "type": kind,
             field: items,
             "more_info": self.text["more_info"],
@@ -754,6 +918,12 @@ class _Builder:
             # A section can be several columns wide, and a card of values fills it.
             "grid_options": {"columns": "full"},
         }
+        # The line under a figure in the page's language, once per card and
+        # only on a card that draws one; a Swedish page has none to send.
+        story = self.story if any("sub" in item for item in items) else None
+        if story is not None:
+            card["story"] = story
+        return card
 
     @staticmethod
     def _hide_when_empty(card: dict[str, Any] | None, items: list[dict[str, Any]]) -> None:

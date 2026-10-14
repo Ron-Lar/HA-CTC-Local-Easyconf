@@ -540,8 +540,10 @@ everything held.
 The coefficient of performance says under its figure what it rests on, the
 last day, the last seven or thirty days, a rolling year, the first year or the
 whole life, and while it has no figure it says why instead: no sample old
-enough yet, too little energy so far, a counter standing still. It stays on the
-page as long as its sensor does.
+enough yet, too little energy so far, a counter standing still. The share of
+auxiliary heat does the same, and the page says both lines in its own
+language, though the attributes behind them stay Swedish (see
+[Language](#language)). Each stays on the page as long as its sensor does.
 
 The cards are the integration's own rather than Home Assistant's tiles, because
 a heat pump has a hundred values and they have to fit on a screen: chips for the
@@ -664,9 +666,13 @@ The integration follows the language Home Assistant is set to, under
 *Settings, System, General*: Swedish when that is Swedish, English for every
 other language. That covers the CTC page, its headings, its words for states
 and every explanation and source line behind the ⓘ, and the names of the
-integration's own entities, which come from its translations. The setup and
-options forms, the repairs view and the actions have always followed Home
-Assistant's language the same way.
+integration's own entities, which come from its translations. After a change
+of language the page changes the next time it is opened, and the entity names
+at the next restart of Home Assistant or reload of the entry; the integration
+does not reload itself for it, since a reload reads the display again and moves
+its panel. The system language under *Settings, System, General* sets the page
+and the names, while the setup and options forms, the repairs view and the
+actions follow the language of each user's own profile.
 
 Some things stay as they are whatever the language:
 
@@ -690,9 +696,12 @@ Some things stay as they are whatever the language:
   gets ids from the names in its language, `sensor.ctc_ecozenith_i255_outdoor_temperature`
   in English and the Swedish ids as before in Swedish. A name you gave an
   entity yourself is kept.
-- **Attribute values in text stay Swedish**, such as the reason under the
-  coefficient of performance; the attribute names have English twins, see
-  [Attribute names](#attribute-names).
+- **Attribute values in text stay Swedish**, such as the reason a coefficient
+  of performance gives for an empty figure, so that automations read the same
+  words in every language; the attribute names have English twins, see
+  [Attribute names](#attribute-names). The CTC page shows the line under the
+  figure, what it rests on or why it has none, in the page's language all the
+  same.
 
 ## In the Energy dashboard
 
@@ -807,13 +816,16 @@ control registers, and the first writes nothing at all.
   controller goes back to its own setting within about five minutes, and every
   other override stays as it is. An energy manager can drop a power limit
   without letting go of the hot water. An entity that is not a control of a
-  loaded heat pump is refused, and then nothing in the call is released.
+  loaded heat pump is refused, and then nothing in the call is released. In
+  the example, put your own model in place of `i255`; an installation from
+  before the translations, or one in Swedish, has
+  `number.ctc_ecozenith_i255_styr_max_elpatron_nedre` instead.
 
   ```yaml
   action: ctc_ecozenith.release
   data:
     entity_id:
-      - number.ctc_ecozenith_i255_styr_max_elpatron_nedre
+      - number.ctc_ecozenith_i255_control_max_lower_immersion_heater
   ```
 
 - **`ctc_ecozenith.reread_menu`** reads the display's menu again, the same
