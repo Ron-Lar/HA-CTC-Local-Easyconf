@@ -664,12 +664,83 @@ def test_the_root_asked_for_is_found_at_once(page_search, web_api, const):
     assert found.page.title == "Driftinfo system"
 
 
-def test_a_home_screen_that_cannot_be_recognised_gets_no_control_pressed(page_search, web_api):
-    panel = pt_like(start=VP1, english_missing=frozenset({570}))
+#: The two ways the tile's caption is not read: the display answers nothing
+#: in English, or it does not answer at all, twice, which the client counts
+#: as a caption it would not give up (CtcWebClient.text_misses).
+UNREAD_TILE = {
+    "english_missing": {"english_missing": frozenset({570})},
+    "silent": {"silent": frozenset({"/txt/0/570"})},
+}
+
+
+@pytest.mark.parametrize("unread", sorted(UNREAD_TILE))
+def test_a_home_screen_that_cannot_be_recognised_gets_no_control_pressed(
+    page_search, web_api, unread
+):
+    # The walk home steps back from the page asked for to the home screen,
+    # whose tile does not read just now: it stops there without a press, so
+    # the quick menu is never opened, and the search says it found no menu.
+    panel = pt_like(start=VP1, **UNREAD_TILE[unread])
     found = search(page_search, web_api, panel)
     assert found.reason == page_search.NO_MENU
     assert panel.control_presses == []
-    assert sum(1 for p in panel.presses if p.page == HOME) <= 1, "snabbmenyn högst en gång"
+    assert [p for p in panel.presses if p.page == HOME] == [], "snabbmenyn öppnas aldrig"
+    assert QUICK not in panel.shown
+    assert panel.page == HOME
+
+
+#: What the walk home presses before it stops on the unread home screen, by
+#: where the panel stood: on the home screen nothing, from the root the
+#: panel's own button once.
+UNREAD_WALKS = {HOME: [], I550_ROOT: [(I550_ROOT, "back")]}
+
+
+@pytest.mark.parametrize("unread", sorted(UNREAD_TILE))
+@pytest.mark.parametrize("root", [None, I550_ROOT])
+@pytest.mark.parametrize("start", sorted(UNREAD_WALKS))
+def test_from_the_home_screen_or_the_root_an_unread_tile_presses_nothing_on_the_home_screen(
+    page_search, web_api, start, root, unread
+):
+    # A client that does not know the home screen yet: an entry reloaded a
+    # moment ago, one that is not loaded, or one without a ticked page, with
+    # and without the root from the stored menu. Neither the page the panel
+    # starts on, which may itself be the home screen, nor the page one step
+    # up from the root gets the button that opens the quick menu.
+    panel = pt_like(start=start, **UNREAD_TILE[unread])
+    client = panel.client(web_api)
+    client.root = root
+    found = run(page_search.async_search_page(client, VP1))
+    assert found.reason == page_search.NO_MENU
+    assert [(p.page, p.took) for p in panel.presses] == UNREAD_WALKS[start]
+    assert QUICK not in panel.shown
+    assert panel.page == HOME
+
+
+def test_an_unread_caption_on_the_root_does_not_keep_the_walk_there(page_search, web_api):
+    # The root is never the home screen: a running entry's client knows it,
+    # so a caption on it that does not answer does not stop the walk home.
+    unread = Spec(3, 10, 120, 140, 30, text=2005)
+    panel = pt_like(
+        start=I550_ROOT, extra_root=(unread,), silent=frozenset({"/txt/1/2005", "/txt/0/2005"})
+    )
+    client = panel.client(web_api)
+    client.root = I550_ROOT
+    found = run(page_search.async_search_page(client, VP1))
+    assert found.found
+    assert panel.presses[0].page == I550_ROOT and panel.presses[0].took == "back"
+    assert [p for p in panel.presses if p.page == HOME and (p.x, p.y) == BACK] == []
+
+
+def test_the_way_home_from_another_page_is_no_hint(page_search, web_api):
+    # The walk home is made from every page the panel stands on, but only the
+    # way from the page asked for says where that page lies: from the heat
+    # pump page the search goes as it goes from the home screen, and the
+    # tank's dead boxes spend the budget.
+    panel = far_parent(start=VP)
+    found = search(page_search, web_api, panel)
+    assert found.reason == page_search.NOT_FOUND
+    assert found.tries == page_search.MAX_TAPS
+    assert panel.presses[0].page == VP and panel.presses[0].took == "back"
 
 
 # ------------------------------------------------------------- the panel lock
