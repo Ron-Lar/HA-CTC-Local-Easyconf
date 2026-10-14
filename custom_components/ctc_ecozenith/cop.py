@@ -1242,10 +1242,14 @@ class ImmersionSnapshot(ConsumptionSnapshot):
 
     The share of auxiliary heat sets the immersion heater's counter against
     the compressor's, which is read with the display, so the two are taken at
-    the same moment for the reason :class:`ConsumptionSnapshot` gives. Nothing
-    of it is written down for a restart: until the display is read again the
-    snapshot is empty, and a sample written down meanwhile has no immersion
-    heater, which the share passes over.
+    the same moment for the reason :class:`ConsumptionSnapshot` gives. It is
+    written down with the harvest, as the consumption is, and seeded back as
+    the pair of the moment the display store comes back with, so the sample
+    taken at start-up keeps it rather than replacing the day's sample with
+    one that has none. Where the store has none, as one written before it
+    was kept, the snapshot is empty until the display is read again, and a
+    sample written down meanwhile has no immersion heater, which the share
+    passes over.
     """
 
     @staticmethod

@@ -1412,12 +1412,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
             # The immersion heater's counter, taken when delivered heat is
             # read, as the consumption above, so a sample and the share of
             # auxiliary heat set it against the compressor's counter of the
-            # same moment. Nothing is kept for a restart: the moment the
-            # display store comes back with is the snapshot's, empty, so a
-            # fresh Modbus reading is never paired with an old display one.
+            # same moment. Written down with the harvest and brought back
+            # here as the pair of the moment the display store comes back
+            # with, so the sample taken at start-up keeps it; a fresh Modbus
+            # reading is never paired with an old display one. A store
+            # written before it was kept has none, and that sample has no
+            # immersion heater, which the share passes over.
             immersion = ImmersionSnapshot()
             immersion_key = runtime.energy_out.key
-            immersion.seed(web.last_read(immersion_key), None)
+            immersion.seed(
+                web.last_read(immersion_key), stored.immersion if stored is not None else None
+            )
 
             def _take_immersion() -> None:
                 immersion.update(
@@ -1449,13 +1454,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
 
         def _remember() -> None:
             # After every refresh, written only when a harvest actually ran;
-            # after the consumption listener, so the pair goes in together.
+            # after the consumption and immersion heater listeners, so each
+            # pair goes in together.
             paired = runtime.consumption_snapshot
+            heater = runtime.immersion_snapshot
             memory.remember(
                 web.data,
                 web.read_at,
                 web.last_harvest,
                 paired.value if paired is not None else None,
+                heater.value if heater is not None else None,
             )
 
         entry.async_on_unload(web.async_add_listener(_remember))

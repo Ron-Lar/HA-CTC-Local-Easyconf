@@ -75,6 +75,13 @@ def parse_moment(text: Any) -> datetime | None:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
+def _number(value: Any) -> float | None:
+    """A stored Modbus counter back into a float, or None where it is no number."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
 @dataclass
 class StoredHarvest:
     """What the last harvest left: the values, when each was read, and when it ran."""
@@ -87,6 +94,11 @@ class StoredHarvest:
     #: Kept beside the display values so the pair survives a restart as a
     #: pair; see cop.ConsumptionSnapshot.
     consumption: float | None = None
+    #: Modbus 62191, the immersion heater's counter, as it stood at that same
+    #: moment, on every installation with a coefficient of performance, kept
+    #: for the same reason (roadmap R28); see cop.ImmersionSnapshot. A file
+    #: from before has none, and the release before reads past it.
+    immersion: float | None = None
 
     @property
     def latest(self) -> datetime | None:
@@ -122,6 +134,7 @@ class StoredHarvest:
             read_at=read_at,
             harvested_at=self.harvested_at,
             consumption=self.consumption,
+            immersion=self.immersion,
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -130,6 +143,7 @@ class StoredHarvest:
             "read_at": {key: moment.isoformat() for key, moment in self.read_at.items()},
             "harvested_at": self.harvested_at.isoformat() if self.harvested_at else None,
             "consumption": self.consumption,
+            "immersion": self.immersion,
         }
 
     @classmethod
@@ -155,14 +169,12 @@ class StoredHarvest:
         # A value whose moment is unknown cannot be judged fresh, so it is of
         # no use to the sensors and is left out.
         values = {key: value for key, value in values.items() if key in read_at}
-        consumption = stored.get("consumption")
-        if isinstance(consumption, bool) or not isinstance(consumption, (int, float)):
-            consumption = None
         harvest = cls(
             values=values,
             read_at=read_at,
             harvested_at=parse_moment(stored.get("harvested_at")),
-            consumption=None if consumption is None else float(consumption),
+            consumption=_number(stored.get("consumption")),
+            immersion=_number(stored.get("immersion")),
         )
         return harvest if harvest.latest is not None else None
 
@@ -213,12 +225,15 @@ class HarvestMemory:
         read_at: Mapping[str, datetime],
         harvested_at: datetime | None,
         consumption: float | None = None,
+        immersion: float | None = None,
     ) -> bool:
         """Write the harvest down, once per harvest. True when a save was scheduled.
 
         Called from the coordinator's listeners, which run after every
         refresh, a skipped or failed one included; only a harvest that
-        actually ran since the last save is written.
+        actually ran since the last save is written. ``consumption`` and
+        ``immersion`` are the Modbus counters taken when the display's heat
+        counter was read, written down with it so they come back as its pair.
         """
         if harvested_at is None or harvested_at == self._remembered_at:
             return False
@@ -231,6 +246,7 @@ class HarvestMemory:
             read_at={key: moment for key, moment in read_at.items() if key in (values or {})},
             harvested_at=harvested_at,
             consumption=consumption,
+            immersion=immersion,
         )
         payload = harvest.as_dict()
 

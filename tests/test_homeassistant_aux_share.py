@@ -8,8 +8,9 @@ compressor counter at zero beside a compressor that has run gives no share and
 says why. The sample the six hour timer writes carries the immersion heater's
 counter of the same moment, in a store at minor 2, a store an older release
 wrote at minor 1 is read and brought up, and the release before reads the new
-file through Home Assistant's own Store without a refusal. What can be read
-without a core is in test_aux_share.py.
+file through Home Assistant's own Store without a refusal. The sample taken
+when the entry is set up again keeps the counter written down with the
+harvest. What can be read without a core is in test_aux_share.py.
 
 Shares the stand-ins and fixtures of test_homeassistant.py and the answering
 panel of test_homeassistant_harvest.py, and runs the same way:
@@ -65,7 +66,7 @@ from custom_components.ctc_ecozenith.cop import (
     STORAGE_MINOR_VERSION,
     CopTracker,
 )
-from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
+from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY, SAVE_DELAY_SECONDS
 
 HISTORY = 25
 HEAT = "p25_avgiven_varme_totalt"
@@ -279,3 +280,35 @@ async def test_the_release_before_opens_the_new_file_without_a_refusal(hass, has
     await again.async_load()
     assert again._recent[0][3] == 1.0
     assert hass_storage[key]["minor_version"] == 2
+
+
+async def test_the_sample_at_a_reload_keeps_the_immersion_heater_of_the_harvest(
+    hass, hass_storage, monkeypatch
+):
+    # F2.2: the six hour timer writes a sample with the counter, a harvest
+    # after it is written down with 62191 beside the heat counter, and the
+    # entry is set up again, as saved options or a restart do.
+    _pump(monkeypatch, heat=22020, consumed=9020, immersion=1, compressor_hours=8000)
+    entry = await _entry(hass)
+    await _harvested(hass, entry)
+    await _fire(hass, COP_SAMPLE_INTERVAL.total_seconds() + 10)
+    timer = hass_storage[_cop_key(entry)]["data"]["recent"][-1]
+    assert timer[3] == 1.0
+    monkeypatch.setattr(CounterPanel, "counters", [22021, 9021])
+    await _fire(hass, INTERVAL + 1)
+    await _fire(hass, SAVE_DELAY_SECONDS + 1)
+    display = hass_storage[f"{DOMAIN}_{entry.entry_id}_display"]
+    assert (display["version"], display["minor_version"]) == (1, 1)
+    assert display["data"]["immersion"] == 1.0
+    read = display["data"]["read_at"][HEAT]
+    assert read > timer[0], "the harvest is newer than the timer's sample"
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    stored = hass_storage[_cop_key(entry)]["data"]
+    # The sample of the stored harvest's moment replaces the day's, and
+    # keeps the immersion heater's counter rather than dropping it.
+    assert stored["recent"][-1] == [read, 22021.0, 9021.0, 1.0]
+    day = dt_util.parse_datetime(read).date().isoformat()
+    assert stored["samples"][day] == [22021.0, 9021.0, 1.0]
