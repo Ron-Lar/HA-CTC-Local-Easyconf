@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+import json
 import pathlib
 
 import pytest
@@ -97,6 +98,33 @@ def test_what_cannot_be_judged_is_left_out_of_the_seed(harvest):
     )
 
 
+def test_the_immersion_heater_is_written_down_beside_the_consumption(harvest):
+    # The pair of 62191 for the heat counter's moment (R28, F2.2).
+    before = _stored(harvest, timedelta(minutes=10), consumption=9166.0, immersion=1.0)
+    payload = before.as_dict()
+    assert payload["immersion"] == 1.0
+    assert harvest.StoredHarvest.from_dict(payload).immersion == 1.0
+    # A store 0.21.1 wrote has no such key, and its harvest reads as before.
+    older = {key: value for key, value in payload.items() if key != "immersion"}
+    stored = harvest.StoredHarvest.from_dict(older)
+    assert stored.immersion is None
+    assert (stored.values, stored.read_at, stored.consumption) == (
+        before.values, before.read_at, 9166.0
+    )
+    # The same check as the consumption's: no number, no counter.
+    for junk in ("1", True, None, [1.0]):
+        assert harvest.StoredHarvest.from_dict({**payload, "immersion": junk}).immersion is None
+    assert harvest.StoredHarvest.from_dict({**payload, "immersion": 0}).immersion == 0.0
+    # It moves with the rows when their keys move (L2).
+    moved = before.renamed({"p22_avgiven_varme": "p22_s220_v0"})
+    assert (moved.immersion, moved.consumption) == (1.0, 9166.0)
+    # The display store stays at version 1: the key is new, the shape is not.
+    assert harvest.STORAGE_VERSION == 1
+    assert 'Store(hass, HARVEST_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_display")' in (
+        _source("__init__.py")
+    )
+
+
 def test_a_moment_without_a_zone_is_taken_as_utc(harvest):
     assert harvest.parse_moment("2026-10-09T11:50:00") == datetime(
         2026, 10, 9, 11, 50, tzinfo=UTC
@@ -111,9 +139,9 @@ def test_the_memory_writes_once_per_harvest(harvest):
     harvested = NOW
     values = {"p22_avgiven_varme": 11.1, "gone": None}
     read_at = {"p22_avgiven_varme": harvested, "stale_key": harvested - timedelta(days=1)}
-    assert memory.remember(values, read_at, harvested, 9166.0)
+    assert memory.remember(values, read_at, harvested, 9166.0, 1.0)
     # Every refresh calls again, a skipped or failed one included: no new save.
-    assert not memory.remember(values, read_at, harvested, 9166.0)
+    assert not memory.remember(values, read_at, harvested, 9166.0, 1.0)
     assert not memory.remember(values, read_at, None)
     assert memory.remember(values, read_at, harvested + timedelta(minutes=30))
     assert len(store.saves) == 2
@@ -122,7 +150,8 @@ def test_the_memory_writes_once_per_harvest(harvest):
     # Only numbers, and only moments of keys that are in the data.
     assert payload["values"] == {"p22_avgiven_varme": 11.1}
     assert set(payload["read_at"]) == {"p22_avgiven_varme"}
-    assert payload["consumption"] == 9166.0
+    assert (payload["consumption"], payload["immersion"]) == (9166.0, 1.0)
+    assert store.saves[1][0]["immersion"] is None
 
 
 def test_the_memory_knows_what_it_loaded(harvest):
@@ -278,6 +307,69 @@ def test_the_consumption_pair_comes_back_as_a_pair(cop):
     assert empty.value is None
 
 
+class SampleStore:
+    """The coefficient of performance's store, through JSON like the file."""
+
+    def __init__(self) -> None:
+        self.data = None
+
+    async def async_load(self):
+        return None if self.data is None else json.loads(json.dumps(self.data))
+
+    async def async_save(self, data):
+        self.data = json.loads(json.dumps(data))
+
+
+def _restart_after_a_timer_sample(harvest, cop, *, kept: bool):
+    """A timer sample with the counter, a harvest after it, a restart, the start's sample.
+
+    As set-up does it: the display store loaded, the immersion heater's
+    snapshot seeded with the moment the heat counter came back with and
+    what was written down beside it, and the sample of that moment taken.
+    """
+    heat, consumed = "p25_avgiven_varme_totalt", "p25_tillford_energi_totalt"
+    samples = SampleStore()
+    tracker = cop.CopTracker(samples)
+    timer = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
+    run(tracker.async_record(22020.0, 9020.0, now=timer, immersion=1.0))
+    # The harvest at 20:45 reads the counters, and 62191 with them.
+    read = timer + timedelta(minutes=45)
+    snapshot = cop.ImmersionSnapshot()
+    snapshot.update(read, {"immersion_kwh": 1.0})
+    store = FakeStore()
+    memory = harvest.HarvestMemory(store)
+    assert memory.remember(
+        {heat: 22021.0, consumed: 9021.0}, {heat: read, consumed: read}, read, None,
+        snapshot.value if kept else None,
+    )
+    # Home Assistant starts again at 21:00, or the entry is reloaded.
+    stored = run(harvest.HarvestMemory(FakeStore(store.saves[-1][0])).async_load())
+    seeded = cop.ImmersionSnapshot()
+    seeded.seed(stored.read_at[heat], stored.immersion)
+    # A Modbus poll after the start, with the display not read again: the pair stands.
+    seeded.update(stored.read_at[heat], {"immersion_kwh": 5.0})
+    again = cop.CopTracker(samples)
+    moment = stored.read_at[heat]
+    run(again.async_record(
+        stored.values[heat], stored.values[consumed], now=moment,
+        immersion=seeded.value_at(moment),
+    ))
+    return samples.data, timer.date().isoformat()
+
+
+def test_the_sample_at_a_restart_keeps_the_immersion_heater_written_down_with_the_harvest(
+    harvest, cop
+):
+    # F2.2: the start's sample replaces the day's, and keeps its third number.
+    data, day = _restart_after_a_timer_sample(harvest, cop, kept=True)
+    assert data["samples"][day] == [22021.0, 9021.0, 1.0]
+    assert [len(row) for row in data["recent"]] == [4, 4]
+    # A store from before the counter was written down, as at the first
+    # start after the update, still gives a day without it: expected.
+    data, day = _restart_after_a_timer_sample(harvest, cop, kept=False)
+    assert data["samples"][day] == [22021.0, 9021.0]
+
+
 # ------------------------------------------------------------- in code
 
 
@@ -294,6 +386,17 @@ def test_the_set_up_seeds_the_coordinator_and_remembers_after_each_harvest():
     # The energy counters are recorded with the moment they were read.
     assert "_record_cop(read_at=" in setup
     assert "snapshot.seed(" in setup
+    # The immersion heater's counter is written down with the harvest and
+    # seeded back with it (F2.2), and is taken before it is written down:
+    # the coordinator calls its listeners in the order they were added.
+    seed = setup.split("immersion.seed(")[1].split("\n\n")[0]
+    assert "web.last_read(immersion_key)" in seed
+    assert "stored.immersion if stored is not None else None" in seed
+    remember = setup.split("def _remember()")[1].split("entry.async_on_unload(")[0]
+    assert "runtime.immersion_snapshot" in remember
+    assert setup.index("web.async_add_listener(_take_immersion)") < setup.index(
+        "web.async_add_listener(_remember)"
+    )
 
 
 def test_removing_the_entry_takes_all_three_stores_with_it():
