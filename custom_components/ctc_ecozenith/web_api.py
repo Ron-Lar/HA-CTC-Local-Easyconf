@@ -757,13 +757,22 @@ class CtcWebClient:
             # so a step that leaves the panel where it was means the way is
             # not there just now: the i550 Pro's root draws some tiles only in
             # some operating states. The walk ends there, one tap spent, and
-            # does not press on into whatever the next step would hit.
+            # does not press on into whatever the next step would hit. So
+            # does a step that lands on the home screen, on the root or on a
+            # page this walk has passed already, none of which a recorded
+            # route ever leads to: another tile in the same place leads
+            # elsewhere just now, and the next step there is another control.
+            # The pages in between are not stored with the route, so a step
+            # that lands on some other page of the menu is not told from one
+            # that arrived until the walk ends.
             here = await self.async_current_page()
+            passed = {here}
             for x, y in route:
                 await self.async_click(page_map.get(here, []), x, y)
                 landed = await self.async_current_page()
-                if landed == here:
+                if landed in passed or landed in (self._home, self.root):
                     return False
+                passed.add(landed)
                 here = landed
             return here == target
 

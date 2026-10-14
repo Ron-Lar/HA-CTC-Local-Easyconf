@@ -1145,6 +1145,55 @@ STUCK = "stuck"
 _BACK_HOPS = 6
 
 
+def _pages_by_route(
+    routes: Mapping[int, list[tuple[int, int]]] | None,
+) -> dict[tuple[tuple[int, int], ...], int]:
+    """The page each recorded route led to, by the route: where a step of a replay should land."""
+    return {tuple(route): page for page, route in (routes or {}).items()}
+
+
+async def _async_replay_steps(
+    client: CtcWebClient,
+    page_map: dict[int, list[int]],
+    here: int,
+    route: list[tuple[int, int]],
+    done: int,
+    passed: Mapping[tuple[tuple[int, int], ...], int],
+    home: int,
+) -> int | None:
+    """Press the rest of a route, from step ``done`` on, every landing checked.
+
+    ``passed`` is the page each recorded route led to, by the route, so
+    every prefix of this one names the page its last step reached when the
+    route was recorded. A step is pressed only from a page the panel shows,
+    never on the home screen, whose places are tiles and not the route's.
+    The replay ends at the first step that leaves the panel where it was,
+    or lands anywhere but the page that prefix led to, the home screen and
+    a page outside the menu among them: the next step's place on another
+    page is some other control. Where a prefix names no page, a landing on
+    the home screen or on a page the replay has already passed ends it all
+    the same. Returns the page the last step landed on, or None where the
+    replay ended early.
+    """
+    seen = {here}
+    for step in range(done, len(route)):
+        if here == home:
+            return None
+        x, y = route[step]
+        await client.async_click(page_map.get(here, []), x, y)
+        landed = await client.async_current_page()
+        expected = passed.get(tuple(route[: step + 1]))
+        if (
+            landed in seen
+            or landed == home
+            or (expected is not None and landed != expected)
+        ):
+            return None
+        seen.add(landed)
+        here = landed
+    return here
+
+
 async def _async_put_back(
     client: CtcWebClient,
     page_map: dict[int, list[int]],
@@ -1152,6 +1201,7 @@ async def _async_put_back(
     route: list[tuple[int, int]],
     root: int,
     home: int,
+    routes: Mapping[int, list[tuple[int, int]]] | None = None,
 ) -> str:
     """Walk the panel to a page of the operation data menu by its recorded route.
 
@@ -1166,8 +1216,13 @@ async def _async_put_back(
     the walk: every step was recorded because it led somewhere, so the way
     is not there just now (the i550 Pro's root draws some of its tiles only
     in some operating states), and nothing is pressed on into whatever the
-    next step would hit. No step of a recorded route is under the heading,
-    since the sweep never presses there.
+    next step would hit. So does a step that lands anywhere but the page it
+    led to when it was recorded, which ``routes``, every page the walk
+    reached by its route, says by the route's prefix (_async_replay_steps):
+    another tile in the same place, in another operating state, leads
+    elsewhere, and the next step there is another control. No step is
+    pressed on the home screen, and no step of a recorded route is under the
+    heading, since the sweep never presses there.
 
     Returns ARRIVED, ASTRAY or STUCK.
     """
@@ -1190,13 +1245,10 @@ async def _async_put_back(
         here = await client.async_current_page()
         if here != root:
             return ARRIVED if here == page else ASTRAY
-    for x, y in route:
-        await client.async_click(page_map.get(here, []), x, y)
-        landed = await client.async_current_page()
-        if landed == here:
-            return ASTRAY
-        here = landed
-    return ARRIVED if here == page else ASTRAY
+    passed = _pages_by_route(routes)
+    passed[tuple(route)] = page
+    landed = await _async_replay_steps(client, page_map, here, route, 0, passed, home)
+    return ARRIVED if landed == page else ASTRAY
 
 
 async def _async_restore(
@@ -1217,10 +1269,11 @@ async def _async_restore(
     A page the walk reached by a recorded route, ``routes`` by page with the
     root's own empty route among them, is put back the way the walk reached
     it (_async_put_back): stepped back to from below, or walked down to from
-    the root, and from the home screen by the tile and the route. A walk back
-    that loses the way steps back to the home screen and leaves the panel
-    there, so a panel that started inside the menu ends where it started or
-    on the home screen, never on a page in between.
+    the root, and from the home screen by the tile and the route, every step
+    held to the page it led to when it was recorded. A walk back that loses
+    the way steps back to the home screen and leaves the panel there, so a
+    panel that started inside the menu ends where it started or on the home
+    screen, never on a page in between.
 
     Any other page is outside the menu, or a page the walk did not reach.
     Stepping back is tried, but never on the home screen, whose top right
@@ -1244,7 +1297,9 @@ async def _async_restore(
         root, home = found
         route = (routes or {}).get(origin)
         if route is not None:
-            ended = await _async_put_back(client, page_map, origin, list(route), root, home)
+            ended = await _async_put_back(
+                client, page_map, origin, list(route), root, home, routes
+            )
             if ended == ASTRAY:
                 _LOGGER.debug(
                     "The recorded route back to page %s did not arrive, so the panel is "

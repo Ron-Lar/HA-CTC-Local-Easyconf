@@ -56,6 +56,9 @@ class Panel:
         self.presses: list[tuple[int, tuple[int, int]]] = []
         self.widget_reads: list[int] = []
         self.tile_works = True
+        #: Where a press on a page leads instead, by (page, point): a place
+        #: that leads elsewhere in another operating state.
+        self.elsewhere: dict[tuple[int, tuple[int, int]], int] = {}
         client = self.client
 
         async def screen_map(refresh=False):
@@ -80,6 +83,9 @@ class Panel:
 
         async def click(screens, x, y):
             self.presses.append((self.page, (x, y)))
+            if (self.page, (x, y)) in self.elsewhere:
+                self.page = self.elsewhere[(self.page, (x, y))]
+                return []
             if (x, y) == BACK:
                 self.page = {
                     HOME: QUICK_MENU, QUICK_MENU: HOME, ROOT: HOME, 21: ROOT, 22: ROOT,
@@ -203,6 +209,42 @@ def test_the_root_page_itself_is_reached_without_pressing_on_home(panel):
     before = len(panel.presses)
     assert run(client.async_goto_page(ROOT, []))
     assert panel.presses[before:] == [(23, BACK)]
+
+
+def test_a_step_that_lands_on_the_home_screen_ends_the_walk_without_a_press_there(panel):
+    # In another operating state the second tab's place leads to the home
+    # screen. The harvest's walk to the page behind that tab's strip ends
+    # there: the strip's place is not pressed among the home screen's tiles.
+    client = panel.client
+    panel.elsewhere[(ROOT, ROUTES[24][0])] = HOME
+    assert not run(client.async_goto_page(24, ROUTES[24]))
+    assert panel.presses == [(HOME, TILE), (ROOT, ROUTES[24][0])]
+    assert panel.page == HOME
+
+
+@pytest.mark.parametrize(
+    ("elsewhere", "route", "stray"),
+    [
+        # The second step leads back to the root.
+        ({(22, (100, 200)): ROOT}, [(240, 255), (100, 200), (300, 150)], (ROOT, (300, 150))),
+        # The third step leads back to the page the first one reached.
+        (
+            {(21, (200, 150)): 22, (22, (200, 150)): 21},
+            [(80, 255), (200, 150), (200, 150), (300, 150)],
+            (21, (300, 150)),
+        ),
+    ],
+    ids=["the root", "a page passed"],
+)
+def test_a_step_that_lands_where_the_walk_has_been_ends_it(panel, elsewhere, route, stray):
+    # A recorded route never leads back to the root or to a page it passed,
+    # so a step that does has met another control in its place, and the next
+    # step is not pressed there.
+    client = panel.client
+    panel.elsewhere.update(elsewhere)
+    assert not run(client.async_goto_page(24, route))
+    assert stray not in panel.presses
+    assert panel.presses[-1][1] == route[-2]
 
 
 def test_without_a_known_home_the_short_way_is_not_tried(panel):
