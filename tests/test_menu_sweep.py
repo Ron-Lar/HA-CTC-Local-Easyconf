@@ -693,6 +693,57 @@ def test_a_route_that_no_longer_arrives_leaves_the_panel_on_the_home_screen(
     assert all(p.aimed for p in restore)
 
 
+def test_a_step_that_lands_elsewhere_ends_the_walk_back_before_the_next_step(
+    catalogue, web_api, monkeypatch
+):
+    # In another operating state the place of the heat pump tile on the
+    # i550 Pro's root leads to the tank, whose page has a box where
+    # Kompressor VP1's first tab is, and that box leads out of the menu. The
+    # sweep reached the heat pump page by that place, so the landing on the
+    # tank is a step gone astray, and the tab is not pressed on the tank:
+    # the panel is stepped back to the home screen instead.
+    panel = i550(start=VP1)
+
+    def the_tile_leads_to_the_tank():
+        panel.screens[400] = [
+            replace(spec, target=TANK) if spec == VP_BOX else spec for spec in panel.screens[400]
+        ]
+        panel.screens[430] = [*panel.screens[430], Spec(1, 0, 222, 150, 45, target=SETTINGS)]
+
+    restore = sweep_noting_the_restore(
+        catalogue, web_api, panel, monkeypatch, before=the_tile_leads_to_the_tank
+    )
+    assert [(p.page, (p.x, p.y), p.landed) for p in restore] == [
+        (I550_ROOT, centre(VP_BOX), TANK),
+        (TANK, BACK, I550_ROOT),
+        (I550_ROOT, BACK, HOME),
+    ]
+    assert SETTINGS not in [p.landed for p in restore]
+    assert panel.page == HOME
+
+
+def test_a_step_that_lands_on_the_home_screen_presses_nothing_there(
+    catalogue, web_api, monkeypatch
+):
+    # The same place leads to the home screen: the next step of the route
+    # would be pressed on the home screen, among its tiles, and is not. The
+    # walk back ends where it is, on the home screen.
+    panel = i550(start=VP1)
+
+    def the_tile_leads_home():
+        panel.screens[400] = [
+            replace(spec, target=HOME) if spec == VP_BOX else spec for spec in panel.screens[400]
+        ]
+
+    restore = sweep_noting_the_restore(
+        catalogue, web_api, panel, monkeypatch, before=the_tile_leads_home
+    )
+    assert [(p.page, (p.x, p.y), p.landed) for p in restore] == [
+        (I550_ROOT, centre(VP_BOX), HOME),
+    ]
+    assert panel.page == HOME
+
+
 # ---------------------------------------------------------- without a root
 
 

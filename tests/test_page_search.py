@@ -429,6 +429,84 @@ def test_the_panel_ends_where_it_was_or_on_the_home_screen(page_search, web_api,
     assert panel.page == ENDS[start]
 
 
+def the_heat_pump_place_leads(panel: FakePanel, to: int) -> None:
+    """The heat pump's place on the root leads to ``to``, as in another operating state.
+
+    And the tank's page gets a box where Kompressor VP1's first tab is,
+    leading out of the menu, so a step pressed blind on the tank would show.
+    """
+    panel.screens[400] = [
+        Spec(1, s.x, s.y, s.width, s.height, visible=s.visible, target=to)
+        if (s.x, s.y, s.target) == (VP_AT.x, VP_AT.y, VP)
+        else s
+        for s in panel.screens[400]
+    ]
+    panel.screens[430] = [*panel.screens[430], Spec(1, 0, 222, 150, 45, target=SETTINGS)]
+
+
+@pytest.mark.parametrize("to", [TANK, HOME])
+def test_a_step_of_the_way_back_that_lands_elsewhere_ends_it(
+    page_search, web_api, monkeypatch, to
+):
+    # The search for Värmepump drift, started on Kompressor VP1, knows the
+    # way back there: the heat pump's place on the root, then the strip's
+    # first tab. When the restore comes the place leads elsewhere, to the
+    # tank or to the home screen, and the tab is pressed on neither: the
+    # landing is not the heat pump page the place led to, so the panel is
+    # left on the home screen.
+    panel = pt_like(start=VP1)
+    real = page_search._async_restore
+    begun: list[int] = []
+
+    async def noting(*args, **kwargs):
+        begun.append(len(panel.presses))
+        the_heat_pump_place_leads(panel, to)
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(page_search, "_async_restore", noting)
+    found = run(page_search.async_search_page(panel.client(web_api), VP_RUN))
+    assert found.found
+    (start,) = begun
+    restore = [(p.page, (p.x, p.y), p.landed) for p in panel.presses[start:]]
+    assert (I550_ROOT, centre(VP_AT), to) in restore
+    assert centre(VP_TABS[0]) not in [point for _page, point, _landed in restore]
+    assert SETTINGS not in panel.shown
+    tile_icon = panel.screens[11][0]
+    assert {(p.x, p.y) for p in panel.presses if p.page == HOME} <= {centre(tile_icon)}
+    assert panel.page == HOME
+
+
+#: How the search regains Kompressor VP1, by where the panel stands: from
+#: the root by the rest of its route, from the tank by the panel's own button
+#: up to the root and the route from there (catalogue._async_put_back).
+REGAIN_FROM = {I550_ROOT: [], TANK: [(TANK, BACK, I550_ROOT)]}
+
+
+@pytest.mark.parametrize("to", [TANK, HOME])
+@pytest.mark.parametrize("start", sorted(REGAIN_FROM))
+def test_a_page_regained_is_walked_to_with_every_step_held_to_the_page_it_led_to(
+    page_search, web_api, start, to
+):
+    # The first step of Kompressor VP1's route lands elsewhere just now, on
+    # the tank or the home screen, and the second is not pressed there: the
+    # search knows the heat pump page is where that step led, and the walk
+    # is astray at once.
+    panel = pt_like(start=start)
+    the_heat_pump_place_leads(panel, to)
+    client = panel.client(web_api)
+    page_map = run(client.async_screen_map())
+    route = [centre(VP_AT), centre(VP_TABS[0])]
+    known = {I550_ROOT: [], VP: route[:1], VP1: route, TANK: [centre(TANK_AT)]}
+    searching = page_search._Search(
+        client, page_map, VP_RUN, (I550_ROOT, HOME), known, [], set(), 40, 3
+    )
+    node = page_search._Node(VP1, route, (0, 0), 1)
+    assert run(searching._regain(node)) == page_search.ASTRAY
+    assert [(p.page, (p.x, p.y), p.landed) for p in panel.presses] == [
+        *REGAIN_FROM[start], (I550_ROOT, centre(VP_AT), to),
+    ]
+
+
 # ------------------------------------------------------------ what it presses
 
 STARTS = [HOME, SETTINGS, QUICK, I550_ROOT, VP, VP1, TANK, I550_HISTORY]

@@ -72,8 +72,10 @@ from .catalogue import (
     _async_collect,
     _async_operation_root,
     _async_put_back,
+    _async_replay_steps,
     _async_restore,
     _async_tap_targets,
+    _pages_by_route,
 )
 from .const import CHROME_BUTTON, NAV_FORBIDDEN, PAGE_HEADER_HEIGHT, SlowPage
 from .web_api import CtcWebClient, CtcWebError, Widget, tap_target
@@ -391,7 +393,11 @@ class _Search:
         From a page on the page's own route, the page it was set aside on
         when a page below it looked better, the rest of the route is pressed
         from there; from anywhere else the panel is put back the way the
-        restore puts it back (catalogue._async_put_back).
+        restore puts it back (catalogue._async_put_back). Either way every
+        step is held to the page it led to when the search found it, which
+        ``known`` says by the route: a step that lands anywhere else ends the
+        walk before the next step is pressed there, and no step is pressed on
+        the home screen.
         """
         here = await self.client.async_current_page()
         if here == node.page:
@@ -400,15 +406,13 @@ class _Search:
         if above is not None and len(above) < len(node.route) and (
             node.route[: len(above)] == above
         ):
-            for x, y in node.route[len(above):]:
-                await self.client.async_click(self.page_map.get(here, []), x, y)
-                landed = await self.client.async_current_page()
-                if landed == here:
-                    return ASTRAY
-                here = landed
-            return ARRIVED if here == node.page else ASTRAY
+            landed = await _async_replay_steps(
+                self.client, self.page_map, here, node.route, len(above),
+                _pages_by_route(self.known), self.home,
+            )
+            return ARRIVED if landed == node.page else ASTRAY
         return await _async_put_back(
-            self.client, self.page_map, node.page, node.route, self.root, self.home
+            self.client, self.page_map, node.page, node.route, self.root, self.home, self.known
         )
 
     async def _search(self, node: _Node, frontier: list[_Node]) -> str:
