@@ -43,6 +43,8 @@ EVERYTHING = {
     "cop_floor": False,
     "cop_stuck": True,
     "cop_implausible": False,
+    "cop_integrated": True,
+    "power_rows": True,
     "menu_pages": 7,
     "menu_home": True,
     "menu_root": True,
@@ -89,9 +91,10 @@ def test_the_lists_do_not_overlap_and_are_what_the_consent_text_counts(stats_ext
     # Four figures, two totals, three parts of the serial number's story.
     assert len(stats_extra.METRIC_KEYS) == 9
     # Four about the set-up, six about whether a figure is possible, three why
-    # not, and three about the display's menu: how many pages it has, and how far
-    # the last walk through it got (R12, L6).
-    assert len(stats_extra.FEATURE_KEYS) == 16
+    # not, two about the two power rows on the heat pump's page and a figure the
+    # integration worked out from them itself, and three about the display's menu:
+    # how many pages it has, and how far the last walk through it got (R12, L6).
+    assert len(stats_extra.FEATURE_KEYS) == 18
 
 
 def test_a_model_reported_as_other_adds_its_family_and_nothing_else(stats_extra):
@@ -136,6 +139,10 @@ def test_the_english_consent_text_names_what_the_report_carries():
             # with the operating hours was recognised, not that the page is
             # harvested.
             "operating hours",
+            # power_rows and cop_integrated: the two power rows, and a figure
+            # the integration worked out from them itself.
+            "two power rows",
+            "own sums of the two power readings",
             # menu_pages, menu_home and menu_root.
             "pages the display's menu has",
             "home screen",
@@ -160,6 +167,8 @@ def test_the_swedish_consent_text_names_what_the_report_carries():
         "hash",
         "varningar och fel",
         "slumpat id",
+        "de två effektraderna",
+        "egen summering av de två effektvärdena",
         "drifttid",
         "sidor displayens meny har",
         "hemskärmen",
@@ -192,6 +201,7 @@ def test_the_readme_tells_the_same_story():
         "pages the display's menu has",
         "home screen",
         "family code",
+        "two power rows",
         "FEATURE_KEYS",
         "METRIC_KEYS",
         "only when it is wrong",

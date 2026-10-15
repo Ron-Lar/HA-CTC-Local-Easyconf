@@ -999,7 +999,11 @@ CTC's marker for a counter that is not fitted still counts as an answer),
 whether each of those two counters actually handed over a number at the last
 read, and which of three things is in
 the way, too little energy counted so far, a counter standing still although
-the unit has been running, or a quotient no heat pump could produce. Yes or no
+the unit has been running, or a quotient no heat pump could produce. It says
+whether the heat pump's page carries the two power rows at all, and whether the
+figure rests on the integration's own sums of the two power readings rather than
+on the machine's counters, because a figure from the rougher basis is not to be
+compared with one from a counter as if they were the same measurement. Yes or no
 each time, never which page or what is on it.
 
 It also sends what the installation is made of and how well it performs: the

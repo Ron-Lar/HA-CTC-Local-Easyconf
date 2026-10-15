@@ -234,6 +234,8 @@ FEATURE_KEYS = frozenset(
         "cop_floor",
         "cop_stuck",
         "cop_implausible",
+        "power_rows",
+        "cop_integrated",
         "menu_pages",
         "menu_home",
         "menu_root",
@@ -275,6 +277,8 @@ def build_extra(
     cop_floor: bool | None = None,
     cop_stuck: bool | None = None,
     cop_implausible: bool | None = None,
+    cop_integrated: bool | None = None,
+    power_rows: bool | None = None,
     menu_pages: int | None = None,
     menu_home: bool | None = None,
     menu_root: bool | None = None,
@@ -344,6 +348,15 @@ def build_extra(
         "cop_floor": cop_floor,
         "cop_stuck": cop_stuck,
         "cop_implausible": cop_implausible,
+        # Whether the heat pump's page carries the two power rows at all, and
+        # whether the figures rest on the integration's own sums of them rather
+        # than on the machine's counters. The counters follow the outdoor unit:
+        # the one 700 series in the fleet fills them, the 400 and 600 series
+        # leave both at zero, and these two flags say whether the powers are
+        # there to add up instead. A figure from that rougher basis is not to be
+        # compared with a counter's as if it were the same measurement.
+        "power_rows": power_rows,
+        "cop_integrated": cop_integrated,
     }
     payload["features"].update({k: bool(v) for k, v in flags.items() if v is not None})
 

@@ -205,6 +205,10 @@ def _keys_in_code(const, transitions) -> dict[str, set[str]]:
             | {row.elts[0].value for row in identity.elts}
             | {f"cop_{span}" for span in ast.literal_eval(spans)}
             | {f"aux_share_{span}" for span in load("cop").SHARE_SPANS}
+            | {
+                f"integrated_{side}"
+                for side in ast.literal_eval(_assigned(sensor, "INTEGRATED_SIDES"))
+            }
             | {item.key for item in transitions.TRANSITION_SENSORS}
             | {transitions.MEAN_RUN_KEY}
             | own_keys

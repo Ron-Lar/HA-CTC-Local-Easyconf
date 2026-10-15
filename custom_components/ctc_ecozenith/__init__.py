@@ -91,6 +91,7 @@ from .cop import (
     current_totals,
     find_energy_totals,
     find_operating_hours,
+    find_power_pair,
     immersion_at,
     modbus_consumption_answered,
     powered_on_hours,
@@ -103,6 +104,7 @@ from .identity import (
     async_read_identity_via_panel,
     only_identity_differs,
 )
+from .integrate import STORAGE_VERSION as INTEGRATE_STORAGE_VERSION, PowerIntegrator
 from .keys import (
     device_key,
     keep_hidden_rows,
@@ -981,6 +983,7 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
     # totals with it: a machine that has simply not counted far enough yet is
     # waiting, not broken, and sends nothing but the flag that says so.
     fault = counter_fault(heat, consumed, powered_on_hours(runtime))
+    integrator = getattr(runtime, "integrator", None)
     return build_extra(
         entry.data.get("model"),
         has_display=runtime.web is not None,
@@ -1000,6 +1003,11 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
         consumption_total=consumed is not None,
         cop_floor=consumed is not None and not fault and consumed < MIN_CONSUMPTION_KWH,
         cop_stuck=fault == "stuck",
+        power_rows=getattr(runtime, "power_out", None) is not None
+        and getattr(runtime, "power_in", None) is not None,
+        cop_integrated=integrator is not None
+        and current_totals(runtime) == integrator.totals
+        and integrator.totals[0] is not None,
         cop_implausible=fault == "implausible",
         heat_total_kwh=heat if fault else None,
         consumption_total_kwh=consumed if fault else None,
@@ -1125,6 +1133,11 @@ class CtcRuntime:
     #: counters were read, for the samples and the share of auxiliary heat
     #: (roadmap R28). Wherever there is a tracker.
     immersion_snapshot: ImmersionSnapshot | None = None
+    #: The display's two power rows, and the sums the integration makes of them
+    #: where the machine's own counters stay at zero. See integrate.py.
+    power_out: Any | None = None
+    power_in: Any | None = None
+    integrator: PowerIntegrator | None = None
     #: Candidate rows for the unit's powered-on hours; the largest is used.
     operating_hours: Any | None = None
     #: What this installation has ever given a value other than zero.
@@ -1374,6 +1387,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         runtime.pages = pages
         runtime.energy_out, runtime.energy_in = find_energy_totals(pages)
         runtime.operating_hours = find_operating_hours(pages)
+        runtime.power_out, runtime.power_in = find_power_pair(pages)
+        if runtime.power_out is not None and runtime.power_in is not None:
+            # Energy of our own, for the installations whose counters never move,
+            # which follows the outdoor unit: a 400 or 600 series leaves both
+            # lifetime counters at zero where the 700 series fills them. Both
+            # rows sit on the same page, so one read time covers the pair, and a
+            # pair read in the same instant is what makes the quotient worth
+            # having even though each total is rough. See integrate.py.
+            integrator = PowerIntegrator(
+                Store(hass, INTEGRATE_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_integrated")
+            )
+            await integrator.async_load()
+            power_out_key = runtime.power_out.key
+            power_in_key = runtime.power_in.key
+
+            def _integrate() -> None:
+                data = web.data or {}
+                if integrator.note(
+                    web.last_read(power_out_key),
+                    data.get(power_out_key),
+                    data.get(power_in_key),
+                ):
+                    integrator.save_soon()
+
+            _integrate()
+            entry.async_on_unload(web.async_add_listener(_integrate))
+            runtime.integrator = integrator
         runtime.starts_per_day = find_starts_per_day(pages)
         if runtime.energy_out is not None and runtime.energy_in is None:
             # The older display software, as on an i360, counts delivered heat

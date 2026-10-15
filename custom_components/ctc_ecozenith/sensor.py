@@ -48,6 +48,7 @@ from .cop import (
     reason_for,
     share_for,
     stale_rows,
+    totals_source,
 )
 from .entity import async_switch_on_new_defaults
 from .keys import prefix_of, previous_keys, unique_id
@@ -180,6 +181,12 @@ async def async_setup_entry(
         # The immersion heater's share of the electricity over the same spans
         # but the first year (R28), from the same samples.
         entities.extend(CtcShareSensor(runtime, span) for span in SHARE_SPANS)
+
+    # The sums the integration makes of the two power rows, where the machine's
+    # own counters never move (integrate.py). Shown whether or not they are the
+    # ones a figure rests on: that is how an owner sees what the machine gives.
+    if getattr(runtime, "integrator", None) is not None:
+        entities.extend(CtcIntegratedEnergySensor(runtime, side) for side in INTEGRATED_SIDES)
 
     # What the status codes said from one poll to the next: starts, the last
     # run, and where the history page is harvested the mean run over a day.
@@ -667,6 +674,49 @@ class CtcMeanRunSensor(CoordinatorEntity, SensorEntity):
         }
 
 
+#: The two sums the integration makes of the display's powers, each named in the
+#: translations under the key integrated_<side>. A table rather than a literal in
+#: the loop, so the guard over the names can read the keys (test_entity_names).
+INTEGRATED_SIDES = ("out", "in")
+
+
+class CtcIntegratedEnergySensor(CoordinatorEntity, SensorEntity):
+    """One of the two sums the integration adds up itself from the display's powers.
+
+    Rough on purpose, and said so in the attributes: a power read every half hour
+    cannot know what the compressor did in between. The pair is still worth
+    dividing, because both sides are read in the same instant and the error
+    largely cancels in a quotient. See integrate.py.
+    """
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(self, runtime, side: str) -> None:
+        super().__init__(runtime.web)
+        self._runtime = runtime
+        self._side = side
+        self._attr_unique_id = unique_id(runtime.device, f"integrated_{side}")
+        self._attr_translation_key = f"integrated_{side}"
+        self._attr_device_info = runtime.device
+
+    @property
+    def native_value(self) -> float | None:
+        totals = self._runtime.integrator.totals
+        return totals[0] if self._side == "out" else totals[1]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        row = self._runtime.power_out if self._side == "out" else self._runtime.power_in
+        return {
+            "källa": "egen summering av displayens momentana effekt",
+            "rad": getattr(row, "label", None),
+            "timmar i underlaget": self._runtime.integrator.hours,
+        }
+
+
 class CtcCopSensor(CoordinatorEntity, SensorEntity):
     """Delivered heat against supplied energy.
 
@@ -742,9 +792,9 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, object]:
         result = self._result()
         attributes = result.as_attributes()
-        attributes["tillförd energi ur"] = (
-            "displayen" if self._runtime.energy_in is not None else "Modbus 62341"
-        )
+        out_source, in_source = totals_source(self._runtime)
+        attributes["avgiven värme ur"] = out_source
+        attributes["tillförd energi ur"] = in_source
         # An empty figure that says nothing is the thing people ask about.
         out, consumed = current_totals(self._runtime)
         reason = reason_for(

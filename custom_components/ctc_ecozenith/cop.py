@@ -1257,6 +1257,46 @@ class ImmersionSnapshot(ConsumptionSnapshot):
         return modbus_immersion(modbus_data)
 
 
+def find_power_pair(pages: list[Any]) -> tuple[Any | None, Any | None]:
+    """The display's two power rows, where the heat pump's page is harvested.
+
+    Matched the way the lifetime counters are, on the label the display printed
+    and only on a row in kilowatts, so the counters on the history page and the
+    rows for a period cannot be taken for a power. These two are what the
+    integration can make its own energy out of where the machine's counters stay
+    at zero; see integrate.py.
+    """
+    from .const import (
+        LABEL_POWER_IN_EN,
+        LABEL_POWER_IN_SV,
+        LABEL_POWER_OUT_EN,
+        LABEL_POWER_OUT_SV,
+        LABEL_POWER_OUT_SV_OLD,
+    )
+
+    def match(value: Any, names: tuple[str, ...]) -> bool:
+        label = (getattr(value, "label", None) or "").strip().casefold()
+        return (
+            (getattr(value, "unit", None) or "").casefold() == "kw"
+            and label.startswith(names)
+            and not any(marker in label for marker in PERIOD_MARKERS)
+        )
+
+    values = [value for page in pages for value in page.values]
+    out = next(
+        (
+            v
+            for v in values
+            if match(v, (LABEL_POWER_OUT_EN.casefold(), LABEL_POWER_OUT_SV.casefold(),
+                         LABEL_POWER_OUT_SV_OLD.casefold()))
+        ),
+        None,
+    )
+    supplied = (LABEL_POWER_IN_EN.casefold(), LABEL_POWER_IN_SV.casefold())
+    consumed = next((v for v in values if match(v, supplied)), None)
+    return out, consumed
+
+
 def find_operating_hours(pages: list[Any]) -> Any | None:
     """Pick the unit's total powered-on hours out of the harvested pages.
 
@@ -1279,10 +1319,18 @@ def find_operating_hours(pages: list[Any]) -> Any | None:
 
 
 def current_totals(runtime: Any) -> tuple[float | None, float | None]:
-    """The two lifetime counters as they stood when the display was last read.
+    """The two energy totals behind every figure, as they stood at the last read.
 
     Consumption comes from the display's own counter where there is one, and
     otherwise from the Modbus reading taken when delivered heat was read.
+
+    Where the machine's counters stand at zero, which is what every installation
+    in the fleet with a 400 or 600 series outdoor unit does, the integration's own
+    sums step in: the two powers on the
+    heat pump's page, added up over time (integrate.py). **Both sides always come
+    from the same source.** A counter for one and an integral for the other would
+    be two different spans divided by each other, and the quotient would mean
+    nothing at all.
     """
     if getattr(runtime, "web", None) is None:
         return None, None
@@ -1293,7 +1341,33 @@ def current_totals(runtime: Any) -> tuple[float | None, float | None]:
     else:
         snapshot = getattr(runtime, "consumption_snapshot", None)
         consumed = snapshot.value if snapshot is not None else None
+    if out and consumed:
+        return out, consumed
+    integrator = getattr(runtime, "integrator", None)
+    if integrator is not None:
+        own_out, own_in = integrator.totals
+        if own_out and own_in:
+            return own_out, own_in
     return out, consumed
+
+
+def totals_source(runtime: Any) -> tuple[str, str]:
+    """Where the pair above came from, in the words the attributes show.
+
+    Said per side, because the consumed side has a route of its own: the register
+    Modbus holds is the same counter the display prints, only fresher.
+    """
+    out, consumed = current_totals(runtime)
+    integrator = getattr(runtime, "integrator", None)
+    if integrator is not None and (out, consumed) == integrator.totals and out:
+        own = "egen summering av displayens momentana effekt"
+        return own, own
+    return (
+        "displayen",
+        "displayen"
+        if getattr(runtime, "energy_in", None) is not None
+        else "Modbus 62341",
+    )
 
 
 def counter_rows(runtime: Any) -> list[Any]:

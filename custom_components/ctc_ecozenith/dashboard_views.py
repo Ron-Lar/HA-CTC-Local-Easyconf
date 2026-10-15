@@ -68,6 +68,13 @@ from collections.abc import Iterable, Mapping
 import re
 from typing import Any
 
+from .const import (
+    LABEL_POWER_IN_EN,
+    LABEL_POWER_IN_SV,
+    LABEL_POWER_OUT_EN,
+    LABEL_POWER_OUT_SV,
+    LABEL_POWER_OUT_SV_OLD,
+)
 from .cop import (
     BASIS_WORDS,
     SHARE_BOTH_STUCK,
@@ -136,8 +143,8 @@ ENERGY_IN = "@energy_in"
 #: trailing unit from a row name, so "Avgiven värme (kW)" is stored as
 #: "Avgiven värme" with the unit kW.
 _POWER_LABELS = {
-    HEAT_POWER: ("energy output", "avgiven värme"),
-    SUPPLIED_POWER: ("energy add", "tillförd effekt"),
+    HEAT_POWER: (LABEL_POWER_OUT_EN, LABEL_POWER_OUT_SV, LABEL_POWER_OUT_SV_OLD),
+    SUPPLIED_POWER: (LABEL_POWER_IN_EN, LABEL_POWER_IN_SV),
 }
 _PERIOD_MARKERS = ("/", "24", "30")
 #: How a display value's key starts: the page number it was harvested from.

@@ -23,11 +23,12 @@ MAJORS = {
     "HARVEST_STORAGE_VERSION": 1,
     "ALARM_STORAGE_VERSION": 1,
     "SEEN_STORAGE_VERSION": 1,
+    "INTEGRATE_STORAGE_VERSION": 1,
 }
 
 
 def test_every_store_module_declares_major_one():
-    for name in ("seen", "harvest", "alarms", "cop"):
+    for name in ("seen", "harvest", "alarms", "cop", "integrate"):
         assert load(name).STORAGE_VERSION == 1, f"{name}.STORAGE_VERSION är inte 1"
     seen = load("seen")
     assert seen.STORAGE_MINOR_VERSION == 2, "den nya formen är minor 2"

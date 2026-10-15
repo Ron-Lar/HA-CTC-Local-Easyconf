@@ -224,6 +224,18 @@ def identity_signal(entry_id: str) -> str:
 #: English labels of the two lifetime counters that make a coefficient of
 #: performance possible at all. Modbus carries the consumption side but not the
 #: delivered side, so both have to come from the display.
+#: The display's two instantaneous power rows, which live on the heat pump's own
+#: page, matched on the label the display printed (text 1807 and 1810). The
+#: catalogue strips a trailing unit from a row name, so "Avgiven värme (kW)" is
+#: stored as "Avgiven värme" with the unit kW. The older Swedish name for
+#: delivered heat is accepted too: the English string is the same in both
+#: generations, the Swedish one is not.
+LABEL_POWER_OUT_EN: Final = "energy output"
+LABEL_POWER_OUT_SV: Final = "avgiven värme"
+LABEL_POWER_OUT_SV_OLD: Final = "avgiven energi"
+LABEL_POWER_IN_EN: Final = "energy add"
+LABEL_POWER_IN_SV: Final = "tillförd effekt"
+
 LABEL_ENERGY_OUT_EN: Final = "Energy output total"
 LABEL_ENERGY_IN_EN: Final = "Energy consumption total"
 
