@@ -248,3 +248,25 @@ def test_an_empty_sum_says_which_of_the_two_it_is(cop, integrate):
     assert cop.POWER_SILENT != cop.POWER_FIRST_READ
     assert "avstängd" in cop.POWER_SILENT
     assert "nästa skörd" in cop.POWER_FIRST_READ
+
+
+def test_nothing_judges_a_counter_at_zero_by_the_units_powered_on_hours():
+    """The mistake behind this guard was made twice in one evening.
+
+    The hours a unit has been switched on say nothing about whether the
+    compressor has run, and judging a counter at zero by them told Portugal, whose
+    display counts no compressor hours at all, that its controller was at fault.
+    The report was changed and the sensor's own reason was not, so the house went
+    on saying 16698 hours where Modbus says the compressor has run 4160. Only the
+    commissioning date may read the powered-on hours: that is about when the
+    counters started from zero, which is exactly what they measure.
+    """
+    from conftest import COMPONENT
+
+    for name in ("__init__.py", "sensor.py", "cop.py"):
+        source = (COMPONENT / name).read_text(encoding="utf-8")
+        for number, line in enumerate(source.splitlines(), 1):
+            if "powered_on_hours(" not in line or "def powered_on_hours" in line:
+                continue
+            allowed = name == "__init__.py" and "hours = powered_on_hours(runtime)" in line
+            assert allowed, f"{name}:{number}: {line.strip()}"

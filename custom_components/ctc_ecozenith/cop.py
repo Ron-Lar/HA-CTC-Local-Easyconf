@@ -1087,9 +1087,11 @@ class CopTracker:
     ) -> ShareResult:
         """The share over everything the two counters have counted.
 
-        Both at zero on a unit that has been switched on for a day
-        (``hours``, the powered-on hours) is a controller that fills neither,
-        said as such; before that it is too little energy so far. The days are
+        Both at zero where the compressor has run for a day (``hours``, the
+        compressor's own hours from Modbus 62214) is a controller that fills
+        neither, said as such; before that it is too little energy so far. The
+        compressor's hours and not the unit's, for the reason counter_fault
+        gives: a machine can stand powered on for years without running. The days are
         counted as the lifetime coefficient of performance counts them.
         """
         if compressor is None or immersion is None:
@@ -1523,7 +1525,7 @@ def share_for(runtime: Any, span: str) -> tuple[ShareResult, str | None]:
     elif span == "year":
         result = tracker.share_year(compressor, immersion)
     else:
-        result = tracker.share_lifetime(compressor, immersion, hours=powered_on_hours(runtime))
+        result = tracker.share_lifetime(compressor, immersion, hours=compressor_hours(runtime))
     modbus = getattr(runtime, "modbus", None)
     answered = getattr(modbus, "answered", None)
     reason = share_reason(

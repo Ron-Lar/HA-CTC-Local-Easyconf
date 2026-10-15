@@ -42,12 +42,12 @@ from .cop import (
     POWER_SILENT,
     SHARE_SPANS,
     WINDOWS,
+    compressor_hours,
     counter_rows,
     current_totals,
     display_silence,
     modbus_consumption_answered,
     power_now,
-    powered_on_hours,
     reason_for,
     share_for,
     stale_rows,
@@ -810,7 +810,8 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
             result,
             out,
             consumed,
-            powered_on_hours(self._runtime),
+            # The compressor's hours, not the unit's: see cop.counter_fault.
+            compressor_hours(self._runtime),
             # Only the Modbus route can be waiting on a register; the
             # display's own counter is a row that was recognised.
             modbus_answered=self._runtime.energy_in is not None
