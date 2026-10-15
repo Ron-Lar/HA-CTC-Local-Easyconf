@@ -1000,8 +1000,9 @@ whether each of those two counters actually handed over a number at the last
 read, and which of three things is in
 the way, too little energy counted so far, a counter standing still although
 the unit has been running, or a quotient no heat pump could produce. It says
-whether the heat pump's page carries the two power rows at all, and whether the
-figure rests on the integration's own sums of the two power readings rather than
+whether the heat pump's page carries the two power rows at all and whether they
+handed over numbers at the last read, which a heat pump switched off does not,
+and whether the figure rests on the integration's own sums of the two power readings rather than
 on the machine's counters, because a figure from the rougher basis is not to be
 compared with one from a counter as if they were the same measurement. Yes or no
 each time, never which page or what is on it.

@@ -235,6 +235,7 @@ FEATURE_KEYS = frozenset(
         "cop_stuck",
         "cop_implausible",
         "power_rows",
+        "power_values",
         "cop_integrated",
         "menu_pages",
         "menu_home",
@@ -279,6 +280,7 @@ def build_extra(
     cop_implausible: bool | None = None,
     cop_integrated: bool | None = None,
     power_rows: bool | None = None,
+    power_values: bool | None = None,
     menu_pages: int | None = None,
     menu_home: bool | None = None,
     menu_root: bool | None = None,
@@ -356,6 +358,7 @@ def build_extra(
         # there to add up instead. A figure from that rougher basis is not to be
         # compared with a counter's as if it were the same measurement.
         "power_rows": power_rows,
+        "power_values": power_values,
         "cop_integrated": cop_integrated,
     }
     payload["features"].update({k: bool(v) for k, v in flags.items() if v is not None})

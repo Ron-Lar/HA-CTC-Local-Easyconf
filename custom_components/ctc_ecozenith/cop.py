@@ -167,6 +167,46 @@ def powered_on_hours(runtime: Any) -> float | None:
     )
 
 
+#: Why a sum of the integration's own has no figure yet. The first is what a
+#: heat pump switched off looks like: the rows are on the page, the page answers
+#: nothing. The second is the half hour between the first harvest and the second,
+#: since one reading is a power and two are an energy.
+POWER_SILENT = "värmepumpens sida ger inga värden, vilket en avstängd värmepump inte gör"
+POWER_FIRST_READ = "väntar på en andra läsning, summeringen börjar vid nästa skörd"
+
+
+def power_now(runtime: Any) -> tuple[float, float] | None:
+    """The two powers as the last harvest read them, or None where it read neither.
+
+    Both or neither: a quotient wants the pair, and the sums are only ever added
+    to from a pair read in the same instant. None is what a heat pump switched
+    off looks like, since its page then answers nothing at all.
+    """
+    if getattr(runtime, "web", None) is None:
+        return None
+    out_row = getattr(runtime, "power_out", None)
+    in_row = getattr(runtime, "power_in", None)
+    if out_row is None or in_row is None:
+        return None
+    data = runtime.web.data or {}
+    out = data.get(out_row.key)
+    consumed = data.get(in_row.key)
+    if not isinstance(out, (int, float)) or not isinstance(consumed, (int, float)):
+        return None
+    if isinstance(out, bool) or isinstance(consumed, bool):
+        return None
+    return float(out), float(consumed)
+
+
+def compressor_hours(runtime: Any) -> float | None:
+    """The hours the compressor has run, Modbus 62214.
+
+    What decides whether a counter at zero is a fault: the compressor's own
+    hours, not the unit's. See :func:`counter_fault`.
+    """
+    return _modbus_number(runtime, "compressor_hours")
+
+
 def counter_fault(
     out: float | None,
     consumed: float | None,
@@ -175,11 +215,16 @@ def counter_fault(
 ) -> str | None:
     """Which fault the two counters show, or None when they merely need time.
 
-    ``stuck`` is a counter standing at zero on a unit that has been switched on
-    for a day, which is what CTC's controllers do on installations where these
-    counters are never written. ``implausible`` is two numbers whose quotient no
-    heat pump could produce, so they are not the pair they are taken for. A new
-    machine that has simply not counted far enough yet is neither.
+    ``stuck`` is a counter standing at zero where the COMPRESSOR has run for a
+    day or more, which is what CTC's controllers do on installations where these
+    counters are never written. The hours have to be the compressor's, Modbus
+    62214, and not the hours the unit has been switched on: a machine can stand
+    powered on for years without the compressor ever running, and then two zeroes
+    are an honest account of it rather than a fault. Judging it on the powered-on
+    hours told Portugal, whose display counts no compressor hours at all, that
+    its controller was at fault. ``implausible`` is two numbers whose quotient no
+    heat pump could produce, so they are not the pair they are taken for. A
+    machine that has simply not run far enough yet is neither.
 
     The quotient is judged only above the same floor :func:`_ratio` divides
     above. Below it the divisor is a kilowatt hour or two of whole-number
@@ -249,7 +294,11 @@ def cop_reason(
     else:
         fault = counter_fault(energy_out, energy_in, hours)
     if fault == "stuck":
-        return "räknaren står på noll fast enheten varit igång, styrenheten fyller den inte"
+        # counter_fault says stuck only where the hours are known, so they are.
+        return (
+            f"räknaren står på noll fast kompressorn har gått {hours:.0f} timmar, "
+            "styrenheten fyller den inte"
+        )
     if fault == "implausible":
         return f"kvoten {round(energy_out / energy_in, 2)} är orimlig, räknarna hör inte ihop"
     if energy_in < floor:

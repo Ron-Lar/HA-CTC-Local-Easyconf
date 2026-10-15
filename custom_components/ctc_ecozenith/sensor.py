@@ -38,12 +38,15 @@ from .const import (
     identity_signal,
 )
 from .cop import (
+    POWER_FIRST_READ,
+    POWER_SILENT,
     SHARE_SPANS,
     WINDOWS,
     counter_rows,
     current_totals,
     display_silence,
     modbus_consumption_answered,
+    power_now,
     powered_on_hours,
     reason_for,
     share_for,
@@ -710,11 +713,17 @@ class CtcIntegratedEnergySensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, object]:
         row = self._runtime.power_out if self._side == "out" else self._runtime.power_in
-        return {
+        attributes: dict[str, object] = {
             "källa": "egen summering av displayens momentana effekt",
             "rad": getattr(row, "label", None),
             "timmar i underlaget": self._runtime.integrator.hours,
         }
+        if self.native_value is None:
+            # An empty sum says which of the two it is, as the figures do.
+            attributes["skäl"] = (
+                POWER_SILENT if power_now(self._runtime) is None else POWER_FIRST_READ
+            )
+        return attributes
 
 
 class CtcCopSensor(CoordinatorEntity, SensorEntity):

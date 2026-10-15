@@ -628,9 +628,11 @@ _REASON_WORDS: dict[str, dict[str, str]] = {
         "väntar på ett prov som är 20 till 30 timmar gammalt": (
             "waiting for a sample 20 to 30 hours old"
         ),
-        "räknaren står på noll fast enheten varit igång, styrenheten fyller den inte": (
-            "the counter stands at zero although the unit has been running; the controller "
-            "does not fill it"
+        "värmepumpens sida ger inga värden, vilket en avstängd värmepump inte gör": (
+            "the heat pump's page gives no values, which a heat pump switched off does not"
+        ),
+        "väntar på en andra läsning, summeringen börjar vid nästa skörd": (
+            "waiting for a second reading; the sum starts at the next harvest"
         ),
         "displayen har inte svarat sedan Home Assistant startade": (
             "the display has not answered since Home Assistant started"
@@ -695,6 +697,12 @@ _REASON_PATTERNS: dict[str, tuple[tuple[str, str], ...]] = {
             r"styrenheten fyller den inte$",
             "the compressor's counter stands at zero although the compressor has run for $1 "
             "hours; the controller does not fill it",
+        ),
+        (
+            r"^räknaren står på noll fast kompressorn har gått (\d+) timmar, "
+            r"styrenheten fyller den inte$",
+            "the counter stands at zero although the compressor has run for $1 hours; the "
+            "controller does not fill it",
         ),
     ),
 }

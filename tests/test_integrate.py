@@ -202,3 +202,49 @@ def test_without_sums_of_its_own_the_zeroes_stand_as_they_are(cop, integrate):
     runtime = _runtime(cop, integrate, (0.0, 0.0), None)
     assert cop.current_totals(runtime) == (0.0, 0.0)
     assert cop.cop_reason(None, "lifetime", 0.0, 0.0, 20000) is not None
+
+
+# ------------------------------------- a counter at zero against the compressor's hours
+
+
+def test_zero_counters_are_a_fault_only_where_the_compressor_has_run(cop):
+    # Portugal: the unit has stood powered on for 16697 hours, the display counts
+    # no compressor hours at all, and Modbus 62214 says the compressor has run
+    # 4160. Judged on the unit's hours this was called a controller at fault even
+    # where the compressor had never run; judged on the compressor's it is one
+    # only where it has.
+    assert cop.counter_fault(0.0, 0.0, 4160) == "stuck"
+    assert cop.counter_fault(0.0, 0.0, 3) is None
+    assert cop.counter_fault(0.0, 0.0, 0) is None
+    reason = cop.cop_reason(None, "lifetime", 0.0, 0.0, 4160)
+    assert "kompressorn har gått 4160 timmar" in reason
+
+
+def test_the_compressor_hours_come_from_modbus_not_from_the_display(cop):
+    runtime = SimpleNamespace(modbus=SimpleNamespace(data={"compressor_hours": 4160.0}))
+    assert cop.compressor_hours(runtime) == 4160.0
+    assert cop.compressor_hours(SimpleNamespace(modbus=SimpleNamespace(data={}))) is None
+    assert cop.compressor_hours(SimpleNamespace()) is None
+
+
+# ------------------------------------------ rows that are there and give nothing
+
+
+def test_the_pair_is_read_or_it_is_not(cop):
+    rows = {"power_out": SimpleNamespace(key="out"), "power_in": SimpleNamespace(key="in")}
+    both = SimpleNamespace(web=SimpleNamespace(data={"out": 8.3, "in": 3.0}), **rows)
+    assert cop.power_now(both) == (8.3, 3.0)
+    # A heat pump switched off: the rows are on the page, the page answers nothing.
+    off = SimpleNamespace(web=SimpleNamespace(data={}), **rows)
+    assert cop.power_now(off) is None
+    half = SimpleNamespace(web=SimpleNamespace(data={"out": 8.3}), **rows)
+    assert cop.power_now(half) is None
+    without = SimpleNamespace(web=SimpleNamespace(data={"out": 8.3, "in": 3.0}),
+                              power_out=None, power_in=None)
+    assert cop.power_now(without) is None
+
+
+def test_an_empty_sum_says_which_of_the_two_it_is(cop, integrate):
+    assert cop.POWER_SILENT != cop.POWER_FIRST_READ
+    assert "avstängd" in cop.POWER_SILENT
+    assert "nästa skörd" in cop.POWER_FIRST_READ

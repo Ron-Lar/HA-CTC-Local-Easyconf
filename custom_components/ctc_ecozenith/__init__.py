@@ -85,6 +85,7 @@ from .cop import (
     ConsumptionSnapshot,
     CopTracker,
     ImmersionSnapshot,
+    compressor_hours,
     cop_for_report,
     counter_fault,
     counters_read_at,
@@ -94,6 +95,7 @@ from .cop import (
     find_power_pair,
     immersion_at,
     modbus_consumption_answered,
+    power_now,
     powered_on_hours,
 )
 from .harvest import STORAGE_VERSION as HARVEST_STORAGE_VERSION, HarvestMemory
@@ -982,7 +984,10 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
     # And whether the numbers themselves are wrong. Only a fault carries the two
     # totals with it: a machine that has simply not counted far enough yet is
     # waiting, not broken, and sends nothing but the flag that says so.
-    fault = counter_fault(heat, consumed, powered_on_hours(runtime))
+    # The compressor's hours, not the unit's: a machine can stand powered on for
+    # years without the compressor running, and two zeroes are then an honest
+    # account rather than a fault. See cop.counter_fault.
+    fault = counter_fault(heat, consumed, compressor_hours(runtime))
     integrator = getattr(runtime, "integrator", None)
     return build_extra(
         entry.data.get("model"),
@@ -1005,6 +1010,10 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
         cop_stuck=fault == "stuck",
         power_rows=getattr(runtime, "power_out", None) is not None
         and getattr(runtime, "power_in", None) is not None,
+        # And whether they handed over numbers. A row that is there and gives
+        # nothing is what a switched off heat pump looks like, and it used to be
+        # indistinguishable from a page without the rows at all.
+        power_values=power_now(runtime) is not None,
         cop_integrated=integrator is not None
         and current_totals(runtime) == integrator.totals
         and integrator.totals[0] is not None,
