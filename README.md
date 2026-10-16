@@ -430,7 +430,7 @@ the form reloads the entry.
 | Allow controlling the heat pump | on | Creates the controls, which write only to the volatile 1000 block; see [Control](https://github.com/beolink/HA-CTC-Local-Easyconf#control). |
 | Let the integration open System information on the panel | on | The one walk to the page with the serial number and the display's software version; see [Setup](https://github.com/beolink/HA-CTC-Local-Easyconf#setup). |
 | Tell me when a new version is released | on | Asks GitHub once a day and says so in the repairs view. |
-| Send anonymous usage statistics | on | One report a day; see [Anonymous statistics](https://github.com/beolink/HA-CTC-Local-Easyconf#anonymous-statistics). Switching it off erases what was sent. |
+| Send anonymous usage statistics | on | One report a day; see [Anonymous statistics](https://github.com/beolink/HA-CTC-Local-Easyconf#anonymous-statistics). Switching it off stops the reporting; what was sent stays. |
 | Read the display's menu again | off | Walks the menu now and offers the pages again on the next form; see [The catch with the display](https://github.com/beolink/HA-CTC-Local-Easyconf#the-catch-with-the-display-and-what-the-integration-does-about-it). |
 | Search for the way to a page | off | For a page the reading of the menu does not reach: asks for its number on the next form and searches for the way there once, with somebody at the panel. Offered where the entry has a display; see [The catch with the display](https://github.com/beolink/HA-CTC-Local-Easyconf#the-catch-with-the-display-and-what-the-integration-does-about-it). |
 
@@ -1062,8 +1062,14 @@ full to Home Assistant's log at info level, so you can read exactly what left
 your installation before deciding whether to keep it on.
 
 To opt out: *Settings, Devices and services, CTC Local Easyconf, Configure, Send
-anonymous usage statistics.* Switching it off also erases what has already been
-sent about your installation. The full list of fields and the reasoning:
+anonymous usage statistics.* Switching it off stops the reporting and marks the
+installation as having stopped, and no further report is taken until it is
+switched back on. What has already been sent stays, and that is a deliberate
+choice: the reports are anonymous, carry no free text and are stored per day, and
+which installations have existed is what the statistics are for, since an
+integration falling out of use says as much as one coming into use. If you want
+what was sent erased anyway, ask whoever runs the service and the installation's
+row and all its daily rows are deleted. The full list of fields and the reasoning:
 <https://stats.rnet.se/integritet>. The code that builds the report is
 `stats_extra.py`, and the client that sends it is `stats.py`.
 
@@ -1117,9 +1123,10 @@ resources, `/ctc_ecozenith/ctc-ecozenith-card.js`, is deleted under *Settings,
 Dashboards*, the three dots at the top right, *Resources*, which shows with
 advanced mode switched on in your user profile; the integration's cards on a
 dashboard of your own are deleted from that dashboard. What the anonymous
-statistics have already sent: removing the integration only stops the reports,
-so switch *Send anonymous usage statistics* off under *Configure* first if you
-want that erased. And the file `config/.storage/ctc_ecozenith.stats`, which
+statistics have already sent stays either way: removing the integration stops the
+reports, and so does switching *Send anonymous usage statistics* off under
+*Configure*, which also marks the installation as having stopped. Erasure is on
+request, from whoever runs the service. And the file `config/.storage/ctc_ecozenith.stats`, which
 holds the installation's random id for those reports, one for all heat pumps
 together: delete it by hand once the last heat pump is removed, or an
 installation of the integration later on reports under the same id.

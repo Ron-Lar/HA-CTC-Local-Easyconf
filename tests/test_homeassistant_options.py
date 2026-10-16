@@ -130,7 +130,10 @@ async def test_a_tick_in_read_again_keeps_the_rest_of_the_form(hass, stubs):
         )
         assert result["type"] is FlowResultType.CREATE_ENTRY
         await hass.async_block_till_done()
-        assert forget.await_count == 1, "statistiken stängdes av: det sända raderas vid sparandet"
+        assert forget.await_count == 1, (
+            "statistiken stängdes av: avanmälan skickas vid sparandet, och servern "
+            "markerar installationen i stället för att radera den"
+        )
 
     options = entry.options
     assert options[CONF_FAST_INTERVAL] == 45
