@@ -1521,6 +1521,8 @@ def merge_menu(
     A stored page the reading did not reach stays, ticked as it was, while it
     still belongs (see still_offered).
     """
+    if not previous_menu:
+        return discovered, [p.page for p in discovered if p.page in set(previous_selection)]
     known = {page.page for page in previous_menu}
     switched_off = known - set(previous_selection)
     keep = still_offered(previous_selection, root, screen_pages)

@@ -871,13 +871,13 @@ HARVEST: dict[str, Text] = {
     "display_harvest": Text(
         "När displayens sidor senast lästes. Integrationen bläddrar till de valda sidorna "
         f"var {_HARVEST_MINUTES} som förval, hoppar över varvet om någon står vid panelen, högst "
-        f"{_SKIPS} i rad, och försöker om efter fem minuter när displayen inte svarar. Attributen "
+        f"{_SKIPS} i rad, och försöker om efter 30 minuter när displayen inte svarar. Attributen "
         "säger hur många varv i rad "
         "som hoppats över eller misslyckats, när nästa försök görs, vilket skälet var och "
         "vilka sidor som lästes och missades senast.",
         "When the display's pages were last read. The integration walks to the chosen pages "
         f"every {_HARVEST_MINUTES_EN} by default, skips the round while somebody is at the "
-        f"panel, at most {_SKIPS_EN} in a row, and tries again after five minutes when the "
+        f"panel, at most {_SKIPS_EN} in a row, and tries again after 30 minutes when the "
         "display does not answer. The attributes say how many rounds in a row have been skipped "
         "or have failed, when the next try is made, what the reason was and which pages were "
         "read and missed last.",
