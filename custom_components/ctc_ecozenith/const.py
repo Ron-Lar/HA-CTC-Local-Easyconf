@@ -409,7 +409,10 @@ MODBUS_SENSORS: Final[tuple[ModbusSensor, ...]] = (
     ModbusSensor("hp1_fan", 62127, "Fläkt", 0.1, "%", None, icon="mdi:fan"),
     ModbusSensor("hp1_defrost_timer", 62137, "Avfrostningstimer", 1, None, None, icon="mdi:timer-sand"),
     ModbusSensor("hp1_outdoor_temp", 62147, "Utetemperatur vid värmepump", 0.1, "°C", _T),
-    ModbusSensor("degree_minutes", 62167, "Gradminuter", 1, None, None, icon="mdi:counter"),
+    # Degree minutes and hot water capacity are written in tenths, like the
+    # temperatures: on an i360 the register read -3 447 and 846 while the panel's
+    # own rows showed Gradminut -392.7 and Kapacitet 85.7 % (GitHub issue 1).
+    ModbusSensor("degree_minutes", 62167, "Gradminuter", 0.1, None, None, icon="mdi:counter"),
     ModbusSensor("immersion_upper_kw", 62168, "Elpatron övre", 0.1, "kW", _P),
     ModbusSensor("immersion_lower_kw", 62169, "Elpatron nedre", 0.1, "kW", _P),
     ModbusSensor("current_l1", 62171, "Ström L1", 0.1, "A", "current"),
@@ -429,7 +432,7 @@ MODBUS_SENSORS: Final[tuple[ModbusSensor, ...]] = (
     ModbusSensor("tank_lower_setpoint", 62274, "Nedre tank börvärde", 0.1, "°C", _T),
     ModbusSensor("dhw_lower_temp", 62275, "Varmvatten nedre", 0.1, "°C", _T),
     ModbusSensor("dhw_temp", 62276, "Varmvatten", 0.1, "°C", _T),
-    ModbusSensor("dhw_capacity", 62279, "Varmvattenkapacitet", 1, "%", None, icon="mdi:water-percent"),
+    ModbusSensor("dhw_capacity", 62279, "Varmvattenkapacitet", 0.1, "%", None, icon="mdi:water-percent"),
     # Pump and fan speeds carry one decimal: an EcoAir 720M running at 66.2 per
     # cent reports 662, which read as a whole number would be nonsense.
     ModbusSensor("sg_mode", 62301, "SmartGrid-läge", 1, None, None, None, enum=SG_MODE, icon="mdi:transmission-tower"),

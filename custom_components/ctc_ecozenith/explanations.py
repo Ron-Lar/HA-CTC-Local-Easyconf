@@ -394,10 +394,11 @@ MODBUS: dict[str, Text] = {
         "The hot water's temperature.",
     ),
     "dhw_capacity": Text(
-        "Varmvattenkapacitet i procent enligt CTC:s registerlista. Visar 0 på båda enheterna som "
-        "provats, så vad talet betyder är inte bekräftat.",
-        "Hot water capacity in per cent according to CTC's register list. Reads 0 on both units "
-        "it has been tried on, so what the figure means is not confirmed.",
+        "Varmvattenkapacitet i procent enligt CTC:s registerlista, samma tal som panelen visar "
+        "som Kapacitet under Varmvatten. Vad procenten räknas mot säger registerlistan inte.",
+        "Hot water capacity in per cent according to CTC's register list, the same figure the "
+        "panel shows as Kapacitet under Varmvatten. The register list does not say what the per "
+        "cent is counted against.",
     ),
     "sg_mode": Text(
         "Vilket SmartGrid-läge som gäller. Normal: ingen påverkan. Blockering: det som valts i "

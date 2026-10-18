@@ -54,6 +54,15 @@ def test_pump_speeds_carry_one_decimal(modbus_api, const):
     assert _reading(modbus_api, const, "hp1_charge_pump", 662).value == pytest.approx(66.2)
 
 
+def test_degree_minutes_and_hot_water_capacity_carry_one_decimal(modbus_api, const):
+    """GitHub issue 1: on an i360 the registers read -3 447 and 846 while the
+    panel's own rows showed Gradminut -392.7 and Kapacitet 85.7 %. A per cent
+    above 100 is not a capacity, so both are tenths, like the temperatures."""
+    minus_3447 = 65536 - 3447
+    assert _reading(modbus_api, const, "degree_minutes", minus_3447).value == pytest.approx(-344.7)
+    assert _reading(modbus_api, const, "dhw_capacity", 846).value == pytest.approx(84.6)
+
+
 # ------------------------------------------------- one unsigned counter
 
 
